@@ -3,12 +3,15 @@
 @theme inline {
   --color-navy: #0a1628;
   --color-navy-light: #111f36;
+  --color-navy-booking: #0d1f3c;
   --color-teal: #00b4d8;
   --color-teal-bright: #22d3ee;
   --color-text-primary: #ffffff;
-  --color-text-secondary: #b0b8c4;
-  --color-border: #1a2d4a;
-  --color-red-muted: #6b7280;
+  --color-text-secondary: #d1d9e6;
+  --color-text-card: #e2e8f0;
+  --color-text-muted: #b0b8c4;
+  --color-border: #1e3456;
+  --color-red-muted: #9ca3af;
   --font-sans: "Inter", system-ui, sans-serif;
 }
 
@@ -24,4 +27,10 @@ body {
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Calendly embed container */
+.calendly-inline-widget {
+  min-width: 320px;
+  height: 700px;
 }

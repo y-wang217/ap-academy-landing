@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Script from "next/script";
 
 function FAQItem({
   question,
@@ -17,7 +18,7 @@ function FAQItem({
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center justify-between py-5 text-left"
       >
-        <span className="pr-4 text-lg font-semibold text-text-primary">
+        <span className="pr-4 text-lg font-bold text-text-primary">
           {question}
         </span>
         <span className="flex-shrink-0 text-2xl text-teal">
@@ -26,7 +27,7 @@ function FAQItem({
       </button>
       {isOpen && (
         <div className="pb-5">
-          <p className="text-text-secondary leading-relaxed">{answer}</p>
+          <p className="text-[17px] leading-[1.75] text-text-secondary">{answer}</p>
         </div>
       )}
     </div>
@@ -83,16 +84,16 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-navy">
       {/* SECTION 1: HERO */}
-      <section className="px-4 py-20 md:py-28 lg:py-32">
-        <div className="mx-auto max-w-4xl text-center">
-          <h1 className="mb-6 text-3xl font-bold leading-tight text-text-primary md:text-4xl lg:text-5xl xl:text-6xl">
+      <section className="px-4 py-24 md:py-28 lg:py-32">
+        <div className="mx-auto max-w-[800px] text-center">
+          <h1 className="mb-6 text-[28px] font-bold leading-tight text-text-primary md:text-[36px] lg:text-[48px]">
             We Get Grade 11–12 Students Into Waterloo Engineering.
           </h1>
-          <p className="mb-10 text-lg leading-relaxed text-teal md:text-xl lg:text-2xl">
+          <p className="mb-10 text-[20px] leading-relaxed text-teal md:text-[22px]">
             90+ in math and physics. Euclid prep. AIF coaching. Interview drills. Built by a Waterloo Engineering grad.
           </p>
           <CTAButton />
-          <p className="mt-6 text-sm text-text-secondary">
+          <p className="mt-6 text-sm text-text-muted">
             Limited to 3 students per semester
           </p>
         </div>
@@ -100,35 +101,35 @@ export default function Home() {
 
       {/* SECTION 2: PROBLEM */}
       <section className="px-4 py-20 md:py-24">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="mb-12 text-center text-2xl font-bold text-text-primary md:mb-16 md:text-3xl lg:text-4xl">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Why Smart Students Still Get Rejected
           </h2>
           <div className="grid gap-6 md:grid-cols-3 md:gap-8">
             {/* Card 1 */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Grade 11 Is Where Waterloo Is Won or Lost
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
                 Grade 11 math and physics are the hardest courses your child has faced — and they're the foundation for Grade 12 Advanced Functions and Physics, the two courses Waterloo weighs most. A weak Grade 11 doesn't just hurt this year. It compounds into Grade 12 and tanks the application. Most students don't recover in time.
               </p>
             </div>
             {/* Card 2 */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 You Can't Google Your Way Through This
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
                 Parents want to help but don't know how. Which extracurriculars actually matter? Is volunteering worth it or a waste of time? Should they do Euclid? Start coding? Join robotics? The information is scattered and contradictory — and the wrong choices cost a year you can't get back.
               </p>
             </div>
             {/* Card 3 */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 A 95% Average Still Gets Rejected
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
                 Waterloo doesn't just want grades. They want proof your child is genuinely passionate about engineering — Euclid scores, programming projects, robotics, leadership. They read the AIF looking for evidence of real time spent and real results. Most tutors teach math. Nobody builds the full picture.
               </p>
             </div>
@@ -138,53 +139,53 @@ export default function Home() {
 
       {/* SECTION 3: MECHANISM */}
       <section className="px-4 py-20 md:py-24">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="mb-12 text-center text-2xl font-bold text-text-primary md:mb-16 md:text-3xl lg:text-4xl">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             The Only Program That Covers Everything
           </h2>
           <div className="grid gap-6 md:grid-cols-2 md:gap-8">
             {/* Pillar 1 */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <div className="mb-4 text-3xl font-bold text-teal">01</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 1-on-1 Math & Physics Tutoring
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
                 Diagnostic-first. We find the exact gaps, build a custom plan, and push grades to 90+. No generic homework help.
               </p>
             </div>
             {/* Pillar 2 */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <div className="mb-4 text-3xl font-bold text-teal">02</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Euclid Competition Prep
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
                 The single highest-signal extracurricular for Waterloo Engineering admissions. Dedicated prep sessions with contest-level problems.
               </p>
             </div>
             {/* Pillar 3 */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <div className="mb-4 text-3xl font-bold text-teal">03</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 AIF Coaching
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
                 We write, review, and polish your child's Application Information Form from scratch. Every sentence built to show Waterloo what they want to see.
               </p>
             </div>
             {/* Pillar 4 */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <div className="mb-4 text-3xl font-bold text-teal">04</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Extracurricular Strategy & Interview Prep
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
                 We map out exactly how your child should spend their time outside the classroom — what to pursue, what to skip, and how to present it in their AIF and interview.
               </p>
             </div>
           </div>
-          <p className="mt-12 text-center text-xl font-bold text-text-primary md:text-2xl">
+          <p className="mt-12 text-center text-[20px] font-bold text-teal md:text-[22px]">
             This isn't tutoring. It's a complete Waterloo Engineering admission system.
           </p>
           <div className="mt-10 text-center">
@@ -195,32 +196,32 @@ export default function Home() {
 
       {/* SECTION 4: PROOF / CREDIBILITY */}
       <section className="px-4 py-20 md:py-24">
-        <div className="mx-auto max-w-4xl">
-          <h2 className="mb-12 text-center text-2xl font-bold text-text-primary md:mb-16 md:text-3xl lg:text-4xl">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Built by Someone Who's Done It
           </h2>
-          <div className="rounded-xl border border-border bg-navy-light p-8 md:p-12">
-            <p className="text-lg leading-relaxed text-text-secondary md:text-xl">
+          <div className="rounded-xl border border-border bg-navy-light p-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-12">
+            <p className="max-w-[600px] mx-auto text-[17px] leading-[1.75] text-text-card md:text-[18px]">
               AP Academy was built by a Waterloo Engineering graduate who's coached 10+ students through competitive STEM admissions. Every lesson, every strategy, every AIF review comes from firsthand experience with the exact system your child is applying to.
             </p>
           </div>
 
           {/* TESTIMONIALS: Uncomment when available
           <div className="mt-12 grid gap-6 md:grid-cols-3">
-            <div className="rounded-xl border border-border bg-navy-light p-6">
-              <p className="mb-4 text-text-secondary italic">"Quote from student here..."</p>
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+              <p className="mb-4 text-text-card italic">"Quote from student here..."</p>
               <p className="font-bold text-text-primary">Student Name</p>
-              <p className="text-sm text-text-secondary">School Name — Outcome</p>
+              <p className="text-sm text-text-muted">School Name — Outcome</p>
             </div>
-            <div className="rounded-xl border border-border bg-navy-light p-6">
-              <p className="mb-4 text-text-secondary italic">"Quote from student here..."</p>
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+              <p className="mb-4 text-text-card italic">"Quote from student here..."</p>
               <p className="font-bold text-text-primary">Student Name</p>
-              <p className="text-sm text-text-secondary">School Name — Outcome</p>
+              <p className="text-sm text-text-muted">School Name — Outcome</p>
             </div>
-            <div className="rounded-xl border border-border bg-navy-light p-6">
-              <p className="mb-4 text-text-secondary italic">"Quote from student here..."</p>
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+              <p className="mb-4 text-text-card italic">"Quote from student here..."</p>
               <p className="font-bold text-text-primary">Student Name</p>
-              <p className="text-sm text-text-secondary">School Name — Outcome</p>
+              <p className="text-sm text-text-muted">School Name — Outcome</p>
             </div>
           </div>
           */}
@@ -233,8 +234,8 @@ export default function Home() {
 
       {/* SECTION 5: HOW IT WORKS */}
       <section className="px-4 py-20 md:py-24">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="mb-12 text-center text-2xl font-bold text-text-primary md:mb-16 md:text-3xl lg:text-4xl">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             How It Works
           </h2>
           <div className="grid gap-8 md:grid-cols-3">
@@ -244,7 +245,7 @@ export default function Home() {
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Book a Strategy Call
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="text-[17px] leading-[1.75] text-text-secondary">
                 We'll assess where your child stands and whether AP Academy is the right fit. No pressure, just clarity.
               </p>
             </div>
@@ -254,7 +255,7 @@ export default function Home() {
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Get a Custom Roadmap
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="text-[17px] leading-[1.75] text-text-secondary">
                 If we're a match, we build a semester plan targeting exactly what your child needs — grades, Euclid, AIF, everything.
               </p>
             </div>
@@ -264,7 +265,7 @@ export default function Home() {
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Watch Them Get In
               </h3>
-              <p className="leading-relaxed text-text-secondary">
+              <p className="text-[17px] leading-[1.75] text-text-secondary">
                 Weekly sessions, weekly parent updates, and a clear path to Waterloo Engineering.
               </p>
             </div>
@@ -274,17 +275,17 @@ export default function Home() {
 
       {/* SECTION 6: WHO THIS IS FOR */}
       <section className="px-4 py-20 md:py-24">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="mb-12 text-center text-2xl font-bold text-text-primary md:mb-16 md:text-3xl lg:text-4xl">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Is AP Academy Right for Your Child?
           </h2>
           <div className="grid gap-8 lg:grid-cols-2">
             {/* This IS for you */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <h3 className="mb-6 text-xl font-bold text-teal">
                 This IS for you if...
               </h3>
-              <ul className="space-y-4 text-text-secondary">
+              <ul className="space-y-4 text-[17px] leading-[1.75] text-text-card">
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-teal">&#10003;</span>
                   <span>
@@ -318,11 +319,11 @@ export default function Home() {
               </ul>
             </div>
             {/* This ISN'T for you */}
-            <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <h3 className="mb-6 text-xl font-bold text-red-muted">
                 This ISN'T for you if...
               </h3>
-              <ul className="space-y-4 text-text-secondary">
+              <ul className="space-y-4 text-[17px] leading-[1.75] text-text-card">
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-red-muted">&#10007;</span>
                   <span>
@@ -355,11 +356,11 @@ export default function Home() {
 
       {/* SECTION 7: FAQ */}
       <section className="px-4 py-20 md:py-24">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="mb-12 text-center text-2xl font-bold text-text-primary md:mb-16 md:text-3xl lg:text-4xl">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Common Questions Parents Ask
           </h2>
-          <div className="rounded-xl border border-border bg-navy-light p-6 md:p-8">
+          <div className="mx-auto max-w-[700px] rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
             {faqs.map((faq, index) => (
               <FAQItem
                 key={index}
@@ -372,19 +373,40 @@ export default function Home() {
       </section>
 
       {/* SECTION 8: FINAL CTA */}
-      <section
-        id="booking"
-        className="bg-gradient-to-b from-navy to-navy-light px-4 py-20 md:py-28"
-      >
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="mb-6 text-2xl font-bold text-text-primary md:text-3xl lg:text-4xl">
+      <section className="px-4 py-20 md:py-24">
+        <div className="mx-auto max-w-[800px] text-center">
+          <h2 className="mb-6 text-[28px] font-bold text-text-primary md:text-[32px]">
             Your Child's Waterloo Admission Starts With One Call.
           </h2>
-          <p className="mb-10 text-lg text-text-secondary md:text-xl">
+          <p className="mb-10 text-[17px] leading-[1.75] text-text-secondary md:text-[18px]">
             Book a free strategy call. We'll assess where your child stands, build a plan, and tell you honestly if AP Academy is the right fit.
           </p>
           <CTAButton large />
-          {/* TODO: Replace button with Calendly embed or external Calendly link */}
+        </div>
+      </section>
+
+      {/* SECTION 9: BOOKING (Calendly Embed) */}
+      <section id="booking" className="bg-navy-booking px-4 py-20 md:py-24">
+        <div className="mx-auto max-w-[800px] text-center">
+          <h2 className="mb-6 text-[28px] font-bold text-text-primary md:text-[32px]">
+            Book Your Free Strategy Call
+          </h2>
+          <p className="mb-10 text-[17px] leading-[1.75] text-text-secondary md:text-[18px]">
+            Pick a time that works. We'll spend 20 minutes assessing where your child stands and whether AP Academy is the right fit.
+          </p>
+
+          {/* Calendly inline embed */}
+          <div className="mx-auto max-w-[700px]">
+            {/* IMPORTANT: Replace REPLACE_WITH_YOUR_CALENDLY_URL with your actual Calendly link */}
+            <div
+              className="calendly-inline-widget"
+              data-url="https://calendly.com/REPLACE_WITH_YOUR_CALENDLY_URL"
+            />
+            <Script
+              src="https://assets.calendly.com/assets/external/widget.js"
+              strategy="lazyOnload"
+            />
+          </div>
         </div>
       </section>
 
@@ -397,16 +419,16 @@ export default function Home() {
               <h3 className="mb-2 text-xl font-bold text-text-primary">
                 AP Academy
               </h3>
-              <p className="text-text-secondary">
+              <p className="text-text-muted">
                 Grade 11–12 Math & Physics | Waterloo Engineering Prep
               </p>
-              <p className="text-text-secondary">
+              <p className="text-text-muted">
                 Serving the Greater Toronto Area
               </p>
             </div>
             {/* Right side */}
             <div className="text-center md:text-right">
-              <p className="text-text-secondary">
+              <p className="text-text-muted">
                 Email:{" "}
                 <a
                   href="mailto:contact@apacademy.ca"
@@ -415,7 +437,7 @@ export default function Home() {
                   contact@apacademy.ca
                 </a>
               </p>
-              <p className="text-text-secondary">
+              <p className="text-text-muted">
                 Phone:{" "}
                 <a
                   href="tel:+14161234567"
@@ -427,7 +449,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-8 border-t border-border pt-8 text-center">
-            <p className="text-sm text-text-secondary">
+            <p className="text-sm text-text-muted">
               &copy; 2026 AP Academy. All rights reserved.
             </p>
           </div>
