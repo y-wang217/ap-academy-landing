@@ -2,43 +2,32 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Thank You | AP Academy",
-  description: "Download your free Waterloo Readiness Checklist",
+  description: "Your strategy call has been booked",
 };
 
 export default function ThankYou() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-light px-4 py-16">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-navy px-4 py-16">
       <div className="mx-auto max-w-xl text-center">
         <div className="mb-6 text-6xl text-teal">&#10003;</div>
-        <h1 className="mb-4 text-3xl font-bold text-gray-900 md:text-4xl">
-          You&apos;re All Set!
+        <h1 className="mb-4 text-3xl font-bold text-text-primary md:text-4xl">
+          Your Call Is Booked!
         </h1>
-        <p className="mb-8 text-lg text-gray-600">
-          Your Waterloo Readiness Checklist is ready to download. We&apos;ll
-          call you within 24 hours to discuss your child&apos;s situation and
-          answer any questions.
+        <p className="mb-8 text-lg text-text-secondary">
+          We&apos;ll see you soon. Check your email for confirmation and calendar details.
         </p>
 
-        <a
-          href="/waterloo-readiness-checklist.pdf"
-          download
-          className="mb-6 inline-block rounded-lg bg-teal px-8 py-4 text-lg font-bold text-white transition-all hover:bg-teal/90 hover:shadow-lg"
-        >
-          Download Your Checklist (PDF)
-        </a>
-
-        <div className="mt-8 rounded-xl bg-white p-6 shadow-lg">
-          <h2 className="mb-4 text-xl font-bold text-navy">
+        <div className="rounded-xl border border-border bg-navy-light p-6">
+          <h2 className="mb-4 text-xl font-bold text-text-primary">
             What Happens Next?
           </h2>
-          <ol className="space-y-3 text-left text-gray-700">
+          <ol className="space-y-4 text-left text-text-secondary">
             <li className="flex gap-3">
               <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-teal text-sm font-bold text-white">
                 1
               </span>
               <span>
-                <strong>Review the checklist</strong> — Go through each of the
-                10 steps with your child
+                <strong className="text-text-primary">Check your inbox</strong> — You&apos;ll receive a confirmation email with call details
               </span>
             </li>
             <li className="flex gap-3">
@@ -46,8 +35,7 @@ export default function ThankYou() {
                 2
               </span>
               <span>
-                <strong>We&apos;ll call you</strong> — Expect a call within 24
-                hours to discuss your results
+                <strong className="text-text-primary">Prepare some notes</strong> — Think about your child&apos;s current grades and goals
               </span>
             </li>
             <li className="flex gap-3">
@@ -55,30 +43,29 @@ export default function ThankYou() {
                 3
               </span>
               <span>
-                <strong>Book your trial</strong> — Schedule a $19.99 trial
-                lesson to get started
+                <strong className="text-text-primary">We&apos;ll assess & plan</strong> — Get honest feedback and a clear roadmap
               </span>
             </li>
           </ol>
         </div>
 
-        <p className="mt-8 text-gray-500">
+        <p className="mt-8 text-text-secondary">
           Questions?{" "}
           <a
             href="mailto:contact@apacademy.ca"
-            className="text-teal hover:underline"
+            className="text-teal hover:text-teal-bright hover:underline"
           >
             Email us
           </a>{" "}
           or call{" "}
-          <a href="tel:+14161234567" className="text-teal hover:underline">
+          <a href="tel:+14161234567" className="text-teal hover:text-teal-bright hover:underline">
             (416) 123-4567
           </a>
         </p>
 
         <Link
           href="/"
-          className="mt-6 inline-block text-navy hover:underline"
+          className="mt-6 inline-block text-teal hover:text-teal-bright hover:underline"
         >
           &larr; Back to Home
         </Link>
