@@ -8,9 +8,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "AP Academy | Waterloo Engineering Prep for Grade 11–12",
+  title: "AP Academy | Get Into Waterloo Engineering | Grade 11-12 Tutoring",
   description:
-    "We get Grade 11–12 students into Waterloo Engineering. 90+ in math and physics. Euclid prep. AIF coaching. Interview drills. Built by a Waterloo Engineering grad.",
+    "We get Grade 11-12 students into Waterloo Engineering. 1-on-1 math and physics tutoring, Euclid prep, AIF coaching, and interview drills. Book a free strategy call.",
   keywords: [
     "Waterloo Engineering",
     "Grade 11 tutoring",

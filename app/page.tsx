@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Script from "next/script";
 
 function FAQItem({
@@ -34,12 +34,63 @@ function FAQItem({
   );
 }
 
+function AIFTooltip() {
+  return (
+    <span className="relative inline-block group">
+      <span className="border-b border-dotted border-teal cursor-help">AIF</span>
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[#1a2d4a] text-white text-sm rounded-md whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-200 z-50">
+        Application Information Form — Waterloo's required essay for engineering applicants.
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#1a2d4a]"></span>
+      </span>
+    </span>
+  );
+}
+
 function CTAButton({ large = false }: { large?: boolean }) {
   return (
     <a
       href="#booking"
       className={`inline-block rounded-lg bg-teal font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg ${
         large ? "px-10 py-5 text-lg" : "px-8 py-4"
+      }`}
+    >
+      Book a Free Strategy Call
+    </a>
+  );
+}
+
+function StickyMobileCTA() {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const heroSection = document.getElementById("hero");
+      const bookingSection = document.getElementById("booking");
+
+      if (!heroSection || !bookingSection) return;
+
+      const heroBottom = heroSection.getBoundingClientRect().bottom;
+      const bookingTop = bookingSection.getBoundingClientRect().top;
+      const windowHeight = window.innerHeight;
+
+      // Show when scrolled past hero, hide when booking section is in view
+      const pastHero = heroBottom < 100;
+      const atBooking = bookingTop < windowHeight;
+
+      setIsVisible(pastHero && !atBooking);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    handleScroll(); // Check initial state
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  return (
+    <a
+      href="#booking"
+      className={`fixed bottom-0 left-0 right-0 z-[9999] flex h-14 items-center justify-center bg-teal font-bold text-white text-base md:hidden transition-opacity duration-300 ${
+        isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
     >
       Book a Free Strategy Call
@@ -82,15 +133,18 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-navy">
+    <div className="min-h-screen bg-navy pb-14 md:pb-0">
+      {/* Sticky Mobile CTA */}
+      <StickyMobileCTA />
+
       {/* SECTION 1: HERO */}
-      <section className="px-4 py-24 md:py-28 lg:py-32">
+      <section id="hero" className="px-4 py-20 md:py-24 lg:py-28">
         <div className="mx-auto max-w-[800px] text-center">
           <h1 className="mb-6 text-[28px] font-bold leading-tight text-text-primary md:text-[36px] lg:text-[48px]">
             We Get Grade 11–12 Students Into Waterloo Engineering.
           </h1>
           <p className="mb-10 text-[20px] leading-relaxed text-teal md:text-[22px]">
-            90+ in math and physics. Euclid prep. AIF coaching. Interview drills. Built by a Waterloo Engineering grad.
+            90+ in math and physics. Euclid prep. AIF coaching (Waterloo's application essay). Interview drills. Built by a Waterloo Engineering grad.
           </p>
           <CTAButton />
           <p className="mt-6 text-sm text-text-muted">
@@ -100,7 +154,7 @@ export default function Home() {
       </section>
 
       {/* SECTION 2: PROBLEM */}
-      <section className="px-4 py-20 md:py-24">
+      <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Why Smart Students Still Get Rejected
@@ -121,7 +175,7 @@ export default function Home() {
                 You Can't Google Your Way Through This
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Parents want to help but don't know how. Which extracurriculars actually matter? Is volunteering worth it or a waste of time? Should they do Euclid? Start coding? Join robotics? The information is scattered and contradictory — and the wrong choices cost a year you can't get back.
+                Parents want to help but don't know how. Which extracurriculars actually matter? Is volunteering worth it or a waste of time? Should they do Euclid? Start coding? Join robotics? The information is scattered and all over the place — and the wrong choices cost a year you can't get back.
               </p>
             </div>
             {/* Card 3 */}
@@ -130,7 +184,7 @@ export default function Home() {
                 A 95% Average Still Gets Rejected
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Waterloo doesn't just want grades. They want proof your child is genuinely passionate about engineering — Euclid scores, programming projects, robotics, leadership. They read the AIF looking for evidence of real time spent and real results. Most tutors teach math. Nobody builds the full picture.
+                Waterloo doesn't just want grades. They want proof your child is genuinely passionate about engineering — Euclid scores, programming projects, robotics, leadership. They read the <AIFTooltip /> looking for evidence of real time spent and real results. Most tutors teach math. Nobody builds the full picture.
               </p>
             </div>
           </div>
@@ -138,7 +192,7 @@ export default function Home() {
       </section>
 
       {/* SECTION 3: MECHANISM */}
-      <section className="px-4 py-20 md:py-24">
+      <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             The Only Program That Covers Everything
@@ -161,7 +215,7 @@ export default function Home() {
                 Euclid Competition Prep
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                The single highest-signal extracurricular for Waterloo Engineering admissions. Dedicated prep sessions with contest-level problems.
+                Waterloo loves Euclid scores. We run focused prep sessions with real contest problems so your child stands out.
               </p>
             </div>
             {/* Pillar 3 */}
@@ -181,12 +235,12 @@ export default function Home() {
                 Extracurricular Strategy & Interview Prep
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                We map out exactly how your child should spend their time outside the classroom — what to pursue, what to skip, and how to present it in their AIF and interview.
+                We tell your child exactly what to do outside of class. What to pursue. What to skip. And how to talk about it in their AIF and interview.
               </p>
             </div>
           </div>
           <p className="mt-12 text-center text-[20px] font-bold text-teal md:text-[22px]">
-            This isn't tutoring. It's a complete Waterloo Engineering admission system.
+            This isn't tutoring. It's a full system to get your child into Waterloo Engineering.
           </p>
           <div className="mt-10 text-center">
             <CTAButton />
@@ -195,14 +249,14 @@ export default function Home() {
       </section>
 
       {/* SECTION 4: PROOF / CREDIBILITY */}
-      <section className="px-4 py-20 md:py-24">
+      <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Built by Someone Who's Done It
           </h2>
           <div className="rounded-xl border border-border bg-navy-light p-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-12">
             <p className="max-w-[600px] mx-auto text-[17px] leading-[1.75] text-text-card md:text-[18px]">
-              AP Academy was built by a Waterloo Engineering graduate who's coached 10+ students through competitive STEM admissions. Every lesson, every strategy, every AIF review comes from firsthand experience with the exact system your child is applying to.
+              AP Academy was built by a Waterloo Engineering grad who's helped 10+ students get into top STEM programs. Every lesson, every strategy, every AIF review comes from someone who's been through the exact same process your child is facing.
             </p>
           </div>
 
@@ -233,7 +287,7 @@ export default function Home() {
       </section>
 
       {/* SECTION 5: HOW IT WORKS */}
-      <section className="px-4 py-20 md:py-24">
+      <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             How It Works
@@ -256,7 +310,7 @@ export default function Home() {
                 Get a Custom Roadmap
               </h3>
               <p className="text-[17px] leading-[1.75] text-text-secondary">
-                If we're a match, we build a semester plan targeting exactly what your child needs — grades, Euclid, AIF, everything.
+                If we're a match, we build a clear plan for the semester. Grades, Euclid, AIF — all of it mapped out.
               </p>
             </div>
             {/* Step 3 */}
@@ -266,7 +320,7 @@ export default function Home() {
                 Watch Them Get In
               </h3>
               <p className="text-[17px] leading-[1.75] text-text-secondary">
-                Weekly sessions, weekly parent updates, and a clear path to Waterloo Engineering.
+                Weekly lessons. Weekly parent updates. A clear path to Waterloo.
               </p>
             </div>
           </div>
@@ -274,7 +328,7 @@ export default function Home() {
       </section>
 
       {/* SECTION 6: WHO THIS IS FOR */}
-      <section className="px-4 py-20 md:py-24">
+      <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Is AP Academy Right for Your Child?
@@ -355,7 +409,7 @@ export default function Home() {
       </section>
 
       {/* SECTION 7: FAQ */}
-      <section className="px-4 py-20 md:py-24">
+      <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Common Questions Parents Ask
@@ -373,7 +427,7 @@ export default function Home() {
       </section>
 
       {/* SECTION 8: FINAL CTA */}
-      <section className="px-4 py-20 md:py-24">
+      <section className="px-4 py-20 md:py-20">
         <div className="mx-auto max-w-[800px] text-center">
           <h2 className="mb-6 text-[28px] font-bold text-text-primary md:text-[32px]">
             Your Child's Waterloo Admission Starts With One Call.
@@ -386,7 +440,7 @@ export default function Home() {
       </section>
 
       {/* SECTION 9: BOOKING (Calendly Embed) */}
-      <section id="booking" className="bg-navy-booking px-4 py-20 md:py-24">
+      <section id="booking" className="bg-navy-booking px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[800px] text-center">
           <h2 className="mb-6 text-[28px] font-bold text-text-primary md:text-[32px]">
             Book Your Free Strategy Call
