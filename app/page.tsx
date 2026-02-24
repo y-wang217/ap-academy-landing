@@ -454,6 +454,7 @@ export default function Home() {
             <div
               className="calendly-inline-widget"
               data-url="https://calendly.com/y-wang217/30min"
+              data-resize="true"
             />
             <Script
               src="https://assets.calendly.com/assets/external/widget.js"

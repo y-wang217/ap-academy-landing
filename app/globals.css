@@ -29,8 +29,13 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Calendly embed container */
+/* Calendly embed container - dynamic height */
 .calendly-inline-widget {
   min-width: 320px;
-  height: 700px;
+  min-height: 750px;
+}
+
+/* Allow Calendly iframe to resize */
+.calendly-inline-widget iframe {
+  height: 100% !important;
 }
