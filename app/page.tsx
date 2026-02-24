@@ -397,10 +397,9 @@ export default function Home() {
 
           {/* Calendly inline embed */}
           <div className="mx-auto max-w-[700px]">
-            {/* IMPORTANT: Replace REPLACE_WITH_YOUR_CALENDLY_URL with your actual Calendly link */}
             <div
               className="calendly-inline-widget"
-              data-url="https://calendly.com/REPLACE_WITH_YOUR_CALENDLY_URL"
+              data-url="https://calendly.com/y-wang217/30min"
             />
             <Script
               src="https://assets.calendly.com/assets/external/widget.js"
@@ -431,19 +430,19 @@ export default function Home() {
               <p className="text-text-muted">
                 Email:{" "}
                 <a
-                  href="mailto:contact@apacademy.ca"
+                  href="mailto:y.wang217@gmail.com"
                   className="text-teal hover:text-teal-bright hover:underline"
                 >
-                  contact@apacademy.ca
+                  y.wang217@gmail.com
                 </a>
               </p>
               <p className="text-text-muted">
                 Phone:{" "}
                 <a
-                  href="tel:+14161234567"
+                  href="tel:+15195898217"
                   className="text-teal hover:text-teal-bright hover:underline"
                 >
-                  (416) 123-4567
+                  (519) 589-8217
                 </a>
               </p>
             </div>

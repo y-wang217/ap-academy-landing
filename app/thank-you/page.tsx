@@ -52,14 +52,14 @@ export default function ThankYou() {
         <p className="mt-8 text-text-secondary">
           Questions?{" "}
           <a
-            href="mailto:contact@apacademy.ca"
+            href="mailto:y.wang217@gmail.com"
             className="text-teal hover:text-teal-bright hover:underline"
           >
             Email us
           </a>{" "}
           or call{" "}
-          <a href="tel:+14161234567" className="text-teal hover:text-teal-bright hover:underline">
-            (416) 123-4567
+          <a href="tel:+15195898217" className="text-teal hover:text-teal-bright hover:underline">
+            (519) 589-8217
           </a>
         </p>
 
