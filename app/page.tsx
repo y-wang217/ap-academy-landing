@@ -469,16 +469,23 @@ export default function Home() {
         <div className="mx-auto max-w-6xl">
           <div className="flex flex-col items-center justify-between gap-8 md:flex-row md:items-start">
             {/* Left side */}
-            <div className="text-center md:text-left">
-              <h3 className="mb-2 text-xl font-bold text-text-primary">
-                AP Academy
-              </h3>
-              <p className="text-text-muted">
-                Grade 11–12 Math & Physics | Waterloo Engineering Prep
-              </p>
-              <p className="text-text-muted">
-                Serving the Greater Toronto Area
-              </p>
+            <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
+              <img
+                src="/logo.png"
+                alt="AP Academy Logo"
+                className="h-16 w-16 rounded-lg"
+              />
+              <div className="text-center md:text-left">
+                <h3 className="mb-2 text-xl font-bold text-text-primary">
+                  AP Academy
+                </h3>
+                <p className="text-text-muted">
+                  Grade 11–12 Math & Physics | Waterloo Engineering Prep
+                </p>
+                <p className="text-text-muted">
+                  Serving the Greater Toronto Area
+                </p>
+              </div>
             </div>
             {/* Right side */}
             <div className="text-center md:text-right">
