@@ -4,6 +4,21 @@ import { useState, useEffect } from "react";
 import Script from "next/script";
 import Image from "next/image";
 
+function HeroAssessmentButton() {
+  return (
+    <>
+      <button
+        data-tf-popup="GwhmMSJC"
+        data-tf-size="100"
+        className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
+      >
+        Take the Free Readiness Assessment
+      </button>
+      <Script src="//embed.typeform.com/next/embed.js" strategy="lazyOnload" />
+    </>
+  );
+}
+
 function FAQItem({
   question,
   answer,
@@ -147,8 +162,19 @@ export default function Home() {
           <p className="mb-10 text-[20px] leading-relaxed text-teal md:text-[22px]">
             90+ in math and physics. Euclid prep. AIF coaching (Waterloo's application essay). Interview drills. Built by a Waterloo Engineering grad.
           </p>
-          <CTAButton />
-          <p className="mt-6 text-sm text-text-muted">
+          <HeroAssessmentButton />
+          <p className="mt-4 text-sm text-text-muted">
+            Free · 2 minutes · See where your child stands
+          </p>
+          <p className="mt-4">
+            <a
+              href="#booking"
+              className="text-sm text-teal underline hover:text-teal-bright"
+            >
+              or book a free strategy call directly
+            </a>
+          </p>
+          <p className="mt-4 text-sm text-text-muted">
             Limited to 3 students per semester
           </p>
         </div>
