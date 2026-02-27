@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Script from "next/script";
 import Image from "next/image";
+import { Calculator, Trophy, FileText, Compass } from "lucide-react";
 
 function HeroAssessmentButton() {
   return (
@@ -157,10 +158,10 @@ export default function Home() {
       <section id="hero" className="px-4 py-20 md:py-24 lg:py-28">
         <div className="mx-auto max-w-[800px] text-center">
           <h1 className="mb-6 text-[28px] font-bold leading-tight text-text-primary md:text-[36px] lg:text-[48px]">
-            We Get Grade 11 Students Into Waterloo Engineering.
+            Want to Get Your Child Into Waterloo Engineering?
           </h1>
           <p className="mb-10 text-[18px] leading-relaxed text-teal md:text-[20px]">
-            Find out if your child is on track — free 2-minute assessment by a Waterloo Engineering grad.
+            See exactly where they stand — free assessment built by a Waterloo Engineering grad.
           </p>
           <HeroAssessmentButton />
         </div>
@@ -213,6 +214,7 @@ export default function Home() {
           <div className="grid gap-6 md:grid-cols-2 md:gap-8">
             {/* Pillar 1 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+              <Calculator className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">01</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 1-on-1 Math & Physics Tutoring
@@ -223,6 +225,7 @@ export default function Home() {
             </div>
             {/* Pillar 2 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+              <Trophy className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">02</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Euclid Competition Prep
@@ -233,6 +236,7 @@ export default function Home() {
             </div>
             {/* Pillar 3 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+              <FileText className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">03</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 AIF Coaching
@@ -243,6 +247,7 @@ export default function Home() {
             </div>
             {/* Pillar 4 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+              <Compass className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">04</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Extracurricular Strategy & Interview Prep
@@ -256,7 +261,13 @@ export default function Home() {
             This isn't tutoring. It's a full system to get your child into Waterloo Engineering.
           </p>
           <div className="mt-10 text-center">
-            <CTAButton />
+            <button
+              data-tf-popup="GwhmMSJC"
+              data-tf-size="100"
+              className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
+            >
+              Take the Free Readiness Assessment
+            </button>
           </div>
         </div>
       </section>
