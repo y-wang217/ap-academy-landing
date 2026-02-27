@@ -1,20 +1,37 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Script from "next/script";
 import Image from "next/image";
 import { Calculator, Trophy, FileText, Compass, Clock, HelpCircle, XCircle } from "lucide-react";
 
-function HeroAssessmentButton() {
+function useABTest() {
+  const searchParams = useSearchParams();
+  const variant = searchParams.get("v") === "b" ? "b" : "a";
+  const utmContent = searchParams.get("utm_content") || "";
+  return { variant, utmContent };
+}
+
+function TypeformButton({ variant, utmContent }: { variant: string; utmContent: string }) {
+  const hiddenFields = `variant=${variant}${utmContent ? `,utm_content=${utmContent}` : ""}`;
+
+  return (
+    <button
+      data-tf-popup="GwhmMSJC"
+      data-tf-size="100"
+      data-tf-hidden={hiddenFields}
+      className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
+    >
+      See Where They Stand
+    </button>
+  );
+}
+
+function HeroAssessmentButton({ variant, utmContent }: { variant: string; utmContent: string }) {
   return (
     <>
-      <button
-        data-tf-popup="GwhmMSJC"
-        data-tf-size="100"
-        className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
-      >
-        Click to Find Out How Close Your Child Is
-      </button>
+      <TypeformButton variant={variant} utmContent={utmContent} />
       <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
       <Script src="//embed.typeform.com/next/embed.js" strategy="lazyOnload" />
     </>
@@ -116,7 +133,13 @@ function StickyMobileCTA() {
   );
 }
 
-export default function Home() {
+function HomeContent() {
+  const { variant, utmContent } = useABTest();
+
+  const headline = variant === "b"
+    ? "Is Your Child Ready for Waterloo Engineering?"
+    : "Want to Get Your Child Into Waterloo Engineering?";
+
   const faqs = [
     {
       question: "What if my child is already in Grade 12 — is it too late?",
@@ -159,12 +182,12 @@ export default function Home() {
       <section id="hero" className="px-4 py-20 md:py-24 lg:py-28">
         <div className="mx-auto max-w-[800px] text-center">
           <h1 className="mb-6 text-[28px] font-bold leading-tight text-text-primary md:text-[36px] lg:text-[48px]">
-            Want to Get Your Child Into Waterloo Engineering?
+            {headline}
           </h1>
           <p className="mb-10 text-[18px] leading-relaxed text-teal md:text-[20px]">
             See exactly where they stand — free assessment built by a Waterloo Engineering grad.
           </p>
-          <HeroAssessmentButton />
+          <HeroAssessmentButton variant={variant} utmContent={utmContent} />
         </div>
       </section>
 
@@ -271,13 +294,7 @@ export default function Home() {
             This isn't tutoring. It's a full system to get your child into Waterloo Engineering.
           </p>
           <div className="mt-10 text-center">
-            <button
-              data-tf-popup="GwhmMSJC"
-              data-tf-size="100"
-              className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
-            >
-              Click to Find Out How Close Your Child Is
-            </button>
+            <TypeformButton variant={variant} utmContent={utmContent} />
             <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
           </div>
         </div>
@@ -558,5 +575,13 @@ export default function Home() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-navy" />}>
+      <HomeContent />
+    </Suspense>
   );
 }
