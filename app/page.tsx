@@ -176,38 +176,38 @@ export default function Home() {
           </h2>
           <div className="grid gap-6 md:grid-cols-3 md:gap-8">
             {/* Card 1 */}
-            <div className="rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
+            <div className="flex flex-col rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Grade 11 Is Where Waterloo Is Won or Lost
               </h3>
               <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
                 A weak Grade 11 compounds into Grade 12 and tanks the application. Most students don't recover in time.
               </p>
-              <div className="flex justify-center">
+              <div className="mt-auto flex justify-center">
                 <Clock className="h-6 w-6 text-teal" />
               </div>
             </div>
             {/* Card 2 */}
-            <div className="rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
+            <div className="flex flex-col rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 You Can't Google Your Way Through This
               </h3>
               <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
                 The information is scattered. The wrong choices cost a year you can't get back.
               </p>
-              <div className="flex justify-center">
+              <div className="mt-auto flex justify-center">
                 <HelpCircle className="h-6 w-6 text-teal" />
               </div>
             </div>
             {/* Card 3 */}
-            <div className="rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
+            <div className="flex flex-col rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 A 95% Average Still Gets Rejected
               </h3>
               <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
                 Waterloo wants more than grades. They want Euclid scores, projects, and a compelling <AIFTooltip />. Most tutors only teach math.
               </p>
-              <div className="flex justify-center">
+              <div className="mt-auto flex justify-center">
                 <XCircle className="h-6 w-6 text-teal" />
               </div>
             </div>
