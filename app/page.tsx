@@ -13,8 +13,9 @@ function HeroAssessmentButton() {
         data-tf-size="100"
         className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
       >
-        Take the Free Readiness Assessment
+        How Close Is Your Child?
       </button>
+      <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
       <Script src="//embed.typeform.com/next/embed.js" strategy="lazyOnload" />
     </>
   );
@@ -168,18 +169,18 @@ export default function Home() {
       </section>
 
       {/* SECTION 2: PROBLEM */}
-      <section className="px-4 py-15 md:py-15">
+      <section className="px-4 py-16 md:py-20">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
             Why Smart Students Still Get Rejected
           </h2>
           <div className="grid gap-6 md:grid-cols-3 md:gap-8">
             {/* Card 1 */}
-            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Grade 11 Is Where Waterloo Is Won or Lost
               </h3>
-              <p className="mb-4 text-[17px] leading-[1.75] text-text-card">
+              <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
                 A weak Grade 11 compounds into Grade 12 and tanks the application. Most students don't recover in time.
               </p>
               <div className="flex justify-center">
@@ -187,11 +188,11 @@ export default function Home() {
               </div>
             </div>
             {/* Card 2 */}
-            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 You Can't Google Your Way Through This
               </h3>
-              <p className="mb-4 text-[17px] leading-[1.75] text-text-card">
+              <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
                 The information is scattered. The wrong choices cost a year you can't get back.
               </p>
               <div className="flex justify-center">
@@ -199,11 +200,11 @@ export default function Home() {
               </div>
             </div>
             {/* Card 3 */}
-            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+            <div className="rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 A 95% Average Still Gets Rejected
               </h3>
-              <p className="mb-4 text-[17px] leading-[1.75] text-text-card">
+              <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
                 Waterloo wants more than grades. They want Euclid scores, projects, and a compelling <AIFTooltip />. Most tutors only teach math.
               </p>
               <div className="flex justify-center">
@@ -275,8 +276,9 @@ export default function Home() {
               data-tf-size="100"
               className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
             >
-              Take the Free Readiness Assessment
+              How Close Is Your Child?
             </button>
+            <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
           </div>
         </div>
       </section>
