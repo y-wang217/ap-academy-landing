@@ -157,26 +157,12 @@ export default function Home() {
       <section id="hero" className="px-4 py-20 md:py-24 lg:py-28">
         <div className="mx-auto max-w-[800px] text-center">
           <h1 className="mb-6 text-[28px] font-bold leading-tight text-text-primary md:text-[36px] lg:text-[48px]">
-            We Get Grade 11–12 Students Into Waterloo Engineering.
+            We Get Grade 11 Students Into Waterloo Engineering.
           </h1>
-          <p className="mb-10 text-[20px] leading-relaxed text-teal md:text-[22px]">
-            90+ in math and physics. Euclid prep. AIF coaching (Waterloo's application essay). Interview drills. Built by a Waterloo Engineering grad.
+          <p className="mb-10 text-[18px] leading-relaxed text-teal md:text-[20px]">
+            Find out if your child is on track — free 2-minute assessment by a Waterloo Engineering grad.
           </p>
           <HeroAssessmentButton />
-          <p className="mt-4 text-sm text-text-muted">
-            Free · 2 minutes · See where your child stands
-          </p>
-          <p className="mt-4">
-            <a
-              href="#booking"
-              className="text-sm text-teal underline hover:text-teal-bright"
-            >
-              or book a free strategy call directly
-            </a>
-          </p>
-          <p className="mt-4 text-sm text-text-muted">
-            Limited to 3 students per semester
-          </p>
         </div>
       </section>
 
