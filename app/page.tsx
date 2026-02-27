@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Script from "next/script";
 import Image from "next/image";
-import { Calculator, Trophy, FileText, Compass } from "lucide-react";
+import { Calculator, Trophy, FileText, Compass, Clock, HelpCircle, XCircle } from "lucide-react";
 
 function HeroAssessmentButton() {
   return (
@@ -179,27 +179,36 @@ export default function Home() {
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Grade 11 Is Where Waterloo Is Won or Lost
               </h3>
-              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Grade 11 math and physics are the hardest courses your child has faced — and they're the foundation for Grade 12 Advanced Functions and Physics, the two courses Waterloo weighs most. A weak Grade 11 doesn't just hurt this year. It compounds into Grade 12 and tanks the application. Most students don't recover in time.
+              <p className="mb-4 text-[17px] leading-[1.75] text-text-card">
+                A weak Grade 11 compounds into Grade 12 and tanks the application. Most students don't recover in time.
               </p>
+              <div className="flex justify-center">
+                <Clock className="h-6 w-6 text-teal" />
+              </div>
             </div>
             {/* Card 2 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 You Can't Google Your Way Through This
               </h3>
-              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Parents want to help but don't know how. Which extracurriculars actually matter? Is volunteering worth it or a waste of time? Should they do Euclid? Start coding? Join robotics? The information is scattered and all over the place — and the wrong choices cost a year you can't get back.
+              <p className="mb-4 text-[17px] leading-[1.75] text-text-card">
+                The information is scattered. The wrong choices cost a year you can't get back.
               </p>
+              <div className="flex justify-center">
+                <HelpCircle className="h-6 w-6 text-teal" />
+              </div>
             </div>
             {/* Card 3 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 A 95% Average Still Gets Rejected
               </h3>
-              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Waterloo doesn't just want grades. They want proof your child is genuinely passionate about engineering — Euclid scores, programming projects, robotics, leadership. They read the <AIFTooltip /> looking for evidence of real time spent and real results. Most tutors teach math. Nobody builds the full picture.
+              <p className="mb-4 text-[17px] leading-[1.75] text-text-card">
+                Waterloo wants more than grades. They want Euclid scores, projects, and a compelling <AIFTooltip />. Most tutors only teach math.
               </p>
+              <div className="flex justify-center">
+                <XCircle className="h-6 w-6 text-teal" />
+              </div>
             </div>
           </div>
         </div>
@@ -220,7 +229,7 @@ export default function Home() {
                 1-on-1 Math & Physics Tutoring
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Diagnostic-first. We find the exact gaps, build a custom plan, and push grades to 90+. No generic homework help.
+                Good grades are the minimum. We diagnose the gaps and push to 95+.
               </p>
             </div>
             {/* Pillar 2 */}
@@ -236,24 +245,24 @@ export default function Home() {
             </div>
             {/* Pillar 3 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
-              <FileText className="mb-3 h-9 w-9 text-teal" />
-              <div className="mb-4 text-3xl font-bold text-teal">03</div>
-              <h3 className="mb-4 text-xl font-bold text-text-primary">
-                AIF Coaching
-              </h3>
-              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                We write, review, and polish your child's Application Information Form from scratch. Every sentence built to show Waterloo what they want to see.
-              </p>
-            </div>
-            {/* Pillar 4 */}
-            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
               <Compass className="mb-3 h-9 w-9 text-teal" />
-              <div className="mb-4 text-3xl font-bold text-teal">04</div>
+              <div className="mb-4 text-3xl font-bold text-teal">03</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
                 Extracurricular Strategy & Interview Prep
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                We tell your child exactly what to do outside of class. What to pursue. What to skip. And how to talk about it in their AIF and interview.
+                We tell your child exactly what to do outside of class. What to pursue, what to skip.
+              </p>
+            </div>
+            {/* Pillar 4 */}
+            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
+              <FileText className="mb-3 h-9 w-9 text-teal" />
+              <div className="mb-4 text-3xl font-bold text-teal">04</div>
+              <h3 className="mb-4 text-xl font-bold text-text-primary">
+                AIF Coaching
+              </h3>
+              <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
+                Then we turn those experiences into a compelling application. Every sentence built to show Waterloo what they want to see.
               </p>
             </div>
           </div>
@@ -305,6 +314,7 @@ export default function Home() {
           */}
 
           <div className="mt-10 text-center">
+            <p className="mb-4 text-sm text-text-muted">Already know where you stand?</p>
             <CTAButton />
           </div>
         </div>
