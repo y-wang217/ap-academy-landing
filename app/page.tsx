@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Script from "next/script";
+import Image from "next/image";
 
 function FAQItem({
   question,
@@ -256,7 +257,7 @@ export default function Home() {
           </h2>
           <div className="rounded-xl border border-border bg-navy-light p-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-12">
             <p className="max-w-[600px] mx-auto text-[17px] leading-[1.75] text-text-card md:text-[18px]">
-              AP Academy was built by a Waterloo Engineering grad who's helped 10+ students get into top STEM programs. Every lesson, every strategy, every AIF review comes from someone who's been through the exact same process your child is facing.
+              Students of Charlie typically see a 10% grade increase on their next physics or math test. He went to Waterloo Software Engineering and knows first hand what it takes to make it.
             </p>
           </div>
 
@@ -310,7 +311,7 @@ export default function Home() {
                 Get a Custom Roadmap
               </h3>
               <p className="text-[17px] leading-[1.75] text-text-secondary">
-                If we're a match, we build a clear plan for the semester. Grades, Euclid, AIF — all of it mapped out.
+                If we're a match, we build a clear plan for the semester. Grades, Euclid, AIF — all of it mapped out. Parents receive a weekly update so you always know where your child stands.
               </p>
             </div>
             {/* Step 3 */}
@@ -470,10 +471,12 @@ export default function Home() {
           <div className="flex flex-col items-center justify-between gap-8 md:flex-row md:items-start">
             {/* Left side */}
             <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
-              <img
+              <Image
                 src="/logo.png"
-                alt="AP Academy Logo"
-                className="h-16 w-16 rounded-lg"
+                alt="AP Academy - Waterloo Engineering tutoring for Grade 11 students in the GTA"
+                width={64}
+                height={64}
+                className="rounded-lg"
               />
               <div className="text-center md:text-left">
                 <h3 className="mb-2 text-xl font-bold text-text-primary">
@@ -510,6 +513,9 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-8 border-t border-border pt-8 text-center">
+            <p className="mb-4 text-xs text-text-muted">
+              Serving Grade 11 and 12 students across the GTA including Markham, Richmond Hill, Vaughan, Newmarket, Toronto, and Mississauga — online tutoring available province-wide.
+            </p>
             <p className="text-sm text-text-muted">
               &copy; 2026 AP Academy. All rights reserved.
             </p>

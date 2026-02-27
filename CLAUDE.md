@@ -4,6 +4,8 @@
 - **Phone:** 519-589-8217
 - **Email:** y.wang217@gmail.com
 - **Calendly:** https://calendly.com/y-wang217/30min
+- **Founder:** Charlie (Waterloo Software Engineering grad)
+- **URL:** https://ap-academy-landing.vercel.app
 
 ## Design System
 - Background: #0a1628 (dark navy)
