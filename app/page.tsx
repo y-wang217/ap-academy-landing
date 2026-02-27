@@ -14,12 +14,10 @@ function useABTest() {
 }
 
 function TypeformButton({ variant, utmContent }: { variant: string; utmContent: string }) {
-  const hiddenFields = `variant=${variant}${utmContent ? `&utm_content=${utmContent}` : ""}`;
-  const formIdWithHash = `GwhmMSJC#${hiddenFields}`;
-
   return (
     <button
-      data-tf-popup={formIdWithHash}
+      data-tf-popup="GwhmMSJC"
+      data-tf-hidden={`variant=${variant},utm_content=${utmContent}`}
       data-tf-size="100"
       className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
     >
