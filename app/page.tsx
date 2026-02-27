@@ -13,7 +13,7 @@ function HeroAssessmentButton() {
         data-tf-size="100"
         className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
       >
-        How Close Is Your Child?
+        Click to Find Out How Close Your Child Is
       </button>
       <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
       <Script src="//embed.typeform.com/next/embed.js" strategy="lazyOnload" />
@@ -276,7 +276,7 @@ export default function Home() {
               data-tf-size="100"
               className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
             >
-              How Close Is Your Child?
+              Click to Find Out How Close Your Child Is
             </button>
             <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
           </div>
