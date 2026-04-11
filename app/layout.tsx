@@ -8,23 +8,23 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Waterloo Engineering Tutor GTA | Grade 11 Math & Physics | AP Academy",
+  title: "MHF4U Intensive | Get 95+ Before School Starts | AP Academy",
   description:
-    "AP Academy prepares Grade 11 students for Waterloo Engineering admission. 1-on-1 math and physics tutoring with parent progress updates. Built by a Waterloo Software Engineering grad. Book a free strategy call.",
+    "Master Grade 12 Advanced Functions in 10 days before the semester begins. Only 5 spots per session. Small group, full curriculum coverage. Start the semester ahead, not catching up. Book your spot.",
   keywords: [
-    "Waterloo Engineering tutor",
-    "Grade 11 tutoring",
-    "Grade 12 tutoring",
-    "Physics tutoring GTA",
-    "Math tutoring GTA",
+    "MHF4U tutoring",
+    "Grade 12 Advanced Functions",
+    "MHF4U intensive",
+    "math tutoring GTA",
     "Advanced Functions tutor",
-    "Euclid prep",
-    "AIF coaching",
+    "MHF4U course",
+    "Grade 12 math prep",
+    "summer math intensive",
     "Markham tutor",
     "Richmond Hill tutor",
     "Vaughan tutor",
     "Toronto tutor",
-    "STEM admissions",
+    "get ahead in math",
   ],
   authors: [{ name: "AP Academy" }],
   creator: "AP Academy",
@@ -34,9 +34,9 @@ export const metadata: Metadata = {
     canonical: "https://ap-academy-landing.vercel.app",
   },
   openGraph: {
-    title: "Waterloo Engineering Tutor | AP Academy",
+    title: "MHF4U Intensive | Get 95+ Before School Starts",
     description:
-      "AP Academy prepares Grade 11 students for Waterloo Engineering admission. 1-on-1 math and physics tutoring with parent progress updates. Built by a Waterloo Software Engineering grad. Book a free strategy call.",
+      "Master Grade 12 Advanced Functions in 10 days before the semester begins. Only 5 spots per session. Book your spot.",
     url: "https://ap-academy-landing.vercel.app",
     siteName: "AP Academy",
     locale: "en_CA",
@@ -44,9 +44,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Waterloo Engineering Tutor | AP Academy",
+    title: "MHF4U Intensive | Get 95+ Before School Starts",
     description:
-      "AP Academy prepares Grade 11 students for Waterloo Engineering admission. 1-on-1 math and physics tutoring with parent progress updates. Built by a Waterloo Software Engineering grad.",
+      "Master Grade 12 Advanced Functions in 10 days before the semester begins. Only 5 spots per session.",
   },
   robots: {
     index: true,
@@ -78,7 +78,7 @@ export default function RootLayout({
               "@type": "EducationalOrganization",
               name: "AP Academy",
               description:
-                "AP Academy prepares Grade 11-12 students for Waterloo Engineering admission through 1-on-1 math and physics tutoring, Euclid prep, AIF coaching, and interview drills.",
+                "AP Academy offers a 10-day MHF4U intensive program to help Grade 12 students master Advanced Functions before the semester begins. Small groups, full curriculum coverage, 95+ results.",
               url: "https://ap-academy-landing.vercel.app",
               email: "y.wang217@gmail.com",
               telephone: "+1-519-589-8217",
@@ -110,10 +110,9 @@ export default function RootLayout({
               ],
               priceRange: "$$",
               serviceType: [
-                "Math Tutoring",
-                "Physics Tutoring",
-                "University Admission Coaching",
-                "Euclid Contest Prep",
+                "MHF4U Intensive",
+                "Grade 12 Advanced Functions Tutoring",
+                "Math Intensive Program",
               ],
             }),
           }}

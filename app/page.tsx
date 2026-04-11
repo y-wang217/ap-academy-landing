@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Script from "next/script";
 import Image from "next/image";
-import { Calculator, Trophy, FileText, Compass, Clock, HelpCircle, XCircle } from "lucide-react";
+import { BookOpen, Target, TrendingUp, Calendar, Clock, Users } from "lucide-react";
 
 function useABTest() {
   const searchParams = useSearchParams();
@@ -21,7 +21,7 @@ function TypeformButton({ variant, utmContent }: { variant: string; utmContent: 
       data-tf-size="100"
       className="inline-block rounded-lg bg-teal px-8 py-4 font-bold text-white transition-all hover:bg-teal-bright hover:shadow-lg cursor-pointer"
     >
-      See Where They Stand
+      See If You Qualify
     </button>
   );
 }
@@ -30,7 +30,7 @@ function HeroAssessmentButton({ variant, utmContent }: { variant: string; utmCon
   return (
     <>
       <TypeformButton variant={variant} utmContent={utmContent} />
-      <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
+      <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Limited spots</p>
       <Script src="//embed.typeform.com/next/embed.js" strategy="lazyOnload" />
     </>
   );
@@ -67,18 +67,6 @@ function FAQItem({
   );
 }
 
-function AIFTooltip() {
-  return (
-    <span className="relative inline-block group">
-      <span className="border-b border-dotted border-teal cursor-help">AIF</span>
-      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[#1a2d4a] text-white text-sm rounded-md whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-200 z-50">
-        Application Information Form — Waterloo's required essay for engineering applicants.
-        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#1a2d4a]"></span>
-      </span>
-    </span>
-  );
-}
-
 function CTAButton({ large = false }: { large?: boolean }) {
   return (
     <a
@@ -87,7 +75,7 @@ function CTAButton({ large = false }: { large?: boolean }) {
         large ? "px-10 py-5 text-lg" : "px-8 py-4"
       }`}
     >
-      Book a Free Strategy Call
+      Book Your Spot
     </a>
   );
 }
@@ -126,7 +114,7 @@ function StickyMobileCTA() {
         isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
     >
-      Book a Free Strategy Call
+      Book Your Spot — Only 5 Students
     </a>
   );
 }
@@ -135,39 +123,39 @@ function HomeContent() {
   const { variant, utmContent } = useABTest();
 
   const headline = variant === "b"
-    ? "Is Your Child Ready for Waterloo Engineering?"
-    : "Want to Get Your Child Into Waterloo Engineering?";
+    ? "Start Grade 12 Math With a 95%"
+    : "Get a 95+ in MHF4U Before the Semester Even Starts";
 
   const faqs = [
     {
-      question: "What if my child is already in Grade 12 — is it too late?",
+      question: "When does the 10-day intensive run?",
       answer:
-        "Not necessarily, but the sooner we start, the more we can do. Grade 12 students can still improve grades, prep for Euclid, and get AIF coaching — but the window is tight. Book a call and we'll be honest about what's realistic.",
+        "We run intensives before each semester — typically late August for Semester 1 and late January for Semester 2. Book a call to confirm the exact dates for the upcoming session.",
     },
     {
-      question: "Do you guarantee admission to Waterloo?",
+      question: "What exactly is covered in 10 days?",
       answer:
-        "No one can guarantee admission — and anyone who does is lying. What we guarantee is that your child will have the strongest possible application: competitive grades, Euclid prep, a polished AIF, and interview confidence. We put every piece in place.",
+        "We cover the entire MHF4U curriculum: polynomial functions, rational functions, exponential & logarithmic functions, trigonometry, and function operations. You'll complete practice problems, unit tests, and a final assessment — all before Day 1 of school.",
     },
     {
-      question: "Why only 3 students per semester?",
+      question: "How many hours per day?",
       answer:
-        "Because this is 1-on-1 and I teach every session personally. I'd rather deliver exceptional results for 3 students than mediocre results for 20. As we grow, we'll add carefully trained instructors — but quality comes first.",
+        "Expect 3-4 hours of focused work daily — a mix of 1-on-1 instruction, guided practice, and independent problem sets. It's intense but manageable. Students finish the program feeling confident, not burned out.",
     },
     {
-      question: "How is this different from regular tutoring?",
+      question: "What if my child is already decent at math?",
       answer:
-        "Regular tutors help with homework. We build a complete Waterloo admission strategy — grades, Euclid, AIF, extracurriculars, and interview prep. It's the difference between hiring someone to explain a problem set and hiring someone to get your child into Waterloo.",
+        "Even better. If they're sitting at 80-85%, this program can push them to 95+. We move faster with stronger students and go deeper on the challenging units. The goal is mastery, not just passing.",
     },
     {
-      question: "What subjects do you cover?",
+      question: "Why only 5 students?",
       answer:
-        "Grade 11 Functions, Grade 11 Physics, Grade 12 Advanced Functions, Grade 12 Physics, and Euclid Contest prep. Everything Waterloo Engineering weighs most.",
+        "Because I teach every session personally. With 5 students max, I can give real attention to each one — catch mistakes early, adjust pacing, and make sure no one falls behind. Quality over quantity.",
     },
     {
-      question: "How do parents stay informed?",
+      question: "What happens after the 10 days?",
       answer:
-        "You get a written progress update every Friday — what we covered, how your child performed, and what's coming next week. You'll never have to wonder how things are going.",
+        "Your child starts the semester having already mastered the material. While classmates are learning concepts for the first time, your child is reviewing and reinforcing. That head start compounds all semester.",
     },
   ];
 
@@ -179,11 +167,14 @@ function HomeContent() {
       {/* SECTION 1: HERO */}
       <section id="hero" className="px-4 py-20 md:py-24 lg:py-28">
         <div className="mx-auto max-w-[800px] text-center">
+          <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-teal">
+            10-Day MHF4U Intensive · Only 5 Spots
+          </p>
           <h1 className="mb-6 text-[28px] font-bold leading-tight text-text-primary md:text-[36px] lg:text-[48px]">
             {headline}
           </h1>
-          <p className="mb-10 text-[18px] leading-relaxed text-teal md:text-[20px]">
-            See exactly where they stand — free assessment built by a Waterloo Engineering grad.
+          <p className="mb-10 text-[18px] leading-relaxed text-text-secondary md:text-[20px]">
+            Master the entire Grade 12 Advanced Functions course in 10 days — before school begins. Start the semester ahead, not catching up.
           </p>
           <HeroAssessmentButton variant={variant} utmContent={utmContent} />
         </div>
@@ -193,16 +184,16 @@ function HomeContent() {
       <section className="px-4 py-16 md:py-20">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
-            Why Smart Students Still Get Rejected
+            Why Most Students Struggle in MHF4U
           </h2>
           <div className="grid gap-6 md:grid-cols-3 md:gap-8">
             {/* Card 1 */}
             <div className="flex flex-col rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                Grade 11 Is Where Waterloo Is Won or Lost
+                The Pace Is Brutal
               </h3>
               <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
-                A weak Grade 11 compounds into Grade 12 and tanks the application. Most students don't recover in time.
+                MHF4U moves fast. By the time most students realize they're behind, they've already bombed the first test.
               </p>
               <div className="mt-auto flex justify-center">
                 <Clock className="h-6 w-6 text-teal" />
@@ -211,25 +202,25 @@ function HomeContent() {
             {/* Card 2 */}
             <div className="flex flex-col rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                You Can't Google Your Way Through This
+                Grade 11 Gaps Compound
               </h3>
               <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
-                The information is scattered. The wrong choices cost a year you can't get back.
+                MHF4U builds on MCR3U. Any weakness in functions, factoring, or trig becomes a crisis in Grade 12.
               </p>
               <div className="mt-auto flex justify-center">
-                <HelpCircle className="h-6 w-6 text-teal" />
+                <TrendingUp className="h-6 w-6 text-teal" />
               </div>
             </div>
             {/* Card 3 */}
             <div className="flex flex-col rounded-xl border border-border bg-navy-light p-7 pb-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8 md:pb-10">
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                A 95% Average Still Gets Rejected
+                Catching Up Is Nearly Impossible
               </h3>
               <p className="mb-6 text-[17px] leading-[1.75] text-text-card">
-                Waterloo wants more than grades. They want Euclid scores, projects, and a compelling <AIFTooltip />. Most tutors only teach math.
+                Once you're behind, you're learning new material while trying to fix old gaps. The hole just gets deeper.
               </p>
               <div className="mt-auto flex justify-center">
-                <XCircle className="h-6 w-6 text-teal" />
+                <Target className="h-6 w-6 text-teal" />
               </div>
             </div>
           </div>
@@ -240,60 +231,60 @@ function HomeContent() {
       <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
-            The Only Program That Covers Everything
+            The 10-Day Head Start
           </h2>
           <div className="grid gap-6 md:grid-cols-2 md:gap-8">
             {/* Pillar 1 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
-              <Calculator className="mb-3 h-9 w-9 text-teal" />
+              <BookOpen className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">01</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                1-on-1 Math & Physics Tutoring
+                Full Curriculum Coverage
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Good grades are the minimum. We diagnose the gaps and push to 95+.
+                We teach the entire MHF4U course — every unit, every concept — before Day 1 of school. Not a preview. The whole thing.
               </p>
             </div>
             {/* Pillar 2 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
-              <Trophy className="mb-3 h-9 w-9 text-teal" />
+              <Users className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">02</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                Euclid Competition Prep
+                Small Group, Personal Attention
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Waterloo loves Euclid scores. We run focused prep sessions with real contest problems so your child stands out.
+                Only 5 students per cohort. Every question gets answered. Every gap gets fixed. No one gets left behind.
               </p>
             </div>
             {/* Pillar 3 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
-              <Compass className="mb-3 h-9 w-9 text-teal" />
+              <Target className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">03</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                Extracurricular Strategy & Interview Prep
+                Daily Practice & Testing
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                We tell your child exactly what to do outside of class. What to pursue, what to skip.
+                Learn in the morning, practice in the afternoon. Unit tests throughout. Your child knows exactly where they stand.
               </p>
             </div>
             {/* Pillar 4 */}
             <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
-              <FileText className="mb-3 h-9 w-9 text-teal" />
+              <Calendar className="mb-3 h-9 w-9 text-teal" />
               <div className="mb-4 text-3xl font-bold text-teal">04</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                AIF Coaching
+                Semester-Long Advantage
               </h3>
               <p className="max-w-[600px] text-[17px] leading-[1.75] text-text-card">
-                Then we turn those experiences into a compelling application. Every sentence built to show Waterloo what they want to see.
+                When school starts, your child already knows the material. Class becomes review. Tests become easy. Confidence compounds.
               </p>
             </div>
           </div>
           <p className="mt-12 text-center text-[20px] font-bold text-teal md:text-[22px]">
-            This isn't tutoring. It's a full system to get your child into Waterloo Engineering.
+            10 days of focused work = an entire semester of advantage.
           </p>
           <div className="mt-10 text-center">
             <TypeformButton variant={variant} utmContent={utmContent} />
-            <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Personalized results</p>
+            <p className="mt-3 text-sm text-text-muted">Free · 2 minutes · Limited spots</p>
           </div>
         </div>
       </section>
@@ -306,7 +297,7 @@ function HomeContent() {
           </h2>
           <div className="rounded-xl border border-border bg-navy-light p-8 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-12">
             <p className="max-w-[600px] mx-auto text-[17px] leading-[1.75] text-text-card md:text-[18px]">
-              Students of Charlie typically see a 10% grade increase on their next physics or math test. He went to Waterloo Software Engineering and knows first hand what it takes to make it.
+              I'm Charlie — Waterloo Software Engineering grad. I've tutored dozens of students through MHF4U. I know exactly where students struggle and how to fix it fast. This intensive is designed to do in 10 days what most students take 5 months to learn.
             </p>
           </div>
 
@@ -317,21 +308,11 @@ function HomeContent() {
               <p className="font-bold text-text-primary">Student Name</p>
               <p className="text-sm text-text-muted">School Name — Outcome</p>
             </div>
-            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
-              <p className="mb-4 text-text-card italic">"Quote from student here..."</p>
-              <p className="font-bold text-text-primary">Student Name</p>
-              <p className="text-sm text-text-muted">School Name — Outcome</p>
-            </div>
-            <div className="rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
-              <p className="mb-4 text-text-card italic">"Quote from student here..."</p>
-              <p className="font-bold text-text-primary">Student Name</p>
-              <p className="text-sm text-text-muted">School Name — Outcome</p>
-            </div>
           </div>
           */}
 
           <div className="mt-10 text-center">
-            <p className="mb-4 text-sm text-text-muted">Already know where you stand?</p>
+            <p className="mb-4 text-sm text-text-muted">Ready to get ahead?</p>
             <CTAButton />
           </div>
         </div>
@@ -348,30 +329,30 @@ function HomeContent() {
             <div className="text-center">
               <div className="mb-6 text-6xl font-bold text-teal">1</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                Book a Strategy Call
+                Book a Quick Call
               </h3>
               <p className="text-[17px] leading-[1.75] text-text-secondary">
-                We'll assess where your child stands and whether AP Academy is the right fit. No pressure, just clarity.
+                We'll confirm your child is a good fit and lock in their spot. Takes 15 minutes.
               </p>
             </div>
             {/* Step 2 */}
             <div className="text-center">
               <div className="mb-6 text-6xl font-bold text-teal">2</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                Get a Custom Roadmap
+                Complete the 10-Day Intensive
               </h3>
               <p className="text-[17px] leading-[1.75] text-text-secondary">
-                If we're a match, we build a clear plan for the semester. Grades, Euclid, AIF — all of it mapped out. Parents receive a weekly update so you always know where your child stands.
+                Daily sessions covering the full MHF4U curriculum. Practice problems, unit tests, and a final assessment.
               </p>
             </div>
             {/* Step 3 */}
             <div className="text-center">
               <div className="mb-6 text-6xl font-bold text-teal">3</div>
               <h3 className="mb-4 text-xl font-bold text-text-primary">
-                Watch Them Get In
+                Start the Semester Ahead
               </h3>
               <p className="text-[17px] leading-[1.75] text-text-secondary">
-                Weekly lessons. Weekly parent updates. A clear path to Waterloo.
+                Your child walks into Day 1 already knowing the material. The rest of the semester is review.
               </p>
             </div>
           </div>
@@ -382,7 +363,7 @@ function HomeContent() {
       <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
-            Is AP Academy Right for Your Child?
+            Is This Right for Your Child?
           </h2>
           <div className="grid gap-8 lg:grid-cols-2">
             {/* This IS for you */}
@@ -394,31 +375,31 @@ function HomeContent() {
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-teal">&#10003;</span>
                   <span>
-                    Your child is in Grade 11 or 12 taking Physics and/or Functions/Advanced Functions
+                    Your child is taking MHF4U next semester
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-teal">&#10003;</span>
                   <span>
-                    Current grades are 70–85% and need to reach 90+
+                    They want to hit 90-95%+ in math
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-teal">&#10003;</span>
                   <span>
-                    You're targeting Waterloo Engineering or competitive STEM programs
+                    They're willing to put in 10 days of focused work
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-teal">&#10003;</span>
                   <span>
-                    Your child is willing to put in the work but needs expert guidance and a real system
+                    You'd rather get ahead than play catch-up all semester
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-teal">&#10003;</span>
                   <span>
-                    You want more than tutoring — you want a Waterloo admission strategy
+                    They're targeting competitive university programs (engineering, CS, business)
                   </span>
                 </li>
               </ul>
@@ -432,25 +413,25 @@ function HomeContent() {
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-red-muted">&#10007;</span>
                   <span>
-                    Your child is already at 95%+ and just needs occasional help
+                    Your child isn't willing to commit to 10 consecutive days
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-red-muted">&#10007;</span>
                   <span>
-                    You're looking for quick fixes without consistent effort
+                    They're looking for a quick fix without real effort
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-red-muted">&#10007;</span>
                   <span>
-                    You want group tutoring or franchise-style programs
+                    They've already started MHF4U and need catch-up help
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-0.5 text-red-muted">&#10007;</span>
                   <span>
-                    Your child isn't interested in engineering or STEM
+                    They're not serious about their math grade
                   </span>
                 </li>
               </ul>
@@ -463,7 +444,7 @@ function HomeContent() {
       <section className="px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[900px]">
           <h2 className="mb-12 text-center text-[28px] font-bold text-text-primary md:mb-16 md:text-[32px]">
-            Common Questions Parents Ask
+            Common Questions
           </h2>
           <div className="mx-auto max-w-[700px] rounded-xl border border-border bg-navy-light p-7 shadow-[0_4px_20px_rgba(0,0,0,0.3)] md:p-8">
             {faqs.map((faq, index) => (
@@ -481,10 +462,10 @@ function HomeContent() {
       <section className="px-4 py-20 md:py-20">
         <div className="mx-auto max-w-[800px] text-center">
           <h2 className="mb-6 text-[28px] font-bold text-text-primary md:text-[32px]">
-            Your Child's Waterloo Admission Starts With One Call.
+            Only 5 Spots Per Session. Don't Wait Until They're Gone.
           </h2>
           <p className="mb-10 text-[17px] leading-[1.75] text-text-secondary md:text-[18px]">
-            Book a free strategy call. We'll assess where your child stands, build a plan, and tell you honestly if AP Academy is the right fit.
+            Book a quick call to confirm your child's spot. We'll make sure they're a good fit and answer any questions.
           </p>
           <CTAButton large />
         </div>
@@ -494,10 +475,10 @@ function HomeContent() {
       <section id="booking" className="bg-navy-booking px-4 py-15 md:py-15">
         <div className="mx-auto max-w-[800px] text-center">
           <h2 className="mb-6 text-[28px] font-bold text-text-primary md:text-[32px]">
-            Book Your Free Strategy Call
+            Book Your Spot
           </h2>
           <p className="mb-10 text-[17px] leading-[1.75] text-text-secondary md:text-[18px]">
-            Pick a time that works. We'll spend 20 minutes assessing where your child stands and whether AP Academy is the right fit.
+            Pick a time for a quick 15-minute call. We'll confirm fit and lock in your child's spot.
           </p>
 
           {/* Calendly inline embed */}
@@ -523,7 +504,7 @@ function HomeContent() {
             <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
               <Image
                 src="/logo.png"
-                alt="AP Academy - Waterloo Engineering tutoring for Grade 11 students in the GTA"
+                alt="AP Academy - MHF4U intensive tutoring"
                 width={64}
                 height={64}
                 className="rounded-lg"
@@ -533,7 +514,7 @@ function HomeContent() {
                   AP Academy
                 </h3>
                 <p className="text-text-muted">
-                  Grade 11–12 Math & Physics | Waterloo Engineering Prep
+                  10-Day MHF4U Intensive
                 </p>
                 <p className="text-text-muted">
                   Serving the Greater Toronto Area
@@ -564,7 +545,7 @@ function HomeContent() {
           </div>
           <div className="mt-8 border-t border-border pt-8 text-center">
             <p className="mb-4 text-xs text-text-muted">
-              Serving Grade 11 and 12 students across the GTA including Markham, Richmond Hill, Vaughan, Newmarket, Toronto, and Mississauga — online tutoring available province-wide.
+              Serving students across the GTA including Markham, Richmond Hill, Vaughan, Newmarket, Toronto, and Mississauga — online sessions available province-wide.
             </p>
             <p className="text-sm text-text-muted">
               &copy; 2026 AP Academy. All rights reserved.
