@@ -194,6 +194,10 @@ function HomeContent() {
             <a href="tel:+15195898217" className="hover:text-accent">
               (519) 589-8217
             </a>
+            {" · "}
+            <a href="/privacy" className="hover:text-accent">
+              Privacy Policy
+            </a>
           </div>
         </div>
         <p className="mt-6 text-center text-xs text-text-muted">
