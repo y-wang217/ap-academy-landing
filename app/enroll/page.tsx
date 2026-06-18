@@ -1,8 +1,6 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { CheckCircle } from "lucide-react";
 import {
   STRIPE_DEPOSIT_LINK,
   STRIPE_FULL_LINK,
@@ -11,162 +9,205 @@ import {
 } from "../config";
 
 export default function EnrollPage() {
-  // Check if Stripe links are configured
   const depositLinkReady = STRIPE_DEPOSIT_LINK.length > 0;
   const fullLinkReady = STRIPE_FULL_LINK.length > 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* MAIN CONTENT - Above the fold on mobile */}
-      <section className="px-4 py-12 md:py-16">
-        <div className="mx-auto max-w-[500px]">
-          {/* Back link */}
-          <Link
-            href="/"
-            className="mb-8 inline-flex items-center gap-2 text-sm text-text-muted hover:text-accent"
-          >
-            ← Back to home
-          </Link>
+    <div className="min-h-screen bg-dark">
+      {/* NAV */}
+      <nav className="flex items-center justify-between px-5 py-5">
+        <Link
+          href="/"
+          className="font-serif text-[21px] tracking-tight text-text-on-dark"
+        >
+          AP Academy
+        </Link>
+        <Link
+          href="/"
+          className="font-mono text-[10px] uppercase tracking-wider text-text-on-dark-muted hover:text-accent"
+        >
+          ← Back
+        </Link>
+      </nav>
 
-          {/* Header */}
-          <h1 className="mb-2 text-[24px] font-bold text-navy md:text-[32px]">
-            You're one step from locking in the summer.
-          </h1>
-          <p className="mb-8 text-text-secondary">
-            Choose how you'd like to get started.
+      {/* MAIN CONTENT */}
+      <section className="px-5 pb-10">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
+          Enroll
+        </p>
+        <h1 className="mt-3 font-serif text-[33px] font-normal leading-[1.1] text-text-on-dark">
+          You're one step from
+          <br />
+          locking in the summer.
+        </h1>
+
+        {/* What's included */}
+        <div className="mt-8 rounded-sm border border-border-dark p-5">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-text-on-dark-muted">
+            What's included
           </p>
+          <ul className="mt-4 space-y-3">
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] text-[#F8EDE6]">
+                ✓
+              </span>
+              <span className="text-[14px] text-text-on-dark">
+                {PRICING.sessions} × {PRICING.sessionLength} 1-on-1 lessons
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] text-[#F8EDE6]">
+                ✓
+              </span>
+              <span className="text-[14px] text-text-on-dark">
+                Any subject: Math, Physics, Chemistry, Biology, or English
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] text-[#F8EDE6]">
+                ✓
+              </span>
+              <span className="text-[14px] text-text-on-dark">
+                Grade 11 or 12 (IB included)
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] text-[#F8EDE6]">
+                ✓
+              </span>
+              <span className="text-[14px] text-text-on-dark">
+                {PRICING.guaranteeScore}+ guarantee on our AP-issued final
+              </span>
+            </li>
+          </ul>
+        </div>
 
-          {/* What's included */}
-          <div className="mb-8 rounded-xl border border-border bg-surface p-6">
-            <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-text-muted">
-              What's included
+        {/* Payment options */}
+        <div className="mt-6 space-y-4">
+          {/* $70 deposit */}
+          <div className="rounded-sm border border-border-dark p-5">
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif text-[38px] text-text-on-dark">
+                ${PRICING.deposit}
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-wide text-text-on-dark-muted">
+                to start
+              </span>
+            </div>
+            <p className="mt-2 text-[13px] leading-relaxed text-text-on-dark-faint">
+              A diagnostic plus your first session. No subscription — cancel
+              anytime.
             </p>
-            <ul className="space-y-3">
-              <li className="flex items-start gap-3">
-                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
-                <span className="text-text-primary">
-                  {PRICING.sessions} × {PRICING.sessionLength} 1-on-1 lessons
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
-                <span className="text-text-primary">
-                  Any subject: Math, Physics, Chemistry, Biology, or English
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
-                <span className="text-text-primary">
-                  Grade 11 or 12 (IB included)
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
-                <span className="text-text-primary">
-                  {PRICING.guaranteeScore}+ guarantee on our AP-issued final
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Payment buttons */}
-          <div className="space-y-4">
-            {/* Primary: Deposit */}
             {depositLinkReady ? (
               <a
                 href={STRIPE_DEPOSIT_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex w-full items-center justify-center rounded-lg bg-accent px-8 py-5 text-lg font-bold text-white transition-all hover:bg-accent-hover hover:shadow-lg"
+                className="mt-4 block w-full rounded-sm bg-text-on-dark py-3.5 text-center text-[14px] font-semibold text-dark transition-colors hover:bg-text-on-dark/90"
               >
-                Reserve First Class — ${PRICING.deposit}
+                Reserve First Class →
               </a>
             ) : (
               <button
                 disabled
-                className="flex w-full cursor-not-allowed items-center justify-center rounded-lg bg-accent/50 px-8 py-5 text-lg font-bold text-white"
+                className="mt-4 block w-full cursor-not-allowed rounded-sm bg-text-on-dark/50 py-3.5 text-center text-[14px] font-semibold text-dark/70"
               >
-                Reserve First Class — ${PRICING.deposit}
-                <span className="ml-2 text-sm font-normal opacity-75">
-                  (Link not configured)
+                Reserve First Class
+                <span className="ml-2 text-[11px] font-normal">
+                  (Link not set)
                 </span>
               </button>
             )}
+          </div>
 
-            {/* Secondary: Full payment */}
+          {/* $600 full */}
+          <div className="rounded-sm border-[1.5px] border-accent bg-accent-bg p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-baseline gap-2">
+                <span className="font-serif text-[38px] text-text-on-dark">
+                  ${PRICING.full}
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-wide text-text-on-dark-muted">
+                  full summer
+                </span>
+              </div>
+              <span className="rounded-sm bg-accent px-2 py-1 font-mono text-[8.5px] uppercase tracking-wide text-[#F8EDE6]">
+                Best value
+              </span>
+            </div>
+            <p className="mt-2 text-[13px] leading-relaxed text-text-on-dark-faint">
+              All ten weekly slots, the complete Bulletproof Method, and the 95+
+              guarantee.
+            </p>
             {fullLinkReady ? (
               <a
                 href={STRIPE_FULL_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex w-full items-center justify-center rounded-lg border-2 border-accent bg-transparent px-8 py-5 text-lg font-bold text-accent transition-all hover:bg-accent/5"
+                className="mt-4 block w-full rounded-sm bg-accent py-3.5 text-center text-[14px] font-bold text-[#F8EDE6] transition-colors hover:bg-accent/90"
               >
-                Pay Full Summer — ${PRICING.full}
+                Pay Full Summer →
               </a>
             ) : (
               <button
                 disabled
-                className="flex w-full cursor-not-allowed items-center justify-center rounded-lg border-2 border-accent/50 bg-transparent px-8 py-5 text-lg font-bold text-accent/50"
+                className="mt-4 block w-full cursor-not-allowed rounded-sm bg-accent/50 py-3.5 text-center text-[14px] font-bold text-[#F8EDE6]/70"
               >
-                Pay Full Summer — ${PRICING.full}
-                <span className="ml-2 text-sm font-normal opacity-75">
-                  (Link not configured)
+                Pay Full Summer
+                <span className="ml-2 text-[11px] font-normal">
+                  (Link not set)
                 </span>
               </button>
             )}
           </div>
+        </div>
 
-          {/* Stripe trust line */}
-          <p className="mt-6 text-center text-sm text-text-muted">
-            Secure checkout via Stripe. You'll get a receipt by email.
+        {/* Trust line */}
+        <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-wide text-text-on-dark-muted">
+          Secure checkout via Stripe · Receipt by email
+        </p>
+
+        {/* Guarantee reminder */}
+        <div className="mt-6 rounded-sm border border-accent/30 bg-accent/5 p-4">
+          <p className="text-center text-[13px] text-text-on-dark-faint">
+            <span className="font-semibold text-accent">
+              {PRICING.guaranteeScore}+ guarantee:
+            </span>{" "}
+            If your child doesn't hit {PRICING.guaranteeScore}% on our final, we
+            keep teaching at no extra cost.
           </p>
-
-          {/* Guarantee reminder */}
-          <div className="mt-8 rounded-lg border border-border bg-background p-4 text-center">
-            <p className="text-sm text-text-secondary">
-              <span className="font-semibold text-accent">
-                {PRICING.guaranteeScore}+ guarantee:
-              </span>{" "}
-              If your child doesn't hit {PRICING.guaranteeScore}% on our final,
-              we keep teaching at no extra cost.
-            </p>
-          </div>
         </div>
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-border bg-background px-4 py-8">
-        <div className="mx-auto flex max-w-[800px] flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/logo.png"
-              alt="AP Academy"
-              width={40}
-              height={40}
-              className="rounded-lg"
-            />
-            <span className="font-semibold text-text-primary">AP Academy</span>
-          </div>
-          <div className="text-sm text-text-muted">
-            <a href={`mailto:${CONTACT.email}`} className="hover:text-accent">
+      <footer className="border-t border-border-dark px-5 py-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <span className="font-serif text-[18px] text-text-on-dark">
+            AP Academy
+          </span>
+          <div className="flex flex-wrap justify-center gap-3 text-[12px] text-text-on-dark-muted">
+            <a
+              href={`mailto:${CONTACT.email}`}
+              className="hover:text-accent"
+            >
               {CONTACT.email}
             </a>
-            {" · "}
+            <span>·</span>
             <a
               href={`tel:+1${CONTACT.phone.replace(/-/g, "")}`}
               className="hover:text-accent"
             >
               ({CONTACT.phone.slice(0, 3)}) {CONTACT.phone.slice(4)}
             </a>
-            {" · "}
+            <span>·</span>
             <Link href="/privacy" className="hover:text-accent">
-              Privacy Policy
+              Privacy
             </Link>
           </div>
+          <p className="text-[11px] text-text-faint">
+            © {new Date().getFullYear()} AP Academy
+          </p>
         </div>
-        <p className="mt-6 text-center text-xs text-text-muted">
-          © {new Date().getFullYear()} AP Academy. All rights reserved.
-        </p>
       </footer>
     </div>
   );

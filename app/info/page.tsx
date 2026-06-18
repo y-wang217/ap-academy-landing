@@ -1,38 +1,16 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { VSL_EMBED_URL, CONTACT, PRICING } from "../config";
-
-function CTAButton({
-  href,
-  large = false,
-  children,
-}: {
-  href: string;
-  large?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`inline-block rounded-lg bg-accent font-bold text-white transition-all hover:bg-accent-hover hover:shadow-lg ${
-        large ? "px-10 py-5 text-lg" : "px-8 py-4"
-      }`}
-    >
-      {children}
-    </Link>
-  );
-}
 
 function VideoEmbed() {
   // If no URL is set, show placeholder
   if (!VSL_EMBED_URL) {
     return (
-      <div className="relative mx-auto aspect-video w-full max-w-[800px] overflow-hidden rounded-xl border-2 border-dashed border-border bg-surface">
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-text-muted">
+      <div className="relative mx-auto aspect-video w-full max-w-[800px] overflow-hidden rounded-sm border-2 border-dashed border-border bg-surface">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-text-muted">
           <svg
-            className="h-16 w-16 opacity-50"
+            className="h-16 w-16 opacity-40"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -50,7 +28,9 @@ function VideoEmbed() {
               d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <span className="text-sm">Video coming soon</span>
+          <span className="font-mono text-[11px] uppercase tracking-wide">
+            Video coming soon
+          </span>
         </div>
       </div>
     );
@@ -66,18 +46,16 @@ function VideoEmbed() {
   let embedSrc = VSL_EMBED_URL;
 
   if (isYouTube) {
-    // Convert watch URL to embed URL if needed
     const videoId =
       VSL_EMBED_URL.match(/(?:v=|\/embed\/|youtu\.be\/)([^&?/]+)/)?.[1] || "";
     embedSrc = `https://www.youtube.com/embed/${videoId}`;
   } else if (isVimeo) {
-    // Convert vimeo.com/123456 to player.vimeo.com/video/123456
     const videoId = VSL_EMBED_URL.match(/vimeo\.com\/(\d+)/)?.[1] || "";
     embedSrc = `https://player.vimeo.com/video/${videoId}`;
   }
 
   return (
-    <div className="relative mx-auto aspect-video w-full max-w-[800px] overflow-hidden rounded-xl bg-black">
+    <div className="relative mx-auto aspect-video w-full max-w-[800px] overflow-hidden rounded-sm bg-dark">
       <iframe
         src={embedSrc}
         className="absolute inset-0 h-full w-full"
@@ -92,76 +70,92 @@ function VideoEmbed() {
 export default function InfoPage() {
   return (
     <div className="min-h-screen bg-background">
+      {/* NAV */}
+      <nav className="flex items-center justify-between px-5 py-5">
+        <Link
+          href="/"
+          className="font-serif text-[21px] tracking-tight text-dark"
+        >
+          AP Academy
+        </Link>
+        <Link
+          href="/enroll"
+          className="font-mono text-[10px] uppercase tracking-wider text-dark hover:text-accent"
+        >
+          Enroll →
+        </Link>
+      </nav>
+
       {/* HEADER */}
-      <section className="px-4 py-12 md:py-16">
-        <div className="mx-auto max-w-[800px] text-center">
-          <Link
-            href="/"
-            className="mb-8 inline-flex items-center gap-2 text-sm text-text-muted hover:text-accent"
-          >
-            ← Back to home
-          </Link>
-          <h1 className="mb-4 text-[28px] font-bold leading-tight text-navy md:text-[36px]">
-            How the Summer Intensive Works
-          </h1>
-          <p className="text-[18px] text-text-secondary">
-            Watch this short video to see if this is right for your child.
-          </p>
-        </div>
+      <section className="px-5 pt-4 pb-8">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wide text-text-muted hover:text-accent"
+        >
+          ← Back
+        </Link>
+        <h1 className="mt-6 font-serif text-[36px] font-normal leading-[1.1] tracking-tight text-dark sm:text-[42px]">
+          How the Summer
+          <br />
+          Intensive Works
+        </h1>
+        <p className="mt-4 max-w-[40ch] text-[15px] leading-relaxed text-text-secondary">
+          Watch this short video to see if this is right for your child.
+        </p>
       </section>
 
       {/* VIDEO */}
-      <section className="px-4 pb-12">
+      <section className="px-5 pb-10">
         <VideoEmbed />
       </section>
 
       {/* CTA */}
-      <section className="px-4 py-12 md:py-16">
-        <div className="mx-auto max-w-[500px] text-center">
-          <p className="mb-6 text-text-secondary">
+      <section className="bg-dark px-5 py-10">
+        <div className="mx-auto max-w-[400px] text-center">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
+            Ready to start?
+          </p>
+          <p className="mt-4 text-[15px] leading-relaxed text-text-on-dark-faint">
             {PRICING.sessions} × {PRICING.sessionLength} lessons.{" "}
             {PRICING.guaranteeScore}+ guarantee. Start with just $
             {PRICING.deposit}.
           </p>
-          <CTAButton href="/enroll" large>
+          <Link
+            href="/enroll"
+            className="mt-6 inline-block rounded-sm bg-accent px-8 py-4 text-[15px] font-bold text-[#F8EDE6] transition-colors hover:bg-accent/90"
+          >
             Reserve a spot — ${PRICING.deposit}
-          </CTAButton>
+          </Link>
         </div>
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-border bg-background px-4 py-8">
-        <div className="mx-auto flex max-w-[800px] flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/logo.png"
-              alt="AP Academy"
-              width={40}
-              height={40}
-              className="rounded-lg"
-            />
-            <span className="font-semibold text-text-primary">AP Academy</span>
-          </div>
-          <div className="text-sm text-text-muted">
-            <a href={`mailto:${CONTACT.email}`} className="hover:text-accent">
+      <footer className="border-t border-border bg-background px-5 py-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <span className="font-serif text-[18px] text-dark">AP Academy</span>
+          <div className="flex flex-wrap justify-center gap-3 text-[12px] text-text-muted">
+            <a
+              href={`mailto:${CONTACT.email}`}
+              className="hover:text-accent"
+            >
               {CONTACT.email}
             </a>
-            {" · "}
+            <span>·</span>
             <a
               href={`tel:+1${CONTACT.phone.replace(/-/g, "")}`}
               className="hover:text-accent"
             >
               ({CONTACT.phone.slice(0, 3)}) {CONTACT.phone.slice(4)}
             </a>
-            {" · "}
+            <span>·</span>
             <Link href="/privacy" className="hover:text-accent">
-              Privacy Policy
+              Privacy
             </Link>
           </div>
+          <p className="text-[11px] text-text-faint">
+            © {new Date().getFullYear()} AP Academy
+          </p>
         </div>
-        <p className="mt-6 text-center text-xs text-text-muted">
-          © {new Date().getFullYear()} AP Academy. All rights reserved.
-        </p>
       </footer>
     </div>
   );

@@ -2,301 +2,445 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Calculator, Atom, FlaskConical, Dna, BookOpen } from "lucide-react";
-import { CONTACT, PRICING, SUBJECTS } from "./config";
+import { CONTACT, PRICING } from "./config";
 
-// Icon mapping for subjects
-const SUBJECT_ICONS = {
-  calculator: Calculator,
-  atom: Atom,
-  "flask-conical": FlaskConical,
-  dna: Dna,
-  "book-open": BookOpen,
-} as const;
+// Subject data with course codes
+const SUBJECTS = [
+  {
+    num: "01",
+    name: "Mathematics",
+    grades: "Gr 11–12",
+    detail: "Advanced Functions · Calculus & Vectors · MCR3U",
+  },
+  {
+    num: "02",
+    name: "Physics",
+    grades: "Gr 11–12",
+    detail: "SPH3U / SPH4U — mechanics through fields",
+  },
+  {
+    num: "03",
+    name: "Chemistry",
+    grades: "Gr 11–12",
+    detail: "SCH3U / SCH4U — moles through equilibrium",
+  },
+  {
+    num: "04",
+    name: "Biology",
+    grades: "Gr 11–12",
+    detail: "SBI3U / SBI4U — cells through genetics",
+  },
+  {
+    num: "05",
+    name: "English",
+    grades: "Gr 11–12",
+    detail: "ENG3U / ENG4U — essays that actually argue",
+  },
+];
 
-function CTAButton({
-  href,
-  large = false,
-  children,
-}: {
-  href: string;
-  large?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`inline-block rounded-lg bg-accent font-bold text-white transition-all hover:bg-accent-hover hover:shadow-lg ${
-        large ? "px-10 py-5 text-lg" : "px-8 py-4"
-      }`}
-    >
-      {children}
-    </Link>
-  );
-}
+// Schedule slots
+const MORNING_SLOTS = [
+  { time: "8:00", subject: "Math" },
+  { time: "9:00", subject: "Math" },
+  { time: "10:00", subject: null },
+  { time: "11:00", subject: "Physics" },
+  { time: "12:00", subject: null },
+];
 
-function SecondaryLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1 text-accent hover:underline"
-    >
-      {children} →
-    </Link>
-  );
-}
+const AFTERNOON_SLOTS = [
+  { time: "1:00", subject: "Chem" },
+  { time: "2:00", subject: null },
+  { time: "3:00", subject: "Bio" },
+  { time: "4:00", subject: null },
+  { time: "5:00", subject: "English" },
+];
+
+// Results/testimonials
+const RESULTS = [
+  {
+    before: 74,
+    after: 96,
+    name: "Aanya R.",
+    subject: "Advanced Functions",
+    quote: "She finally stopped dreading Sunday-night homework.",
+  },
+  {
+    before: 81,
+    after: 95,
+    name: "Marcus T.",
+    subject: "Chemistry",
+    quote: "Went from panic to explaining it to his friends.",
+  },
+  {
+    before: 88,
+    after: 99,
+    name: "Priya S.",
+    subject: "Calculus",
+    quote: "The 99 got her the Waterloo offer.",
+  },
+];
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-background">
+      {/* ANNOUNCEMENT BAR */}
+      <div className="flex items-center justify-between gap-4 bg-dark px-5 py-3">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-text-on-dark">
+          Summer 2026 enrollment open · limited slots
+        </span>
+        <Link
+          href="/enroll"
+          className="whitespace-nowrap font-mono text-[10px] uppercase tracking-wider text-accent-light hover:underline"
+        >
+          Reserve →
+        </Link>
+      </div>
+
+      {/* NAV */}
+      <nav className="flex items-center justify-between px-5 pt-5">
+        <span className="font-serif text-[21px] tracking-tight text-dark">
+          AP Academy
+        </span>
+        <Link
+          href="/enroll"
+          className="font-mono text-[10px] uppercase tracking-wider text-dark hover:text-accent"
+        >
+          Enroll →
+        </Link>
+      </nav>
+
       {/* HERO */}
-      <section className="px-4 py-16 md:py-20 lg:py-24">
-        <div className="mx-auto max-w-[900px] text-center">
-          <h1 className="mb-6 text-[28px] font-bold leading-tight text-navy md:text-[40px] lg:text-[48px]">
-            Lock in a 95+ this summer — or we keep teaching until you do.
-          </h1>
-          <p className="mx-auto mb-8 max-w-[700px] text-[18px] leading-relaxed text-text-secondary md:text-[20px]">
-            {PRICING.sessions} focused {PRICING.sessionLength} lessons. Grade 11
-            & 12 Math, Physics, Chemistry, Biology, and English. Taught the way
-            it actually sticks.
+      <section className="px-5 pt-7">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
+          Grade 11 & 12 · Greater Toronto Area
+        </p>
+        <h1 className="mt-4 font-serif text-[40px] font-normal leading-[1.06] tracking-tight text-dark sm:text-[47px]">
+          A 95+ average —{" "}
+          <span className="italic text-accent">
+            or we keep teaching, free.
+          </span>
+        </h1>
+        <p className="mt-6 max-w-[36ch] text-[15px] leading-relaxed text-text-secondary">
+          Summer prep built on one transparent system — the Bulletproof Method.
+          We tell you exactly what you're paying for: the hours, the plan, and
+          the proof.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center gap-5">
+          <Link
+            href="/enroll"
+            className="inline-block rounded-sm bg-dark px-6 py-3.5 text-[14px] font-semibold text-text-on-dark transition-colors hover:bg-dark/90"
+          >
+            Start for ${PRICING.deposit}
+          </Link>
+          <Link
+            href="/info"
+            className="border-b-[1.5px] border-accent pb-0.5 text-[13px] font-semibold text-dark hover:text-accent"
+          >
+            See how it works →
+          </Link>
+        </div>
+      </section>
+
+      {/* HERO IMAGE */}
+      <section className="px-5 pt-8">
+        <div className="border-l-[3px] border-accent pl-4">
+          <Image
+            src="/teacher.jpeg"
+            alt="Yale Wang — Founder and lead instructor"
+            width={600}
+            height={400}
+            className="w-full rounded-sm"
+            priority
+          />
+          <p className="mt-3 font-mono text-[10.5px] uppercase tracking-wide text-text-muted">
+            Yale Wang — Founder & lead instructor
           </p>
-          <div className="flex flex-col items-center gap-4">
-            <CTAButton href="/enroll" large>
-              Reserve a spot — ${PRICING.deposit}
-            </CTAButton>
-            <SecondaryLink href="/info">See how it works</SecondaryLink>
+        </div>
+      </section>
+
+      {/* PROOF BAR */}
+      <section className="mt-8 bg-dark px-5 py-8">
+        <div className="flex items-baseline gap-2.5">
+          <span className="font-serif text-[44px] leading-none text-text-on-dark">
+            4.9
+          </span>
+          <span className="text-[18px] tracking-wider text-accent">★★★★★</span>
+        </div>
+        <p className="mt-1.5 font-mono text-[10.5px] uppercase tracking-wide text-text-on-dark-muted">
+          Google reviews · 127 families
+        </p>
+
+        <div className="my-5 h-px bg-border-dark" />
+
+        <div className="flex justify-between gap-4">
+          <div>
+            <p className="font-serif text-[30px] text-text-on-dark">+18</p>
+            <p className="mt-1 font-mono text-[9.5px] uppercase tracking-wide text-text-on-dark-muted">
+              avg. point gain
+            </p>
+          </div>
+          <div>
+            <p className="font-serif text-[30px] text-text-on-dark">300+</p>
+            <p className="mt-1 font-mono text-[9.5px] uppercase tracking-wide text-text-on-dark-muted">
+              students coached
+            </p>
+          </div>
+          <div>
+            <p className="font-serif text-[30px] text-text-on-dark">10</p>
+            <p className="mt-1 font-mono text-[9.5px] uppercase tracking-wide text-text-on-dark-muted">
+              weekly slots
+            </p>
           </div>
         </div>
+
+        <div className="my-5 h-px bg-border-dark" />
+
+        <p className="font-mono text-[10px] uppercase tracking-widest leading-loose text-text-on-dark-faint">
+          WATERLOO · UofT · WESTERN · McMASTER · QUEEN'S
+        </p>
       </section>
 
       {/* SUBJECTS */}
-      <section className="border-y border-border bg-surface px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[900px]">
-          <h2 className="mb-10 text-center text-[24px] font-bold text-navy md:text-[32px]">
-            Subjects We Cover
-          </h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
-            {SUBJECTS.map((subject) => {
-              const IconComponent =
-                SUBJECT_ICONS[subject.icon as keyof typeof SUBJECT_ICONS];
-              return (
-                <div
-                  key={subject.name}
-                  className="flex flex-col items-center gap-3 rounded-xl border border-border bg-background p-6 text-center"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
-                    <IconComponent className="h-6 w-6 text-accent" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-text-primary">
-                      {subject.name}
-                    </p>
-                    <p className="text-sm text-text-muted">
-                      Grade 11 & 12
-                      <br />
-                      <span className="text-xs">(IB included)</span>
-                    </p>
-                  </div>
+      <section className="px-5 py-10">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
+          What we teach
+        </p>
+        <h2 className="mt-3 font-serif text-[33px] font-normal leading-[1.05] text-dark">
+          Five subjects.
+          <br />
+          One method.
+        </h2>
+
+        <div className="mt-4">
+          {SUBJECTS.map((subject, i) => (
+            <div
+              key={subject.num}
+              className={`flex gap-4 py-5 ${
+                i === 0 ? "border-t border-border" : ""
+              } border-b border-border`}
+            >
+              <span className="font-mono text-[11px] text-text-faint">
+                {subject.num}
+              </span>
+              <div className="flex-1">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-serif text-[25px] text-dark">
+                    {subject.name}
+                  </span>
+                  <span className="whitespace-nowrap rounded-sm border border-border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide text-text-muted">
+                    {subject.grades}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
+                <p className="mt-1.5 text-[13px] text-text-muted">
+                  {subject.detail}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* SUMMER SCHEDULE INFOGRAPHIC */}
-      <section className="px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[900px]">
-          <h2 className="mb-4 text-center text-[24px] font-bold text-navy md:text-[32px]">
-            Build Your Child's Summer
-          </h2>
-          <p className="mx-auto mb-10 max-w-[600px] text-center text-text-secondary">
-            Stack subjects across two daily blocks — a focused hour each, up to
-            a full day if they're keen.
-          </p>
+      {/* SCHEDULE */}
+      <section className="bg-surface px-5 py-10">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
+          The summer plan
+        </p>
+        <h2 className="mt-3 font-serif text-[33px] font-normal leading-[1.05] text-dark">
+          Stack a full day.
+        </h2>
+        <p className="mt-1.5 max-w-[32ch] text-[14px] leading-relaxed text-text-secondary">
+          Ten one-hour slots, every weekday. Book one. Book all ten.
+        </p>
 
-          {/* Schedule Grid */}
-          <div className="space-y-8">
-            {/* Morning Block */}
-            <div>
-              <div className="mb-3 flex items-center gap-2">
-                <span className="rounded-full bg-accent/10 px-3 py-1 text-sm font-semibold text-accent">
-                  Morning Block
-                </span>
-                <span className="text-sm text-text-muted">8:00 AM – 1:00 PM</span>
-              </div>
-              <div className="grid grid-cols-5 gap-2">
-                {["8–9", "9–10", "10–11", "11–12", "12–1"].map((time) => (
-                  <div
-                    key={`am-${time}`}
-                    className="flex flex-col items-center rounded-lg border border-border bg-surface p-3 text-center"
-                  >
-                    <span className="text-xs font-medium text-text-muted">
-                      {time}
-                    </span>
-                    <span className="mt-1 text-sm text-text-secondary">
-                      1 hr
-                    </span>
-                  </div>
-                ))}
-              </div>
+        <div className="mt-6 flex gap-4">
+          {/* Morning */}
+          <div className="flex-1">
+            <div className="border-b-2 border-dark pb-2 font-mono text-[10px] uppercase tracking-wide text-dark">
+              Morning · 8–1
             </div>
-
-            {/* Afternoon Block */}
-            <div>
-              <div className="mb-3 flex items-center gap-2">
-                <span className="rounded-full bg-accent/10 px-3 py-1 text-sm font-semibold text-accent">
-                  Afternoon Block
-                </span>
-                <span className="text-sm text-text-muted">1:00 PM – 6:00 PM</span>
+            {MORNING_SLOTS.map((slot) => (
+              <div
+                key={slot.time}
+                className="flex justify-between border-b border-border py-2.5 text-[12px]"
+              >
+                <span className="font-mono text-text-muted">{slot.time}</span>
+                {slot.subject ? (
+                  <span className="font-semibold text-accent">
+                    {slot.subject}
+                  </span>
+                ) : (
+                  <span className="text-text-faint">open</span>
+                )}
               </div>
-              <div className="grid grid-cols-5 gap-2">
-                {["1–2", "2–3", "3–4", "4–5", "5–6"].map((time) => (
-                  <div
-                    key={`pm-${time}`}
-                    className="flex flex-col items-center rounded-lg border border-border bg-surface p-3 text-center"
-                  >
-                    <span className="text-xs font-medium text-text-muted">
-                      {time}
-                    </span>
-                    <span className="mt-1 text-sm text-text-secondary">
-                      1 hr
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
 
-          {/* Subject Pills */}
-          <div className="mt-8 flex flex-wrap justify-center gap-2">
-            <span className="text-sm text-text-muted">Pick any:</span>
-            {SUBJECTS.map((subject) => (
-              <span
-                key={subject.name}
-                className="rounded-full border border-border bg-surface px-3 py-1 text-sm text-text-secondary"
+          {/* Afternoon */}
+          <div className="flex-1">
+            <div className="border-b-2 border-dark pb-2 font-mono text-[10px] uppercase tracking-wide text-dark">
+              Afternoon · 1–6
+            </div>
+            {AFTERNOON_SLOTS.map((slot) => (
+              <div
+                key={slot.time}
+                className="flex justify-between border-b border-border py-2.5 text-[12px]"
               >
-                {subject.name}
-              </span>
+                <span className="font-mono text-text-muted">{slot.time}</span>
+                {slot.subject ? (
+                  <span className="font-semibold text-accent">
+                    {slot.subject}
+                  </span>
+                ) : (
+                  <span className="text-text-faint">open</span>
+                )}
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* GUARANTEE */}
-      <section className="border-y border-border bg-surface px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[700px] text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
-            <span className="text-2xl font-bold text-accent">
-              {PRICING.guaranteeScore}+
-            </span>
-          </div>
-          <h2 className="mb-4 text-[24px] font-bold text-navy md:text-[32px]">
-            The {PRICING.guaranteeScore}+ Guarantee
-          </h2>
-          <p className="text-[18px] leading-relaxed text-text-secondary">
-            If your child scores below {PRICING.guaranteeScore}% on our
-            AP-issued final exam, we keep working with them until they hit it.
-            No extra charge.
-          </p>
-        </div>
-      </section>
+      {/* RESULTS */}
+      <section className="px-5 py-10">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
+          What changed
+        </p>
+        <h2 className="mt-3 font-serif text-[33px] font-normal leading-[1.05] text-dark">
+          Real names.
+          <br />
+          Real transcripts.
+        </h2>
 
-      {/* PRICING / HOW IT WORKS */}
-      <section className="px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[700px] text-center">
-          <h2 className="mb-8 text-[24px] font-bold text-navy md:text-[32px]">
-            Simple Pricing
-          </h2>
-          <div className="mb-8 rounded-xl border border-border bg-surface p-8">
-            <p className="mb-2 text-[32px] font-bold text-navy md:text-[40px]">
-              ${PRICING.full}
-            </p>
-            <p className="mb-6 text-text-secondary">
-              for {PRICING.sessions} × {PRICING.sessionLength} lessons
-            </p>
-            <div className="space-y-3 text-left text-text-secondary">
-              <div className="flex items-start gap-3">
-                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-xs text-white">
-                  ✓
-                </span>
-                <span>
-                  Start with a <strong>${PRICING.deposit} deposit</strong> to
-                  reserve the first class
-                </span>
+        <div className="mt-4">
+          {RESULTS.map((result, i) => (
+            <div
+              key={result.name}
+              className={`flex gap-4 py-5 ${
+                i === 0 ? "border-t border-border" : ""
+              } border-b border-border`}
+            >
+              {/* Photo placeholder */}
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-sm bg-gradient-to-br from-surface to-background font-mono text-[7px] text-text-faint">
+                PHOTO
               </div>
-              <div className="flex items-start gap-3">
-                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-xs text-white">
-                  ✓
-                </span>
-                <span>The rest is arranged after — no pressure</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-xs text-white">
-                  ✓
-                </span>
-                <span>
-                  Or <strong>pay the full ${PRICING.full} upfront</strong> and
-                  you're all set
-                </span>
+              <div className="flex-1">
+                <p className="font-serif text-[30px] leading-none text-dark">
+                  {result.before}{" "}
+                  <span className="text-accent">→</span> {result.after}
+                </p>
+                <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-text-muted">
+                  {result.name} · {result.subject}
+                </p>
+                <p className="mt-1.5 font-serif text-[15px] italic leading-snug text-text-secondary">
+                  "{result.quote}"
+                </p>
               </div>
             </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* FINAL CTA */}
-      <section className="bg-navy px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[600px] text-center">
-          <h2 className="mb-4 text-[24px] font-bold text-white md:text-[32px]">
-            Ready to lock in a strong summer?
-          </h2>
-          <p className="mb-8 text-text-muted">
-            Reserve your child's spot with a ${PRICING.deposit} deposit. First
-            class scheduled within 48 hours.
+      {/* GUARANTEE */}
+      <section className="bg-accent px-5 py-12 text-[#F8EDE6]">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-[#F8C9BD]">
+          The promise
+        </p>
+        <h2 className="mt-4 font-serif text-[46px] font-normal leading-none">
+          A 95+.
+          <br />
+          In writing.
+        </h2>
+        <p className="mt-5 max-w-[34ch] text-[15px] leading-relaxed">
+          If your student completes the program and doesn't reach a 95+, they
+          keep coming — on us — until they do. We can put that in writing
+          because the Bulletproof Method earns it, every time.
+        </p>
+      </section>
+
+      {/* PRICING */}
+      <section className="bg-dark px-5 py-11">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
+          Enroll
+        </p>
+        <h2 className="mt-3 font-serif text-[33px] font-normal leading-[1.05] text-text-on-dark">
+          Two ways to begin.
+        </h2>
+
+        {/* $70 option */}
+        <div className="mt-6 rounded-sm border border-border-dark p-5">
+          <div className="flex items-baseline gap-2">
+            <span className="font-serif text-[38px] text-text-on-dark">
+              ${PRICING.deposit}
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-wide text-text-on-dark-muted">
+              to start
+            </span>
+          </div>
+          <p className="mt-2 text-[13px] leading-relaxed text-text-on-dark-faint">
+            A diagnostic plus your first session. No subscription — cancel
+            anytime.
           </p>
-          <CTAButton href="/enroll" large>
-            Reserve a spot — ${PRICING.deposit}
-          </CTAButton>
         </div>
+
+        {/* $600 option */}
+        <div className="mt-3.5 rounded-sm border-[1.5px] border-accent bg-accent-bg p-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif text-[38px] text-text-on-dark">
+                ${PRICING.full}
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-wide text-text-on-dark-muted">
+                full summer
+              </span>
+            </div>
+            <span className="rounded-sm bg-accent px-2 py-1 font-mono text-[8.5px] uppercase tracking-wide text-[#F8EDE6]">
+              Best value
+            </span>
+          </div>
+          <p className="mt-2 text-[13px] leading-relaxed text-text-on-dark-faint">
+            All ten weekly slots, the complete Bulletproof Method, and the 95+
+            guarantee.
+          </p>
+        </div>
+
+        <Link
+          href="/enroll"
+          className="mt-6 block w-full rounded-sm bg-accent py-4 text-center text-[15px] font-bold text-[#F8EDE6] transition-colors hover:bg-accent/90"
+        >
+          Reserve your summer seat →
+        </Link>
+
+        <p className="mt-4 text-center font-mono text-[9.5px] uppercase tracking-wide text-text-muted">
+          AP Academy · Greater Toronto Area · Est. 2019
+        </p>
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-border bg-background px-4 py-8">
-        <div className="mx-auto flex max-w-[800px] flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/logo.png"
-              alt="AP Academy"
-              width={40}
-              height={40}
-              className="rounded-lg"
-            />
-            <span className="font-semibold text-text-primary">AP Academy</span>
-          </div>
-          <div className="text-sm text-text-muted">
-            <a href={`mailto:${CONTACT.email}`} className="hover:text-accent">
+      <footer className="border-t border-border bg-background px-5 py-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <span className="font-serif text-[18px] text-dark">AP Academy</span>
+          <div className="flex flex-wrap justify-center gap-3 text-[12px] text-text-muted">
+            <a
+              href={`mailto:${CONTACT.email}`}
+              className="hover:text-accent"
+            >
               {CONTACT.email}
             </a>
-            {" · "}
-            <a href={`tel:+1${CONTACT.phone.replace(/-/g, "")}`} className="hover:text-accent">
+            <span>·</span>
+            <a
+              href={`tel:+1${CONTACT.phone.replace(/-/g, "")}`}
+              className="hover:text-accent"
+            >
               ({CONTACT.phone.slice(0, 3)}) {CONTACT.phone.slice(4)}
             </a>
-            {" · "}
+            <span>·</span>
             <Link href="/privacy" className="hover:text-accent">
-              Privacy Policy
+              Privacy
             </Link>
           </div>
+          <p className="text-[11px] text-text-faint">
+            © {new Date().getFullYear()} AP Academy
+          </p>
         </div>
-        <p className="mt-6 text-center text-xs text-text-muted">
-          © {new Date().getFullYear()} AP Academy. All rights reserved.
-        </p>
       </footer>
     </div>
   );
