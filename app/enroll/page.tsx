@@ -60,7 +60,7 @@ export default function EnrollPage() {
                 ✓
               </span>
               <span className="text-[14px] text-text-on-dark">
-                Any subject: Math, Physics, Chemistry, Biology, or English
+                Any subject: Advanced Functions, Calculus, Physics, Chemistry, or English
               </span>
             </li>
             <li className="flex items-start gap-3">

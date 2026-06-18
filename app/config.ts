@@ -4,13 +4,14 @@
 // Edit these values to update links across the site.
 
 // Stripe Payment Links (hosted checkout — no API integration needed)
-// Paste your Stripe Payment Link URLs here:
-export const STRIPE_DEPOSIT_LINK: string = ""; // $70 deposit link — paste here
-export const STRIPE_FULL_LINK: string = ""; // $600 full payment link — paste here
+export const STRIPE_DEPOSIT_LINK: string = "https://buy.stripe.com/bJeeVf6UsaFy1dBe7b9bO00";
+export const STRIPE_FULL_LINK: string = "https://buy.stripe.com/dRmcN77YwdRKcWjfbf9bO01";
 
 // Video Sales Letter embed URL
-// TODO: paste YouTube/Vimeo embed URL here once recorded
-export const VSL_EMBED_URL: string = "";
+export const VSL_EMBED_URL: string = "https://youtu.be/Q8VroTZu8qg";
+
+// Alex testimonial URL (99 in Calculus, Waterloo Electrical Engineering 2026)
+export const ALEX_TESTIMONIAL_URL: string = "https://youtu.be/Q8VroTZu8qg";
 
 // Contact info (also in CLAUDE.md — keep in sync)
 export const CONTACT = {
@@ -28,11 +29,11 @@ export const PRICING = {
   guaranteeScore: 95,
 };
 
-// Subjects offered
+// Subjects offered (no Biology)
 export const SUBJECTS = [
-  { name: "Math", icon: "calculator" },
+  { name: "Advanced Functions", icon: "calculator" },
+  { name: "Calculus", icon: "calculator" },
   { name: "Physics", icon: "atom" },
   { name: "Chemistry", icon: "flask-conical" },
-  { name: "Biology", icon: "dna" },
   { name: "English", icon: "book-open" },
 ] as const;

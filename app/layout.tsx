@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Summer Intensive | 95+ Guarantee | AP Academy",
   description:
-    "10 focused 1-hour lessons for $600. Grade 11 & 12 Math, Physics, Chemistry, Biology, and English. 95+ guarantee on our AP-issued final — or we keep teaching at no extra cost.",
+    "10 focused 1-hour lessons for $600. Grade 11 & 12 Math, Physics, Chemistry, and English. 95+ guarantee on our AP-issued final — or we keep teaching at no extra cost.",
   keywords: [
     "summer tutoring",
     "Grade 11 tutoring",
@@ -12,8 +12,9 @@ export const metadata: Metadata = {
     "math tutoring GTA",
     "physics tutoring",
     "chemistry tutoring",
-    "biology tutoring",
     "English tutoring",
+    "calculus tutoring",
+    "advanced functions tutoring",
     "IB tutoring",
     "summer intensive",
     "Toronto tutor",
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Summer Intensive | 95+ Guarantee | AP Academy",
     description:
-      "10 focused 1-hour lessons. Grade 11 & 12 Math, Physics, Chemistry, Biology, English. 95+ guarantee.",
+      "10 focused 1-hour lessons. Grade 11 & 12 Math, Physics, Chemistry, English. 95+ guarantee.",
     url: "https://ap-academy-landing.vercel.app",
     siteName: "AP Academy",
     locale: "en_CA",
@@ -83,7 +84,7 @@ export default function RootLayout({
               "@type": "EducationalOrganization",
               name: "AP Academy",
               description:
-                "AP Academy offers summer intensive tutoring for Grade 11 & 12 students in Math, Physics, Chemistry, Biology, and English. 10 × 1-hour lessons with a 95+ guarantee.",
+                "AP Academy offers summer intensive tutoring for Grade 11 & 12 students in Math, Physics, Chemistry, and English. 10 × 1-hour lessons with a 95+ guarantee.",
               url: "https://ap-academy-landing.vercel.app",
               email: "y.wang217@gmail.com",
               telephone: "+1-519-589-8217",
@@ -99,9 +100,10 @@ export default function RootLayout({
               serviceType: [
                 "Summer Intensive Tutoring",
                 "Math Tutoring",
+                "Calculus Tutoring",
+                "Advanced Functions Tutoring",
                 "Physics Tutoring",
                 "Chemistry Tutoring",
-                "Biology Tutoring",
                 "English Tutoring",
               ],
             }),
