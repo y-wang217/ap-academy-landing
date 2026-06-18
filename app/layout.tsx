@@ -8,23 +8,23 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "MHF4U Intensive | Get 95+ Before School Starts | AP Academy",
+  title: "Summer Intensive | 95+ Guarantee | AP Academy",
   description:
-    "Master Grade 12 Advanced Functions in 10 days before the semester begins. Only 5 spots per session. Small group, full curriculum coverage. Start the semester ahead, not catching up. Book your spot.",
+    "10 focused 1-hour lessons for $600. Grade 11 & 12 Math, Physics, Chemistry, Biology, and English. 95+ guarantee on our AP-issued final — or we keep teaching at no extra cost.",
   keywords: [
-    "MHF4U tutoring",
-    "Grade 12 Advanced Functions",
-    "MHF4U intensive",
+    "summer tutoring",
+    "Grade 11 tutoring",
+    "Grade 12 tutoring",
     "math tutoring GTA",
-    "Advanced Functions tutor",
-    "MHF4U course",
-    "Grade 12 math prep",
-    "summer math intensive",
+    "physics tutoring",
+    "chemistry tutoring",
+    "biology tutoring",
+    "English tutoring",
+    "IB tutoring",
+    "summer intensive",
+    "Toronto tutor",
     "Markham tutor",
     "Richmond Hill tutor",
-    "Vaughan tutor",
-    "Toronto tutor",
-    "get ahead in math",
   ],
   authors: [{ name: "AP Academy" }],
   creator: "AP Academy",
@@ -34,9 +34,9 @@ export const metadata: Metadata = {
     canonical: "https://ap-academy-landing.vercel.app",
   },
   openGraph: {
-    title: "MHF4U Intensive | Get 95+ Before School Starts",
+    title: "Summer Intensive | 95+ Guarantee | AP Academy",
     description:
-      "Master Grade 12 Advanced Functions in 10 days before the semester begins. Only 5 spots per session. Book your spot.",
+      "10 focused 1-hour lessons. Grade 11 & 12 Math, Physics, Chemistry, Biology, English. 95+ guarantee.",
     url: "https://ap-academy-landing.vercel.app",
     siteName: "AP Academy",
     locale: "en_CA",
@@ -44,9 +44,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "MHF4U Intensive | Get 95+ Before School Starts",
+    title: "Summer Intensive | 95+ Guarantee | AP Academy",
     description:
-      "Master Grade 12 Advanced Functions in 10 days before the semester begins. Only 5 spots per session.",
+      "10 focused 1-hour lessons. 95+ guarantee on our AP-issued final.",
   },
   robots: {
     index: true,
@@ -78,41 +78,26 @@ export default function RootLayout({
               "@type": "EducationalOrganization",
               name: "AP Academy",
               description:
-                "AP Academy offers a 10-day MHF4U intensive program to help Grade 12 students master Advanced Functions before the semester begins. Small groups, full curriculum coverage, 95+ results.",
+                "AP Academy offers summer intensive tutoring for Grade 11 & 12 students in Math, Physics, Chemistry, Biology, and English. 10 × 1-hour lessons with a 95+ guarantee.",
               url: "https://ap-academy-landing.vercel.app",
               email: "y.wang217@gmail.com",
               telephone: "+1-519-589-8217",
               areaServed: [
-                {
-                  "@type": "City",
-                  name: "Toronto",
-                },
-                {
-                  "@type": "City",
-                  name: "Markham",
-                },
-                {
-                  "@type": "City",
-                  name: "Richmond Hill",
-                },
-                {
-                  "@type": "City",
-                  name: "Vaughan",
-                },
-                {
-                  "@type": "City",
-                  name: "Newmarket",
-                },
-                {
-                  "@type": "City",
-                  name: "Mississauga",
-                },
+                { "@type": "City", name: "Toronto" },
+                { "@type": "City", name: "Markham" },
+                { "@type": "City", name: "Richmond Hill" },
+                { "@type": "City", name: "Vaughan" },
+                { "@type": "City", name: "Newmarket" },
+                { "@type": "City", name: "Mississauga" },
               ],
               priceRange: "$$",
               serviceType: [
-                "MHF4U Intensive",
-                "Grade 12 Advanced Functions Tutoring",
-                "Math Intensive Program",
+                "Summer Intensive Tutoring",
+                "Math Tutoring",
+                "Physics Tutoring",
+                "Chemistry Tutoring",
+                "Biology Tutoring",
+                "English Tutoring",
               ],
             }),
           }}

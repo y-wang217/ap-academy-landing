@@ -1,82 +1,249 @@
 "use client";
 
-import { Suspense } from "react";
-import Script from "next/script";
 import Image from "next/image";
-import { students } from "./students";
+import Link from "next/link";
+import { Calculator, Atom, FlaskConical, Dna, BookOpen } from "lucide-react";
+import { CONTACT, PRICING, SUBJECTS } from "./config";
 
-// TODO: Replace with actual Calendly URL
-const CALENDLY_URL = "https://calendly.com/y-wang217/30min";
+// Icon mapping for subjects
+const SUBJECT_ICONS = {
+  calculator: Calculator,
+  atom: Atom,
+  "flask-conical": FlaskConical,
+  dna: Dna,
+  "book-open": BookOpen,
+} as const;
 
-function SocialProofBar() {
-  // Double the array for seamless infinite scroll
-  const duplicatedStudents = [...students, ...students];
-
+function CTAButton({
+  href,
+  large = false,
+  children,
+}: {
+  href: string;
+  large?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="border-y border-border bg-surface py-6">
-      <div className="mx-auto max-w-[1200px]">
-        <p className="mb-4 text-center text-sm font-medium text-text-muted">
-          Students we've helped so far:
-        </p>
-        <div className="pause-on-hover overflow-hidden">
-          <div className="animate-scroll flex gap-8 whitespace-nowrap">
-            {duplicatedStudents.map((student, index) => (
-              <div
-                key={index}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-5 py-2"
-              >
-                <span className="font-semibold text-text-primary">{student.name}</span>
-                <span className="text-text-muted">—</span>
-                <span className="text-text-secondary">{student.program}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CTAButton({ large = false }: { large?: boolean }) {
-  return (
-    <a
-      href="#booking"
+    <Link
+      href={href}
       className={`inline-block rounded-lg bg-accent font-bold text-white transition-all hover:bg-accent-hover hover:shadow-lg ${
         large ? "px-10 py-5 text-lg" : "px-8 py-4"
       }`}
     >
-      Book a Qualifying Call
-    </a>
+      {children}
+    </Link>
   );
 }
 
-function HomeContent() {
+function SecondaryLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 text-accent hover:underline"
+    >
+      {children} →
+    </Link>
+  );
+}
+
+export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       {/* HERO */}
-      <section id="hero" className="px-4 py-16 md:py-20 lg:py-24">
-        <div className="mx-auto max-w-[1100px]">
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            {/* Left: Copy */}
+      <section className="px-4 py-16 md:py-20 lg:py-24">
+        <div className="mx-auto max-w-[900px] text-center">
+          <h1 className="mb-6 text-[28px] font-bold leading-tight text-navy md:text-[40px] lg:text-[48px]">
+            Lock in a 95+ this summer — or we keep teaching until you do.
+          </h1>
+          <p className="mx-auto mb-8 max-w-[700px] text-[18px] leading-relaxed text-text-secondary md:text-[20px]">
+            {PRICING.sessions} focused {PRICING.sessionLength} lessons. Grade 11
+            & 12 Math, Physics, Chemistry, Biology, and English. Taught the way
+            it actually sticks.
+          </p>
+          <div className="flex flex-col items-center gap-4">
+            <CTAButton href="/enroll" large>
+              Reserve a spot — ${PRICING.deposit}
+            </CTAButton>
+            <SecondaryLink href="/info">See how it works</SecondaryLink>
+          </div>
+        </div>
+      </section>
+
+      {/* SUBJECTS */}
+      <section className="border-y border-border bg-surface px-4 py-16 md:py-20">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-10 text-center text-[24px] font-bold text-navy md:text-[32px]">
+            Subjects We Cover
+          </h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
+            {SUBJECTS.map((subject) => {
+              const IconComponent =
+                SUBJECT_ICONS[subject.icon as keyof typeof SUBJECT_ICONS];
+              return (
+                <div
+                  key={subject.name}
+                  className="flex flex-col items-center gap-3 rounded-xl border border-border bg-background p-6 text-center"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
+                    <IconComponent className="h-6 w-6 text-accent" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-text-primary">
+                      {subject.name}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Grade 11 & 12
+                      <br />
+                      <span className="text-xs">(IB included)</span>
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* SUMMER SCHEDULE INFOGRAPHIC */}
+      <section className="px-4 py-16 md:py-20">
+        <div className="mx-auto max-w-[900px]">
+          <h2 className="mb-4 text-center text-[24px] font-bold text-navy md:text-[32px]">
+            Build Your Child's Summer
+          </h2>
+          <p className="mx-auto mb-10 max-w-[600px] text-center text-text-secondary">
+            Stack subjects across two daily blocks — a focused hour each, up to
+            a full day if they're keen.
+          </p>
+
+          {/* Schedule Grid */}
+          <div className="space-y-8">
+            {/* Morning Block */}
             <div>
-              <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-accent">
-                10-Day MHF4U Intensive
-              </p>
-              <h1 className="mb-6 text-[32px] font-bold leading-tight text-navy md:text-[42px] lg:text-[52px]">
-                Master MHF4U Before Day One
-              </h1>
-              <p className="mb-8 text-[18px] leading-relaxed text-text-secondary md:text-[20px]">
-                The entire Grade 12 Advanced Functions course in 10 days. Start the semester with a 95+.
-              </p>
-              <CTAButton large />
+              <div className="mb-3 flex items-center gap-2">
+                <span className="rounded-full bg-accent/10 px-3 py-1 text-sm font-semibold text-accent">
+                  Morning Block
+                </span>
+                <span className="text-sm text-text-muted">8:00 AM – 1:00 PM</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {["8–9", "9–10", "10–11", "11–12", "12–1"].map((time) => (
+                  <div
+                    key={`am-${time}`}
+                    className="flex flex-col items-center rounded-lg border border-border bg-surface p-3 text-center"
+                  >
+                    <span className="text-xs font-medium text-text-muted">
+                      {time}
+                    </span>
+                    <span className="mt-1 text-sm text-text-secondary">
+                      1 hr
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            {/* Right: Photo placeholder */}
-            <div className="flex justify-center lg:justify-end">
-              {/* HERO_PHOTO_PLACEHOLDER - Replace with actual photo */}
-              <div className="flex h-[400px] w-[320px] items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface text-text-muted md:h-[480px] md:w-[380px]">
-                <span className="text-center text-sm">
-                  HERO_PHOTO_PLACEHOLDER<br />
-                  (Portrait/action shot)
+
+            {/* Afternoon Block */}
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <span className="rounded-full bg-accent/10 px-3 py-1 text-sm font-semibold text-accent">
+                  Afternoon Block
+                </span>
+                <span className="text-sm text-text-muted">1:00 PM – 6:00 PM</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {["1–2", "2–3", "3–4", "4–5", "5–6"].map((time) => (
+                  <div
+                    key={`pm-${time}`}
+                    className="flex flex-col items-center rounded-lg border border-border bg-surface p-3 text-center"
+                  >
+                    <span className="text-xs font-medium text-text-muted">
+                      {time}
+                    </span>
+                    <span className="mt-1 text-sm text-text-secondary">
+                      1 hr
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Subject Pills */}
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
+            <span className="text-sm text-text-muted">Pick any:</span>
+            {SUBJECTS.map((subject) => (
+              <span
+                key={subject.name}
+                className="rounded-full border border-border bg-surface px-3 py-1 text-sm text-text-secondary"
+              >
+                {subject.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* GUARANTEE */}
+      <section className="border-y border-border bg-surface px-4 py-16 md:py-20">
+        <div className="mx-auto max-w-[700px] text-center">
+          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
+            <span className="text-2xl font-bold text-accent">
+              {PRICING.guaranteeScore}+
+            </span>
+          </div>
+          <h2 className="mb-4 text-[24px] font-bold text-navy md:text-[32px]">
+            The {PRICING.guaranteeScore}+ Guarantee
+          </h2>
+          <p className="text-[18px] leading-relaxed text-text-secondary">
+            If your child scores below {PRICING.guaranteeScore}% on our
+            AP-issued final exam, we keep working with them until they hit it.
+            No extra charge.
+          </p>
+        </div>
+      </section>
+
+      {/* PRICING / HOW IT WORKS */}
+      <section className="px-4 py-16 md:py-20">
+        <div className="mx-auto max-w-[700px] text-center">
+          <h2 className="mb-8 text-[24px] font-bold text-navy md:text-[32px]">
+            Simple Pricing
+          </h2>
+          <div className="mb-8 rounded-xl border border-border bg-surface p-8">
+            <p className="mb-2 text-[32px] font-bold text-navy md:text-[40px]">
+              ${PRICING.full}
+            </p>
+            <p className="mb-6 text-text-secondary">
+              for {PRICING.sessions} × {PRICING.sessionLength} lessons
+            </p>
+            <div className="space-y-3 text-left text-text-secondary">
+              <div className="flex items-start gap-3">
+                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-xs text-white">
+                  ✓
+                </span>
+                <span>
+                  Start with a <strong>${PRICING.deposit} deposit</strong> to
+                  reserve the first class
+                </span>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-xs text-white">
+                  ✓
+                </span>
+                <span>The rest is arranged after — no pressure</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-xs text-white">
+                  ✓
+                </span>
+                <span>
+                  Or <strong>pay the full ${PRICING.full} upfront</strong> and
+                  you're all set
                 </span>
               </div>
             </div>
@@ -84,92 +251,19 @@ function HomeContent() {
         </div>
       </section>
 
-      {/* SOCIAL PROOF BAR */}
-      <SocialProofBar />
-
-      {/* THE BULLETPROOF METHOD */}
-      <section className="px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[800px] text-center">
-          <h2 className="mb-12 text-[28px] font-bold text-navy md:text-[36px]">
-            The Bulletproof Method
-          </h2>
-          <div className="space-y-6">
-            <div className="flex items-center gap-4 text-left">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
-                1
-              </span>
-              <p className="text-[18px] text-text-primary md:text-[20px]">
-                Diagnose every gap with a pre-assessment.
-              </p>
-            </div>
-            <div className="flex items-center gap-4 text-left">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
-                2
-              </span>
-              <p className="text-[18px] text-text-primary md:text-[20px]">
-                Drill the exact problem types that show up on the test until they're automatic.
-              </p>
-            </div>
-            <div className="flex items-center gap-4 text-left">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
-                3
-              </span>
-              <p className="text-[18px] text-text-primary md:text-[20px]">
-                Verify mastery with a full mock exam before day one.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* QUALIFYING VIDEO */}
-      <section className="px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[800px] text-center">
-          <h2 className="mb-4 text-[28px] font-bold text-navy md:text-[36px]">
-            Is This for Your Student?
-          </h2>
-          <p className="mb-10 text-[18px] text-text-secondary">
-            This is a 1-on-1 intensive for a specific type of student. Watch before booking.
-          </p>
-          {/* QUALIFYING_VIDEO_EMBED - Replace with YouTube/Vimeo embed */}
-          <div className="relative mx-auto aspect-video w-full max-w-[700px] overflow-hidden rounded-xl border-2 border-dashed border-border bg-surface">
-            <div className="absolute inset-0 flex items-center justify-center text-text-muted">
-              <span className="text-center text-sm">
-                QUALIFYING_VIDEO_EMBED<br />
-                (YouTube or Vimeo embed)
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* FINAL CTA */}
-      <section className="px-4 py-16 md:py-20">
+      <section className="bg-navy px-4 py-16 md:py-20">
         <div className="mx-auto max-w-[600px] text-center">
-          <p className="mb-6 text-[20px] text-text-primary md:text-[22px]">
-            Only 5 spots per session. Book your qualifying call now.
-          </p>
-          <CTAButton large />
-        </div>
-      </section>
-
-      {/* BOOKING (Calendly Embed) */}
-      <section id="booking" className="bg-surface px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-[800px] text-center">
-          <h2 className="mb-8 text-[28px] font-bold text-navy md:text-[32px]">
-            Book Your Qualifying Call
+          <h2 className="mb-4 text-[24px] font-bold text-white md:text-[32px]">
+            Ready to lock in a strong summer?
           </h2>
-          <div className="mx-auto max-w-[700px]">
-            <div
-              className="calendly-inline-widget"
-              data-url={CALENDLY_URL}
-              data-resize="true"
-            />
-            <Script
-              src="https://assets.calendly.com/assets/external/widget.js"
-              strategy="lazyOnload"
-            />
-          </div>
+          <p className="mb-8 text-text-muted">
+            Reserve your child's spot with a ${PRICING.deposit} deposit. First
+            class scheduled within 48 hours.
+          </p>
+          <CTAButton href="/enroll" large>
+            Reserve a spot — ${PRICING.deposit}
+          </CTAButton>
         </div>
       </section>
 
@@ -187,31 +281,23 @@ function HomeContent() {
             <span className="font-semibold text-text-primary">AP Academy</span>
           </div>
           <div className="text-sm text-text-muted">
-            <a href="mailto:y.wang217@gmail.com" className="hover:text-accent">
-              y.wang217@gmail.com
+            <a href={`mailto:${CONTACT.email}`} className="hover:text-accent">
+              {CONTACT.email}
             </a>
             {" · "}
-            <a href="tel:+15195898217" className="hover:text-accent">
-              (519) 589-8217
+            <a href={`tel:+1${CONTACT.phone.replace(/-/g, "")}`} className="hover:text-accent">
+              ({CONTACT.phone.slice(0, 3)}) {CONTACT.phone.slice(4)}
             </a>
             {" · "}
-            <a href="/privacy" className="hover:text-accent">
+            <Link href="/privacy" className="hover:text-accent">
               Privacy Policy
-            </a>
+            </Link>
           </div>
         </div>
         <p className="mt-6 text-center text-xs text-text-muted">
-          © 2026 AP Academy. All rights reserved.
+          © {new Date().getFullYear()} AP Academy. All rights reserved.
         </p>
       </footer>
     </div>
-  );
-}
-
-export default function Home() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-background" />}>
-      <HomeContent />
-    </Suspense>
   );
 }
