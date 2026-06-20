@@ -66,7 +66,7 @@ export default function HowItWorksPage() {
           </h1>
           <p className="mt-4 max-w-[50ch] text-[15px] leading-relaxed text-text-secondary">
             We know tutoring is an investment. That's why we let you experience
-            Lesson 1 for just ${PRICING.deposit} — no strings attached.
+            Lesson 1 for just ${PRICING.lesson1} — no strings attached.
           </p>
         </section>
       </div>
@@ -136,7 +136,7 @@ export default function HowItWorksPage() {
           <div className="rounded-sm border-2 border-accent bg-accent/5 p-6">
             <div className="flex items-baseline gap-2">
               <span className="font-serif text-[48px] text-dark">
-                ${PRICING.deposit}
+                ${PRICING.lesson1}
               </span>
             </div>
             <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-accent">
@@ -152,7 +152,7 @@ export default function HowItWorksPage() {
           <div className="rounded-sm border border-border bg-background p-6">
             <div className="flex items-baseline gap-2">
               <span className="font-serif text-[48px] text-dark">
-                ${PRICING.full}
+                ${PRICING.fullCourse}
               </span>
             </div>
             <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-text-muted">
@@ -170,7 +170,7 @@ export default function HowItWorksPage() {
           <p className="text-[14px] leading-relaxed text-text-secondary">
             <span className="font-semibold text-accent">In plain terms:</span>{" "}
             It's 100% online. 10 classes to learn the material and get tested.
-            Enrollment is ${PRICING.deposit} — that gets your child into Lesson
+            Enrollment is ${PRICING.lesson1} — that gets your child into Lesson
             1. After the first class, you choose to continue or not.
           </p>
         </div>
@@ -189,14 +189,14 @@ export default function HowItWorksPage() {
               See if it clicks.
             </h2>
             <p className="mx-auto mt-4 max-w-[40ch] text-[14px] leading-relaxed text-text-on-dark-faint">
-              ${PRICING.deposit} unlocks your first class. No subscriptions, no
+              ${PRICING.lesson1} unlocks your first class. No subscriptions, no
               hidden fees. Just one lesson to see if we're the right fit.
             </p>
             <Link
               href="/enroll"
               className="mt-8 inline-block rounded-sm bg-accent px-10 py-4 text-[15px] font-bold text-[#F8EDE6] transition-colors hover:bg-accent/90"
             >
-              Reserve Lesson 1 — ${PRICING.deposit}
+              Reserve Lesson 1 — ${PRICING.lesson1}
             </Link>
           </div>
         </div>

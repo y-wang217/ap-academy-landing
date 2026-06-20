@@ -1,23 +1,25 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Direction A palette */
-  --color-background: #F4EFE5;
-  --color-surface: #EAE2D2;
-  --color-card: #FFFFFF;
-  --color-dark: #15130E;
-  --color-accent: #D8402B;
-  --color-accent-light: #F28A77;
-  --color-accent-bg: rgba(216, 64, 43, 0.08);
-  --color-text-primary: #15130E;
-  --color-text-secondary: #494438;
-  --color-text-muted: #6b6658;
-  --color-text-faint: #a39c8e;
-  --color-text-on-dark: #F4EFE5;
-  --color-text-on-dark-muted: #9b958a;
-  --color-text-on-dark-faint: #c9c3b6;
-  --color-border: rgba(21, 19, 14, 0.13);
-  --color-border-dark: rgba(244, 239, 229, 0.18);
+  /* New design palette - warm cream/terracotta */
+  --color-background: #FBEFE8;
+  --color-surface: #FFFBF6;
+  --color-card: #FFFBF6;
+  --color-dark: #221C17;
+  --color-accent: #D2502A;
+  --color-accent-muted: #CC4E29;
+  --color-accent-light: #F6DDD0;
+  --color-accent-bg: #FBE5DA;
+  --color-text-primary: #221C17;
+  --color-text-secondary: #39322B;
+  --color-text-muted: #6E655B;
+  --color-text-faint: #8A8075;
+  --color-text-on-dark: #FFF6F1;
+  --color-text-on-dark-muted: #E8D5CC;
+  --color-text-on-dark-faint: #C9B8AD;
+  --color-border: rgba(193, 77, 43, 0.16);
+  --color-border-accent: rgba(193, 77, 43, 0.22);
+  --color-border-dark: rgba(210, 80, 42, 0.34);
 
   /* Fonts */
   --font-serif: 'Libre Caslon Display', Georgia, serif;
@@ -26,8 +28,8 @@
 }
 
 :root {
-  --background: #F4EFE5;
-  --foreground: #15130E;
+  --background: #FBEFE8;
+  --foreground: #221C17;
 }
 
 body {
@@ -47,6 +49,63 @@ html {
 
 .font-mono {
   font-family: var(--font-mono);
+}
+
+/* Eyebrow text style */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-accent-muted);
+  text-align: center;
+}
+
+/* Section heading */
+.shead {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: var(--color-dark);
+}
+
+/* Tile icon container */
+.tile {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: var(--color-accent-light);
+  color: var(--color-accent-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tile svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Bullet point */
+.bul {
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  margin-top: 8px;
 }
 
 /* Calendly embed container - dynamic height */

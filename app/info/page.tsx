@@ -118,13 +118,13 @@ export default function InfoPage() {
           <p className="mt-4 text-[15px] leading-relaxed text-text-on-dark-faint">
             {PRICING.sessions} × {PRICING.sessionLength} lessons.{" "}
             {PRICING.guaranteeScore}+ guarantee. Start with just $
-            {PRICING.deposit}.
+            {PRICING.lesson1}.
           </p>
           <Link
             href="/enroll"
             className="mt-6 inline-block rounded-sm bg-accent px-8 py-4 text-[15px] font-bold text-[#F8EDE6] transition-colors hover:bg-accent/90"
           >
-            Reserve a spot — ${PRICING.deposit}
+            Reserve a spot — ${PRICING.lesson1}
           </Link>
         </div>
       </section>
