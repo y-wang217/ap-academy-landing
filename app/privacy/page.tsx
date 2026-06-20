@@ -38,12 +38,12 @@ export default function PrivacyPolicy() {
             Privacy Policy
           </h1>
           <p className="mt-3 text-[14px] text-text-muted">
-            Last updated: «EFFECTIVE_DATE»
+            Last updated: January 1, 2026
           </p>
 
           <div className="mt-10 space-y-8 text-[16px] leading-[1.75] text-text-secondary">
             <p>
-              AP Academy ("AP Academy," "we," "us," or "our") is operated by «LEGAL_ENTITY_NAME» (e.g. Ambition Pathways Life Coaching Inc.), located in Ontario, Canada. This Privacy Policy explains what personal information we collect, how we use it, who we share it with, and the choices you have. We are committed to handling personal information in accordance with Canada's Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable Ontario law.
+              AP Academy ("AP Academy," "we," "us," or "our") is operated by Ambitious Pathways Life Coaching Inc. (e.g. Ambition Pathways Life Coaching Inc.), located in Ontario, Canada. This Privacy Policy explains what personal information we collect, how we use it, who we share it with, and the choices you have. We are committed to handling personal information in accordance with Canada's Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable Ontario law.
             </p>
             <p>
               By using our website or enrolling in our programs, you agree to the practices described in this policy.
@@ -109,7 +109,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="mb-4 font-serif text-[24px] text-dark">5. A note about students and minors</h2>
               <p>
-                Many of our students are under the age of 18. Where we collect information about a minor, we rely on a parent or guardian to provide it or to consent to its collection and use for tutoring purposes. If you are under 18, please involve a parent or guardian before submitting information to us. If you believe a minor has provided us information without appropriate consent, contact us at «CONTACT_EMAIL» and we will address it.
+                Many of our students are under the age of 18. Where we collect information about a minor, we rely on a parent or guardian to provide it or to consent to its collection and use for tutoring purposes. If you are under 18, please involve a parent or guardian before submitting information to us. If you believe a minor has provided us information without appropriate consent, contact us at y.wang217@gmail.com and we will address it.
               </p>
             </section>
 
@@ -133,7 +133,7 @@ export default function PrivacyPolicy() {
                 <li>Request deletion of your information, subject to legal retention requirements.</li>
               </ul>
               <p>
-                To make a request, contact us at «CONTACT_EMAIL». We will respond within a reasonable time.
+                To make a request, contact us at y.wang217@gmail.com. We will respond within a reasonable time.
               </p>
             </section>
 
@@ -181,9 +181,8 @@ export default function PrivacyPolicy() {
                 Questions or requests about this policy or your personal information:
               </p>
               <p className="text-dark">
-                «LEGAL_ENTITY_NAME»<br />
-                «MAILING_ADDRESS (optional)»<br />
-                Email: «CONTACT_EMAIL»
+                Ambitious Pathways Life Coaching Inc.<br />
+                Email: y.wang217@gmail.com
               </p>
             </section>
           </div>
