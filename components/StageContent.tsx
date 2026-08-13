@@ -1,7 +1,7 @@
 import type { Stage } from "@/content/path";
-import { CONTACT } from "@/app/config";
 import VideoFacade from "./VideoFacade";
 import LeadMagnetForm from "./LeadMagnetForm";
+import BookCallLink from "./BookCallLink";
 
 // The body of a stage — brief §4.3 order: beat, why-this-matters, video slot,
 // lead magnet, book-a-call link. Rendered inside the <StageDetail> dialog and
@@ -55,14 +55,12 @@ export default function StageContent({ stage, headingId, headingTag: Heading = "
       </div>
 
       <p className="mt-5 text-center">
-        <a
-          href={CONTACT.calendly}
-          target="_blank"
-          rel="noopener noreferrer"
+        <BookCallLink
+          placement="stage"
           className="font-mono text-[12px] uppercase tracking-[0.1em] text-accent-muted underline-offset-4 hover:underline"
         >
           Talk it through for my child&apos;s situation →
-        </a>
+        </BookCallLink>
       </p>
     </div>
   );

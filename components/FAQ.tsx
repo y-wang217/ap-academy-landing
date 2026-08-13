@@ -1,65 +1,58 @@
 "use client";
 
-import { useState } from "react";
 import { FAQS, type FAQEntry } from "@/content/faq";
+import { track } from "@/lib/analytics";
 
-const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={`h-5 w-5 flex-none text-accent transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
-  >
-    <path d="M9 18l6-6-6-6" />
-  </svg>
-);
+// Native <details>/<summary> accordion (brief §4.8) — expand/collapse needs no
+// JS; the only script here is the faq_open analytics event.
 
-function FAQItem({ faq, index }: { faq: FAQEntry; index: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const panelId = `faq-panel-${index}`;
-  const buttonId = `faq-button-${index}`;
+function Chevron() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5 flex-none text-accent transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none"
+      aria-hidden="true"
+    >
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}
 
+function FAQItem({ faq }: { faq: FAQEntry }) {
   const [firstParagraph, ...restParagraphs] = faq.paragraphs;
 
   return (
-    <div className="border-b border-border">
-      <button
-        id={buttonId}
-        aria-expanded={expanded}
-        aria-controls={panelId}
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center justify-between gap-4 py-5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-      >
+    <details
+      className="group border-b border-border"
+      onToggle={(e) => {
+        if (e.currentTarget.open) track("faq_open", { question: faq.question });
+      }}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-left [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2">
         <span className="text-[15px] font-semibold text-dark md:text-[16px]">{faq.question}</span>
-        <ChevronIcon expanded={expanded} />
-      </button>
-      <div
-        id={panelId}
-        role="region"
-        aria-labelledby={buttonId}
-        className={`overflow-hidden transition-all duration-200 ${expanded ? "pb-5" : "max-h-0"}`}
-        style={{ display: expanded ? "block" : "none" }}
-      >
-        <div className="text-[14px] leading-[1.7] text-text-secondary md:text-[15px]">
-          <p>{firstParagraph}</p>
-          {faq.bullets && (
-            <ul className="ml-5 mt-3 list-disc space-y-1.5">
-              {faq.bullets.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          )}
-          {restParagraphs.map((para, i) => (
-            <p key={i} className="mt-3">
-              {para}
-            </p>
-          ))}
-        </div>
+        <Chevron />
+      </summary>
+      <div className="pb-5 text-[14px] leading-[1.7] text-text-secondary md:text-[15px]">
+        <p>{firstParagraph}</p>
+        {faq.bullets && (
+          <ul className="ml-5 mt-3 list-disc space-y-1.5">
+            {faq.bullets.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        )}
+        {restParagraphs.map((para, i) => (
+          <p key={i} className="mt-3">
+            {para}
+          </p>
+        ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -73,8 +66,8 @@ export default function FAQ() {
       </p>
 
       <div className="mt-10">
-        {FAQS.map((faq, index) => (
-          <FAQItem key={faq.question} faq={faq} index={index} />
+        {FAQS.map((faq) => (
+          <FAQItem key={faq.question} faq={faq} />
         ))}
       </div>
     </section>

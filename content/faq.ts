@@ -1,5 +1,5 @@
-// FAQ copy, moved verbatim out of app/page.tsx. Order is unchanged for now;
-// the objection-handling reorder is a later session.
+// FAQ copy, moved verbatim out of app/page.tsx. Ordered objection-first per
+// the site brief §4.8: the top five handle the questions that block a booking.
 
 export type FAQEntry = {
   question: string;
@@ -9,6 +9,45 @@ export type FAQEntry = {
 };
 
 export const FAQS: FAQEntry[] = [
+  {
+    question: "What does the 95+ benchmark mean?",
+    paragraphs: [
+      "Our 95+ benchmark refers to the standard we train students toward in our own assessments and practice exams.",
+      "It does not mean we can control every school mark, teacher, test format, or university admission decision. What we can control is the quality of preparation, the level of questions students practise, and the consistency of support they receive.",
+      "Our goal is to help students become 95+ ready by building stronger understanding, better study habits, and better test performance.",
+    ],
+  },
+  {
+    question: "What if my child is already getting 90%+?",
+    paragraphs: [
+      "That is exactly the type of student who may benefit from this program.",
+      "At competitive university levels, the difference between 90 and 95+ often comes down to consistency, speed, precision, and knowing how to handle harder questions.",
+      "Strong students do not always need more random tutoring. They need a clear system, better test preparation, and higher-level practice.",
+    ],
+  },
+  {
+    question: "What if my child is below 80% right now?",
+    paragraphs: [
+      "We can still discuss whether the program is a fit.",
+      "However, if a student is missing major foundations, they may need extra support before they are ready for a 95+ focused group program. During the call, we will ask about your child's current level and recommend the most realistic next step.",
+      "We would rather be honest about fit than place a student into a class that is too advanced for them.",
+    ],
+  },
+  {
+    question: "Why group lessons instead of 1-on-1 tutoring?",
+    paragraphs: [
+      "1-on-1 tutoring can be helpful, but it is not always the best fit for every student.",
+      "Small-group lessons give students structure, routine, accountability, and exposure to common questions and mistakes. Students often learn a lot by seeing how other students approach the same problem.",
+      'For students aiming for competitive programs, the goal is not just to "get help with homework." The goal is to build a stronger system for learning and test preparation.',
+    ],
+  },
+  {
+    question: "What happens after I fill out the form?",
+    paragraphs: [
+      "After you submit the form, we will review your answers and contact you.",
+      "During the call, we will ask about your child's current marks, subject needs, university goals, and schedule. If the program is a good fit, we will explain the next steps and how to reserve a spot.",
+    ],
+  },
   {
     question: "Is this program online or in person?",
     paragraphs: [
@@ -73,35 +112,11 @@ export const FAQS: FAQEntry[] = [
     ],
   },
   {
-    question: "What does the 95+ benchmark mean?",
-    paragraphs: [
-      "Our 95+ benchmark refers to the standard we train students toward in our own assessments and practice exams.",
-      "It does not mean we can control every school mark, teacher, test format, or university admission decision. What we can control is the quality of preparation, the level of questions students practise, and the consistency of support they receive.",
-      "Our goal is to help students become 95+ ready by building stronger understanding, better study habits, and better test performance.",
-    ],
-  },
-  {
     question: "Do you guarantee my child will get 95% in school?",
     paragraphs: [
       "No program can honestly guarantee a specific school mark because every school, teacher, and assessment is different.",
       "What we do guarantee is that we will support students toward our 95+ benchmark through structured lessons, practice, feedback, and continued support.",
       "If a student is attending, doing the work, and still not meeting our internal benchmark, we continue supporting them so they know what to improve and how to get closer.",
-    ],
-  },
-  {
-    question: "What if my child is already getting 90%+?",
-    paragraphs: [
-      "That is exactly the type of student who may benefit from this program.",
-      "At competitive university levels, the difference between 90 and 95+ often comes down to consistency, speed, precision, and knowing how to handle harder questions.",
-      "Strong students do not always need more random tutoring. They need a clear system, better test preparation, and higher-level practice.",
-    ],
-  },
-  {
-    question: "What if my child is below 80% right now?",
-    paragraphs: [
-      "We can still discuss whether the program is a fit.",
-      "However, if a student is missing major foundations, they may need extra support before they are ready for a 95+ focused group program. During the call, we will ask about your child's current level and recommend the most realistic next step.",
-      "We would rather be honest about fit than place a student into a class that is too advanced for them.",
     ],
   },
   {
@@ -147,13 +162,6 @@ export const FAQS: FAQEntry[] = [
       "Needs stronger marks, structure, or accountability",
       "Is willing to attend online lessons consistently",
       "Wants to become more prepared before the school year becomes stressful",
-    ],
-  },
-  {
-    question: "What happens after I fill out the form?",
-    paragraphs: [
-      "After you submit the form, we will review your answers and contact you.",
-      "During the call, we will ask about your child's current marks, subject needs, university goals, and schedule. If the program is a good fit, we will explain the next steps and how to reserve a spot.",
     ],
   },
   {

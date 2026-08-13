@@ -1,4 +1,4 @@
-import { CONTACT } from "@/app/config";
+import BookCallLink from "./BookCallLink";
 
 export default function Hero() {
   return (
@@ -11,14 +11,12 @@ export default function Hero() {
         Getting in isn&apos;t luck — it&apos;s a four-stage path, and it&apos;s
         navigable with the right guide.
       </p>
-      <a
-        href={CONTACT.calendly}
-        target="_blank"
-        rel="noopener noreferrer"
+      <BookCallLink
+        placement="hero"
         className="mt-8 inline-block rounded-xl bg-accent px-9 py-4 text-[16px] font-bold text-text-on-dark transition-colors hover:bg-accent/90"
       >
         Book a call with Mr. Charlie
-      </a>
+      </BookCallLink>
     </section>
   );
 }
