@@ -1233,7 +1233,7 @@
     "id": 82,
     "word": "annex",
     "pos": "v",
-    "definition": "to incorporate territory or space; a room attached to a larger space",
+    "definition": "to incorporate territory or space; a room attached to a larger room or space",
     "senses": 2,
     "distractorIds": [
       400,
@@ -1908,7 +1908,7 @@
     "id": 127,
     "word": "asylum",
     "pos": "n",
-    "definition": "a place of refuge, protection, a sanctuary",
+    "definition": "a place of refuge, protection, a sanctuary; an institution in which the insane are kept",
     "senses": 1,
     "distractorIds": [
       859,
@@ -3528,7 +3528,7 @@
     "id": 235,
     "word": "compound",
     "pos": "v",
-    "definition": "to combine parts; a combination of parts; a walled area containing buildings",
+    "definition": "to combine parts; a combination of different parts; a walled area containing a group of buildings",
     "senses": 2,
     "distractorIds": [
       314,
@@ -4008,7 +4008,7 @@
     "id": 267,
     "word": "consummate",
     "pos": "v",
-    "definition": "to complete a deal or marriage",
+    "definition": "to complete a deal; to complete a marriage ceremony through sexual intercourse",
     "senses": 1,
     "distractorIds": [
       58,
@@ -4308,7 +4308,7 @@
     "id": 287,
     "word": "coup",
     "pos": "n",
-    "definition": "a brilliant, unexpected act; the overthrow of a government",
+    "definition": "a brilliant, unexpected act; the overthrow of a government and assumption of authority",
     "senses": 1,
     "distractorIds": [
       764,
@@ -5178,7 +5178,7 @@
     "id": 345,
     "word": "diffuse",
     "pos": "v",
-    "definition": "to scatter, thin out; not concentrated, disorganized",
+    "definition": "to scatter, thin out, break up; not concentrated, scattered, disorganized",
     "senses": 2,
     "distractorIds": [
       119,
@@ -5358,7 +5358,7 @@
     "id": 357,
     "word": "discretion",
     "pos": "n",
-    "definition": "reserve in speech or action; good judgment",
+    "definition": "the quality of being reserved in speech or action; good judgment",
     "senses": 1,
     "distractorIds": [
       752,
@@ -6183,7 +6183,7 @@
     "id": 412,
     "word": "empirical",
     "pos": "adj",
-    "definition": "based on observation or experience",
+    "definition": "based on observation or experience; capable of being proved or disproved by experiment",
     "senses": 1,
     "distractorIds": [
       269,
@@ -6213,7 +6213,7 @@
     "id": 414,
     "word": "enamor",
     "pos": "v",
-    "definition": "to fill with love, fascinate",
+    "definition": "to fill with love, fascinate, usually used in passive form followed by \"of\" or \"with\"",
     "senses": 1,
     "distractorIds": [
       185,
@@ -6228,7 +6228,7 @@
     "id": 415,
     "word": "encore",
     "pos": "n",
-    "definition": "a demand for a repeat performance; that performance",
+    "definition": "the audience's demand for a repeat performance; also the artist's performance in response to that demand",
     "senses": 1,
     "distractorIds": [
       215,
@@ -6918,7 +6918,7 @@
     "id": 461,
     "word": "facile",
     "pos": "adj",
-    "definition": "easy, requiring little effort; superficial, insincere",
+    "definition": "easy, requiring little effort; superficial, achieved with minimal thought or care, insincere",
     "senses": 1,
     "distractorIds": [
       888,
@@ -7803,7 +7803,7 @@
     "id": 520,
     "word": "hierarchy",
     "pos": "n",
-    "definition": "a system with ranked groups",
+    "definition": "a system with ranked groups, usually according to social, economic, or professional class",
     "senses": 1,
     "distractorIds": [
       107,
@@ -8073,7 +8073,7 @@
     "id": 538,
     "word": "impinge",
     "pos": "v",
-    "definition": "to impact, affect; to encroach, infringe",
+    "definition": "to impact, affect, make an impression; to encroach, infringe",
     "senses": 1,
     "distractorIds": [
       139,
@@ -8103,7 +8103,7 @@
     "id": 540,
     "word": "implement",
     "pos": "n",
-    "definition": "an instrument, utensil, tool; to put into effect",
+    "definition": "an instrument, utensil, tool; to put into effect, to institute",
     "senses": 2,
     "distractorIds": [
       834,
@@ -8118,7 +8118,7 @@
     "id": 541,
     "word": "implicate",
     "pos": "v",
-    "definition": "to involve in an incriminating way",
+    "definition": "to involve in an incriminating way, incriminate",
     "senses": 1,
     "distractorIds": [
       959,
@@ -8553,7 +8553,7 @@
     "id": 570,
     "word": "infusion",
     "pos": "n",
-    "definition": "an injection of one substance into another",
+    "definition": "an injection of one substance into another; the permeation of one substance by another",
     "senses": 1,
     "distractorIds": [
       507,
@@ -8718,7 +8718,7 @@
     "id": 581,
     "word": "inoculate",
     "pos": "v",
-    "definition": "to introduce a vaccine into the body to increase immunity",
+    "definition": "to introduce a microorganism, serum, or vaccine into an organism in order to increase immunity to illness; to vaccinate",
     "senses": 1,
     "distractorIds": [
       59,
@@ -9003,7 +9003,7 @@
     "id": 600,
     "word": "inure",
     "pos": "v",
-    "definition": "to cause someone to become accustomed to a situation",
+    "definition": "to cause someone or something to become accustomed to a situation",
     "senses": 1,
     "distractorIds": [
       804,
@@ -9153,7 +9153,7 @@
     "id": 610,
     "word": "juxtaposition",
     "pos": "n",
-    "definition": "placing two things next to each other for implicit comparison",
+    "definition": "the act of placing two things next to each other for implicit comparison",
     "senses": 1,
     "distractorIds": [
       15,
@@ -9363,7 +9363,7 @@
     "id": 624,
     "word": "liability",
     "pos": "n",
-    "definition": "something for which one is legally responsible; a handicap, burden",
+    "definition": "something for which one is legally responsible, usually involving a disadvantage or risk; a handicap, burden",
     "senses": 1,
     "distractorIds": [
       251,
@@ -9873,7 +9873,7 @@
     "id": 658,
     "word": "morass",
     "pos": "n",
-    "definition": "a wet swampy bog; something that traps and confuses",
+    "definition": "a wet swampy bog; figuratively, something that traps and confuses",
     "senses": 1,
     "distractorIds": [
       115,
@@ -11478,7 +11478,7 @@
     "id": 765,
     "word": "prepossessing",
     "pos": "adj",
-    "definition": "occupying the mind to the exclusion of other thoughts",
+    "definition": "occupying the mind to the exclusion of other thoughts or feelings",
     "senses": 1,
     "distractorIds": [
       650,
