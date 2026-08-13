@@ -20,13 +20,13 @@ export const GOOGLE_REVIEWS_URL =
   "https://www.google.com/search?q=ap+academy+google+review#mpd=~87304919827272142/customers/reviews";
 
 export const REVIEWS: Review[] = [
-  // Paste the real Google review here, e.g.:
-  // {
-  //   quote: "…the review text…",
-  //   attribution: "Parent name",
-  //   rating: 5,
-  //   source: "google",
-  //   sourceUrl: GOOGLE_REVIEWS_URL,
-  //   dateLabel: "August 2026",
-  // },
+  {
+    quote:
+      "Our son had an incredible experience with the Tutors at AP Academy, seeing a remarkable improvement in his grades in a very short time. We are thrilled to continue working with them for the upcoming school year.",
+    attribution: "Nadine Deerr",
+    rating: 5,
+    source: "google",
+    sourceUrl: GOOGLE_REVIEWS_URL,
+    dateLabel: "August 2026",
+  },
 ];
