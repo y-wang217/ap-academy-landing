@@ -108,6 +108,115 @@ html {
   margin-top: 8px;
 }
 
+/* ==========================================================================
+   Path to Waterloo — interactions
+   All motion lives inside (prefers-reduced-motion: no-preference); with
+   reduced motion every element sits at its animated end-state.
+   ========================================================================== */
+
+/* Hook + "Learn more" reveal: space is always reserved (opacity only), so
+   revealing never shifts layout or the SVG connector. Touch devices and
+   reduced-motion users see the text at all times. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .stage-node .stage-reveal {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .stage-node:hover .stage-reveal,
+  .stage-node:focus-visible .stage-reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Stage illustration motion (brief §7). Idle states are scoped to .stage-node
+   so the same SVGs render statically on /path/[slug] pages. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  /* 1 — compass: needle settles onto a bearing */
+  .stage-node #compass-needle {
+    transform: rotate(-35deg);
+    transform-origin: 50% 50%;
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  .stage-node:hover #compass-needle,
+  .stage-node:focus-visible #compass-needle {
+    transform: rotate(0deg);
+  }
+
+  /* 2 — threshold: the line is met and holds (check draws in) */
+  .stage-node #threshold-line path + path {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+    transition: stroke-dashoffset 0.45s ease 0.08s;
+  }
+  .stage-node:hover #threshold-line path + path,
+  .stage-node:focus-visible #threshold-line path + path {
+    stroke-dashoffset: 0;
+  }
+
+  /* 3 — storm: cloud mass shifts, one lightning beat */
+  .stage-node #storm-cloud {
+    transition: transform 0.45s ease;
+  }
+  .stage-node:hover #storm-cloud,
+  .stage-node:focus-visible #storm-cloud {
+    transform: translateX(-1.5px);
+  }
+  .stage-node:hover #storm-bolt,
+  .stage-node:focus-visible #storm-bolt {
+    animation: bolt-beat 0.7s ease-out 1;
+  }
+
+  /* 4 — dawn: light widens */
+  .stage-node #dawn-sun {
+    transform-origin: 50% 62%;
+    transition: transform 0.5s ease;
+  }
+  .stage-node:hover #dawn-sun,
+  .stage-node:focus-visible #dawn-sun {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes bolt-beat {
+  0%, 100% { opacity: 1; }
+  20% { opacity: 0.15; }
+  45% { opacity: 1; }
+  60% { opacity: 0.4; }
+  75% { opacity: 1; }
+}
+
+/* Connector draw-on-scroll: paths carry pathLength="1". Without JS (or with
+   reduced motion) the connector is simply visible. */
+.connector-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-drawn="false"] .connector-path {
+    stroke-dashoffset: 1;
+  }
+  [data-drawn="true"] .connector-path {
+    transition: stroke-dashoffset 900ms ease-in-out;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Stage detail dialog */
+.stage-dialog::backdrop {
+  background: rgb(34 28 23 / 0.55);
+}
+
+/* Honeypot field — visually removed, still in the form for bots */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 /* Calendly embed container - dynamic height */
 .calendly-inline-widget {
   min-width: 320px;

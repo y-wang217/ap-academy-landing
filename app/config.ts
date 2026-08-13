@@ -16,6 +16,14 @@ export const STRIPE_FULL_LINK: string = "https://buy.stripe.com/dRmcN77YwdRKcWjf
 export const VSL_EMBED_URL: string = "https://youtu.be/Q8VroTZu8qg";
 export const ALEX_TESTIMONIAL_URL: string = "https://youtu.be/Q8VroTZu8qg";
 
+// Lead magnet ("mistakes blueprint") delivery.
+// LEAD_MAGNET_ENDPOINT: POST endpoint of the email platform that stores the
+// signup and sends the PDF (e.g. a Formspree/ConvertKit/Beehiiv form URL).
+// While it is empty, lead magnet CTAs fall back to a prefilled email link.
+export const LEAD_MAGNET_ENDPOINT: string = "";
+// Direct URL of the PDF, shown as an inline download after a successful signup.
+export const LEAD_MAGNET_PDF_URL: string = "";
+
 // Contact info (also in CLAUDE.md — keep in sync)
 export const CONTACT = {
   phone: "519-589-8217",
