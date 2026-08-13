@@ -5,11 +5,15 @@ import Link from "next/link";
 import { POS_LABEL, buildQuestion, type QuizQuestion } from "../words";
 import { DAILY_LIMIT, bumpCount, readCount } from "./gate";
 import { useHydrated } from "../use-hydrated";
+import { useSatUser } from "../use-sat-user";
+import { logAttempt } from "./log-attempt";
+import { isSupabaseConfigured } from "../supabase/config";
 
 type Score = { correct: number; answered: number };
 
 export default function Quiz() {
   const hydrated = useHydrated();
+  const { user, loading: userLoading } = useSatUser();
   // Lazy initialisers: the random question and the localStorage read both run
   // once, on the client, without a setState-in-effect cascade. Nothing derived
   // from them is rendered until `hydrated` flips true.
@@ -18,7 +22,11 @@ export default function Quiz() {
   const [score, setScore] = useState<Score>({ correct: 0, answered: 0 });
   const [dailyCount, setDailyCount] = useState(readCount);
 
-  const gated = hydrated && dailyCount >= DAILY_LIMIT;
+  // Signed-in users are unlimited, so the counter is skipped entirely for them.
+  const gated = hydrated && !userLoading && !user && dailyCount >= DAILY_LIMIT;
+  // Without Supabase configured there is no account to offer, so the gate falls
+  // back to the honest "come back tomorrow" wording.
+  const signInAvailable = isSupabaseConfigured();
 
   const answer = useCallback(
     (id: number) => {
@@ -29,9 +37,13 @@ export default function Quiz() {
         correct: s.correct + (wasCorrect ? 1 : 0),
         answered: s.answered + 1,
       }));
-      setDailyCount(bumpCount());
+      if (user) {
+        logAttempt(user.id, question.word.id, wasCorrect);
+      } else {
+        setDailyCount(bumpCount());
+      }
     },
-    [picked, question, gated]
+    [picked, question, gated, user]
   );
 
   const advance = useCallback(() => {
@@ -91,17 +103,30 @@ export default function Quiz() {
           That&apos;s your {DAILY_LIMIT} for today
         </h1>
         <p className="max-w-[46ch] text-[15px] leading-relaxed text-sat-chalk-dim">
-          The quiz resets tomorrow morning. Flashcards stay unlimited — they&apos;re
-          the better way to meet words you haven&apos;t seen yet anyway.
+          {signInAvailable
+            ? "Keep going — free, takes 10 seconds. An account lifts the limit and remembers the words you keep missing."
+            : "The quiz resets tomorrow morning. Flashcards stay unlimited — they're the better way to meet words you haven't seen yet anyway."}
         </p>
         {score.answered > 0 && (
           <p className="text-[13px] tracking-[0.04em] text-sat-chalk-dim">
             This session: {score.correct}/{score.answered} correct
           </p>
         )}
+        {signInAvailable && (
+          <Link
+            href="/sat/login?next=%2Fsat%2Fquiz"
+            className="rounded-full bg-sat-accent px-7 py-3 text-[13px] font-semibold uppercase tracking-[0.06em] text-sat-card transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-sat-chalk"
+          >
+            Keep going — it&apos;s free
+          </Link>
+        )}
         <Link
           href="/sat"
-          className="rounded-full bg-sat-accent px-7 py-3 text-[13px] font-semibold uppercase tracking-[0.06em] text-sat-card transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-sat-chalk"
+          className={
+            signInAvailable
+              ? "text-[13px] text-sat-chalk-dim underline transition-colors hover:text-sat-chalk"
+              : "rounded-full bg-sat-accent px-7 py-3 text-[13px] font-semibold uppercase tracking-[0.06em] text-sat-card transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-sat-chalk"
+          }
         >
           Back to flashcards
         </Link>
@@ -110,6 +135,8 @@ export default function Quiz() {
   }
 
   const remaining = Math.max(0, DAILY_LIMIT - dailyCount);
+  const progress =
+    score.answered > 0 ? `${score.correct}/${score.answered} correct` : "";
 
   return (
     <div className="mx-auto flex w-full max-w-[640px] flex-1 flex-col justify-center gap-6 px-5 py-10">
@@ -118,8 +145,9 @@ export default function Quiz() {
           Quiz
         </h1>
         <p className="mt-1.5 text-[12.5px] tracking-[0.04em] text-sat-chalk-dim">
-          {score.answered > 0 && `${score.correct}/${score.answered} correct · `}
-          {remaining} left today
+          {user
+            ? progress || "Unlimited — your answers are being saved"
+            : `${progress ? `${progress} · ` : ""}${remaining} left today`}
         </p>
       </header>
 

@@ -44,12 +44,40 @@ is entirely client-side — no backend, no accounts, no new dependencies.
 - The daily gate is soft by design (localStorage only). Clearing it is an accepted
   bypass — do not add server-side enforcement.
 
+### Phase 2 — accounts (built, not switched on)
+Supabase magic-link auth, CASL consent capture, and attempt logging.
+
+- Env vars in `.env.example`. **Unset by default and that is a supported state:**
+  `/sat` falls back to Phase 1 behaviour everywhere — do not let any `/sat` code
+  path throw or block when Supabase is absent.
+- Schema and RLS live in `supabase/migrations/0001_sat_accounts.sql`. Apply it
+  before setting the env vars, or sign-in will succeed and then fail to write.
+- RLS was verified against a local Postgres with two accounts: neither can read,
+  update, or insert the other's `profiles` or `attempts` rows. Re-run that check
+  if the policies change.
+- `profiles` rows are created by an `on auth.users` trigger; `/auth/callback`
+  re-syncs consent on every sign-in so a returning student's latest choice wins,
+  including withdrawal. `consent_timestamp` records when consent was first given
+  and is preserved while it stays granted.
+- Everything else is derived from `attempts`. Do not add tables for stats.
+- `/sat` and `/sat/quiz` are statically prerendered; auth is read client-side to
+  keep it that way. Don't move the auth check into those layouts/pages.
+
 ### Still open before SAT launch
-- **A–P half of the word list is unverified.** `pretense`–`zephyr` was transcribed
-  from the source PDF; `abase`–`prescribe` was reconstructed from memory. When R–Z
-  was checked it had a ~42% error rate. Diff A–P against the PDF before launch.
-- Phase 2 (Supabase accounts, magic link, CASL consent) and Phase 3 (dashboard,
-  study sheet) are specced but not built — do not build them speculatively.
+- **14 entries are still unverified:** `pretense` through `propriety`. The source
+  PDF supplied for verification had that page removed. Everything else in the
+  991 has been diffed against the PDF and matches.
+- **Before switching accounts on:** create the Supabase project, apply the
+  migration, set the env vars, and configure the auth email template. CASL
+  requires every commercial message to carry an unsubscribe link and a physical
+  mailing address — the sign-in email itself is transactional, but the marketing
+  list built from `marketing_consent` must honour both.
+- **Under-16 parental consent is unresolved.** These are minors in Canada; confirm
+  whether a parental-consent path is required before promoting sign-up.
+- **Where do captured emails go?** Manual export to the Google Sheets CRM, or
+  automated. Not decided.
+- Phase 3 (dashboard, study sheet) is specced but not built — do not build it
+  speculatively. Build it only once Phase 2 shows real signups.
 
 ## Configuration
 All configurable values are in `app/config.ts`:

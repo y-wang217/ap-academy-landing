@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Fraunces, Public_Sans } from "next/font/google";
 import { CONTACT } from "../config";
+import AuthStatus from "./auth-status";
 
 // Self-hosted at build time and scoped to /sat, so the main site's pages never
 // download them. Exposed as CSS variables the --font-sat-* tokens point at.
@@ -46,6 +47,7 @@ export default function SatLayout({
             >
               Quiz
             </Link>
+            <AuthStatus />
           </nav>
         </div>
       </header>
