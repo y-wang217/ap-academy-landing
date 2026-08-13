@@ -8,6 +8,8 @@ export type Profile = {
   marketing_consent: boolean;
   consent_timestamp: string | null;
   created_at: string;
+  /** Per-profile CASL unsubscribe token; only ever sent in marketing email. */
+  unsubscribe_token: string;
 };
 
 export type Attempt = {
@@ -23,7 +25,11 @@ export type Database = {
     Tables: {
       profiles: {
         Row: Profile;
-        Insert: Omit<Profile, "created_at"> & { created_at?: string };
+        // created_at and unsubscribe_token are database defaults.
+        Insert: Omit<Profile, "created_at" | "unsubscribe_token"> & {
+          created_at?: string;
+          unsubscribe_token?: string;
+        };
         Update: Partial<Omit<Profile, "id">>;
         Relationships: [];
       };
@@ -38,7 +44,12 @@ export type Database = {
       };
     };
     Views: Record<never, never>;
-    Functions: Record<never, never>;
+    Functions: {
+      unsubscribe_by_token: {
+        Args: { token: string };
+        Returns: boolean;
+      };
+    };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;
   };
