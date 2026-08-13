@@ -25,6 +25,24 @@
   --font-serif: 'Libre Caslon Display', Georgia, serif;
   --font-sans: 'Hanken Grotesk', system-ui, sans-serif;
   --font-mono: 'Space Mono', monospace;
+
+  /* SAT trainer (/sat) - chalkboard + index card, deliberately distinct from
+     the main site's terracotta. Students, not parents. */
+  --color-sat-board: #22382E;
+  --color-sat-board-deep: #1A2C24;
+  --color-sat-card: #FDFCF6;
+  --color-sat-accent: #D64541;
+  --color-sat-rule: rgba(96, 130, 182, 0.35);
+  --color-sat-ink: #2B2B33;
+  --color-sat-ink-soft: rgba(43, 43, 51, 0.7);
+  --color-sat-ink-faint: rgba(43, 43, 51, 0.45);
+  --color-sat-chalk: #E9EFE9;
+  --color-sat-chalk-dim: rgba(233, 239, 233, 0.55);
+  --color-sat-chalk-faint: rgba(233, 239, 233, 0.18);
+  --color-sat-correct: #3F8F5E;
+
+  --font-sat-display: var(--font-sat-display-loaded), Georgia, serif;
+  --font-sat-sans: var(--font-sat-sans-loaded), system-ui, sans-serif;
 }
 
 :root {
@@ -106,6 +124,74 @@ html {
   border-radius: 50%;
   background: var(--color-accent);
   margin-top: 8px;
+}
+
+/* ---------- SAT trainer (/sat) ---------- */
+
+.sat-board {
+  background: radial-gradient(
+    120% 120% at 50% 20%,
+    var(--color-sat-board) 0%,
+    var(--color-sat-board-deep) 100%
+  );
+}
+
+/* Flashcard: 3D flip on the X axis, mirroring the standalone prototype. */
+.sat-scene {
+  perspective: 1400px;
+}
+
+.sat-card {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.4, 0.15, 0.2, 1);
+  rotate: -0.6deg;
+}
+
+.sat-card.is-flipped {
+  transform: rotateX(180deg);
+}
+
+/* Suppress the flip animation while swapping in a new word, so the answer
+   never flashes on screen mid-reset. */
+.sat-card.is-instant {
+  transition: none;
+}
+
+.sat-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 27px,
+      var(--color-sat-rule) 27px 28px
+    ),
+    var(--color-sat-card);
+  background-position: 0 58px;
+  overflow: hidden;
+}
+
+/* Red header rule of the index card */
+.sat-face::before {
+  content: "";
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-sat-accent);
+}
+
+.sat-face-back {
+  transform: rotateX(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sat-card {
+    transition: none;
+  }
 }
 
 /* Calendly embed container - dynamic height */

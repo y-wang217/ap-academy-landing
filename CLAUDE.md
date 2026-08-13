@@ -25,6 +25,31 @@
 - `/enroll` — Purchase page with Stripe Payment Link buttons
 - `/privacy` — Privacy policy
 - `/thank-you` — Post-booking confirmation
+- `/sat` — SAT vocabulary flashcards (free, ungated)
+- `/sat/quiz` — SAT multiple-choice quiz with a soft 10/day gate for anonymous users
+
+## SAT section (`/sat`)
+A second, parallel self-serve product aimed at **students**, not parents. Phase 1
+is entirely client-side — no backend, no accounts, no new dependencies.
+
+- **Never put Waterloo/admissions/pricing/tutoring copy under `/sat`.** Different
+  audience, different positioning.
+- Word data: `app/sat/sat-words.json`, 991 entries. Never hardcode "1000" in the UI.
+  `scripts/validate-sat-words.mjs` runs on `prebuild` and enforces the data
+  guarantees (valid POS, six same-POS distractors per word, no definition-twin
+  ever offered as a wrong answer). A regeneration that breaks these fails the build.
+- Visual skin is deliberately distinct from the main site: chalkboard green +
+  index card, Fraunces/Public Sans, tokens prefixed `--color-sat-*` / `--font-sat-*`
+  in the `@theme inline` block. Fonts load via `next/font` scoped to `/sat`.
+- The daily gate is soft by design (localStorage only). Clearing it is an accepted
+  bypass — do not add server-side enforcement.
+
+### Still open before SAT launch
+- **A–P half of the word list is unverified.** `pretense`–`zephyr` was transcribed
+  from the source PDF; `abase`–`prescribe` was reconstructed from memory. When R–Z
+  was checked it had a ~42% error rate. Diff A–P against the PDF before launch.
+- Phase 2 (Supabase accounts, magic link, CASL consent) and Phase 3 (dashboard,
+  study sheet) are specced but not built — do not build them speculatively.
 
 ## Configuration
 All configurable values are in `app/config.ts`:
