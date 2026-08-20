@@ -460,7 +460,10 @@ html {
 }
 
 [data-active="true"] #dawn-rays {
-  transform: scale(1.06);
+  /* Same 8-unit rise as the disc, so the rays travel with the sun instead of
+     hanging in place while it climbs out from under them. Scale is about the
+     sun's centre, so they keep their spacing from it and read as lengthening. */
+  transform: translateY(-8px) scale(1.06);
   transition: transform var(--dur-icon) var(--ease-settle);
 }
 
