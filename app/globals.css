@@ -43,6 +43,15 @@
 
   --font-sat-display: var(--font-sat-display-loaded), Georgia, serif;
   --font-sat-sans: var(--font-sat-sans-loaded), system-ui, sans-serif;
+
+  /* Motion. Site-wide primitives — the Path to Waterloo is the first consumer.
+     Note @theme inline only emits a custom property once something references
+     it with var(), so these live or die with the rules below. */
+  --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-lift: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-quick: 180ms;
+  --dur-icon: 620ms;
+  --dur-return: 340ms;
 }
 
 :root {
@@ -267,19 +276,192 @@ html {
   }
 }
 
-/* Hover / keyboard focus on a node lifts its disc off the line. */
-.stage-disc {
-  transition:
-    transform 0.35s cubic-bezier(0.4, 0.15, 0.2, 1),
-    border-color 0.35s ease,
-    box-shadow 0.35s ease;
+/* ---------- Active stage ----------
+
+   One stage is lit at a time. <PathToWaterloo> puts data-active="true" on that
+   stage's <li> and data-fill="N" on the graphic wrapper; everything below is a
+   consequence of those two attributes. Hover, :focus-visible, and tap all set
+   them, so the three inputs cannot drift apart.
+
+   Every entry that needs an overshoot or a draw is a keyframe animation with
+   fill-mode forwards, so the end state holds for as long as the stage is lit.
+   The matching base rule carries a transition, which is what plays when the
+   attribute goes away: the animation is dropped, the value falls back to the
+   base, and the transition eases it home over --dur-return. Nothing loops. */
+
+/* The whole stage lifts; the disc grows a little more than the card does. */
+.stage-node {
+  transition: transform var(--dur-quick) var(--ease-lift);
 }
 
-.stage-node:hover .stage-disc,
-.stage-node:focus-visible .stage-disc {
-  transform: translateY(-4px) scale(1.03);
-  border-color: var(--color-accent);
-  box-shadow: 0 12px 26px -14px rgba(210, 80, 42, 0.55);
+.stage-disc {
+  transition: transform var(--dur-quick) var(--ease-lift);
+}
+
+[data-active="true"] .stage-node {
+  transform: translateY(-4px) scale(1.015);
+}
+
+[data-active="true"] .stage-disc {
+  transform: scale(1.04);
+}
+
+/* Pointer-only fallback so the card still answers the cursor if the JS that
+   owns data-active never runs. Gated on real hover so it can't stick on touch. */
+@media (hover: hover) {
+  .stage-node:hover {
+    transform: translateY(-4px) scale(1.015);
+  }
+
+  .stage-node:hover .stage-disc {
+    transform: scale(1.04);
+  }
+}
+
+/* Coral fill on the connector. Every connector path carries pathLength="1", so
+   the lit stage's share of the journey is N/4 of a single dash unit — the same
+   arithmetic at all three breakpoints, with no per-breakpoint geometry and no
+   measuring at runtime. The retract sits on the base rule and the fill on the
+   data-fill rules, which gives each direction its own duration for free: a
+   transition always reads its timing from the after-change style. */
+.connector-fill {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* A fully offset dash is not reliably invisible — the rasteriser bleeds a
+     faint coral hairline along the whole path, which showed up as an idle
+     pixel diff. visibility guarantees it is gone, and delaying the flip by
+     exactly the retract duration keeps the line on screen while it retracts. */
+  visibility: hidden;
+  transition:
+    stroke-dashoffset var(--dur-return) var(--ease-lift),
+    visibility 0s linear var(--dur-return);
+}
+
+[data-fill="1"] .connector-fill {
+  stroke-dashoffset: 0.75;
+}
+
+[data-fill="2"] .connector-fill {
+  stroke-dashoffset: 0.5;
+}
+
+[data-fill="3"] .connector-fill {
+  stroke-dashoffset: 0.25;
+}
+
+[data-fill="4"] .connector-fill {
+  stroke-dashoffset: 0;
+}
+
+[data-fill]:not([data-fill="0"]) .connector-fill {
+  visibility: visible;
+  transition:
+    stroke-dashoffset 500ms var(--ease-settle),
+    visibility 0s;
+}
+
+/* Stage 1 — the needle swings to a bearing and overshoots before it settles.
+   The dial ring and tick marks never move. The needle's own bounding box is
+   centred on the dial pivot, so fill-box gives us the right origin exactly. */
+#compass-needle {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--dur-return) var(--ease-lift);
+}
+
+[data-active="true"] #compass-needle {
+  animation: compass-bearing var(--dur-icon) var(--ease-lift) forwards;
+}
+
+@keyframes compass-bearing {
+  0% {
+    transform: rotate(0deg);
+  }
+  55% {
+    transform: rotate(66deg);
+  }
+  100% {
+    transform: rotate(52deg);
+  }
+}
+
+/* Stage 2 — the checkmark draws itself after a short hold. The dashed 95-line
+   and the doorway hold perfectly still: crossing it once isn't the test. */
+#threshold-check {
+  stroke-dasharray: 13;
+  stroke-dashoffset: 0;
+}
+
+[data-active="true"] #threshold-check {
+  animation: threshold-cross var(--dur-icon) var(--ease-lift) forwards;
+}
+
+@keyframes threshold-cross {
+  0%,
+  20% {
+    stroke-dashoffset: 13;
+  }
+  70%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Stage 3 — the bolt strikes once, top to bottom, and holds. The cloud drifts
+   2 user units across the full duration. The darkest stage of the journey: it
+   should land with weight, so it never repeats and never flickers. */
+#storm-bolt {
+  stroke-dasharray: 55;
+  stroke-dashoffset: 0;
+}
+
+[data-active="true"] #storm-bolt {
+  animation: storm-strike var(--dur-icon) linear forwards;
+}
+
+@keyframes storm-strike {
+  0% {
+    stroke-dashoffset: 55;
+  }
+  42%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+#storm-cloud {
+  transition: transform var(--dur-return) var(--ease-lift);
+}
+
+[data-active="true"] #storm-cloud {
+  transform: translateX(2px);
+  transition-duration: var(--dur-icon);
+}
+
+/* Stage 4 — the sun rises out from behind a horizon that stays put and clips
+   it, so the disc genuinely emerges instead of sliding over the line. The rays
+   scale about the sun's centre, which reads as them lengthening. */
+#dawn-disc {
+  transition: transform var(--dur-return) var(--ease-lift);
+}
+
+[data-active="true"] #dawn-disc {
+  transform: translateY(-8px);
+  transition: transform var(--dur-icon) var(--ease-settle);
+}
+
+#dawn-rays {
+  transform-box: view-box;
+  transform-origin: 24px 31px;
+  transition: transform var(--dur-return) var(--ease-lift);
+}
+
+[data-active="true"] #dawn-rays {
+  transform: scale(1.06);
+  transition: transform var(--dur-icon) var(--ease-settle);
 }
 
 .stage-node .stage-reveal:last-child {
@@ -305,8 +487,49 @@ html {
     animation: none;
   }
 
-  .stage-disc {
+  /* The lit stage still applies — coral line filled, checkmark shown, bolt
+     struck, sun risen — but as an instant state change, with no travel. The
+     card lift is the one thing dropped outright: it carries no information.
+
+     Each lit-state selector has to be repeated here verbatim. The rules above
+     that set a transition alongside the end state (#dawn-disc and friends) are
+     more specific than a bare class or id, so a plain `.connector-fill` reset
+     loses the cascade and the property keeps animating. Matching the selector
+     exactly and landing later in the sheet is what actually wins. */
+  .stage-node,
+  .stage-disc,
+  #compass-needle,
+  #storm-cloud,
+  #dawn-disc,
+  #dawn-rays,
+  [data-fill] .connector-fill,
+  [data-fill]:not([data-fill="0"]) .connector-fill,
+  [data-active="true"] #storm-cloud,
+  [data-active="true"] #dawn-disc,
+  [data-active="true"] #dawn-rays {
     transition: none;
+  }
+
+  [data-active="true"] .stage-node,
+  [data-active="true"] .stage-disc,
+  .stage-node:hover,
+  .stage-node:hover .stage-disc {
+    transform: none;
+  }
+
+  [data-active="true"] #compass-needle {
+    animation: none;
+    transform: rotate(52deg);
+  }
+
+  [data-active="true"] #threshold-check {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
+  [data-active="true"] #storm-bolt {
+    animation: none;
+    stroke-dashoffset: 0;
   }
 }
 

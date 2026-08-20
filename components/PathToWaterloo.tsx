@@ -14,6 +14,33 @@ import { track } from "@/lib/analytics";
 
 const PATH_STROKE = "var(--color-border-dark)";
 
+// One `d` per breakpoint, shared by both layers of that connector.
+const SPINE_D = "M1 0v100";
+const CURVE_D =
+  "M22.7 8.8 C40 3, 58 14.5, 75 8.8 C96 2, 98 39, 71 50 C51 57.5, 33 51, 22.7 63.9 C39 58, 58 69.5, 75 63.9";
+const ROW_D = "M127 80 C230 52, 332 108, 437 80 S642 52, 745 80 S952 108, 1055 80";
+
+// Every connector is drawn twice: the neutral hairline, and a coral overlay that
+// stroke-dasharray trims to the active stage's share of the path. Both layers take
+// the same `d` from one constant so they can never drift apart.
+function ConnectorPair({
+  d,
+  strokeWidth,
+  vectorEffect,
+}: {
+  d: string;
+  strokeWidth: string;
+  vectorEffect?: "non-scaling-stroke";
+}) {
+  const shared = { d, pathLength: 1, strokeWidth, fill: "none", vectorEffect } as const;
+  return (
+    <>
+      <path {...shared} className="connector-path" stroke={PATH_STROKE} />
+      <path {...shared} className="connector-fill" />
+    </>
+  );
+}
+
 function isStageSlug(value: string | null): value is Stage["slug"] {
   return STAGES.some((s) => s.slug === value);
 }
@@ -26,6 +53,11 @@ function slugFromLocation(): Stage["slug"] | null {
 export default function PathToWaterloo() {
   const [activeSlug, setActiveSlug] = useState<Stage["slug"] | null>(null);
   const [focusIdx, setFocusIdx] = useState(0);
+  // Which stage is lit. Independent of activeSlug: the dialog is the content,
+  // this is the motion. Hover, focus-visible, and tap all set it; it holds until
+  // the pointer leaves the section or a tap lands outside.
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
   const graphicRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const openedViaPush = useRef(false);
@@ -79,6 +111,17 @@ export default function PathToWaterloo() {
     return () => io.disconnect();
   }, []);
 
+  // Tapping outside clears the lit stage. The dialog renders inside this section,
+  // so clicks within it read as "inside" and correctly leave the stage lit.
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const node = sectionRef.current;
+      if (node && !node.contains(e.target as Node)) setActiveIdx(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
+
   const onNodeKeyDown = (e: React.KeyboardEvent, idx: number) => {
     let next: number | null = null;
     if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (idx + 1) % STAGES.length;
@@ -95,7 +138,17 @@ export default function PathToWaterloo() {
   const activeStage = STAGES.find((s) => s.slug === activeSlug) ?? null;
 
   return (
-    <section id="path" className="mx-auto max-w-[1160px] px-5 pb-16 pt-2 md:px-10 md:pb-24">
+    <section
+      ref={sectionRef}
+      id="path"
+      onMouseLeave={() => {
+        // Keyboard focus outranks the pointer: don't unlight a focused stage
+        // just because the cursor swept out of the section.
+        const node = sectionRef.current;
+        if (!node?.contains(document.activeElement)) setActiveIdx(null);
+      }}
+      className="mx-auto max-w-[1160px] px-5 pb-16 pt-2 md:px-10 md:pb-24"
+    >
       <p className="eyebrow">The Path to Waterloo</p>
       <h2 className="shead mt-3.5 text-[34px] md:text-[46px] lg:text-[52px]">
         Four stages stand between grade 10 and an offer
@@ -104,11 +157,16 @@ export default function PathToWaterloo() {
         Most families only ever hear about marks. Marks are stage two.
       </p>
 
-      <div ref={graphicRef} data-drawn="true" className="relative mt-10 sm:mt-12 lg:mt-14">
+      <div
+        ref={graphicRef}
+        data-drawn="true"
+        data-fill={activeIdx === null ? 0 : activeIdx + 1}
+        className="relative mt-10 sm:mt-12 lg:mt-14"
+      >
         {/* <640px — left-gutter spine */}
         <div className="absolute bottom-10 left-[31px] top-10 w-0.5 sm:hidden" aria-hidden="true">
           <svg className="h-full w-full" viewBox="0 0 2 100" preserveAspectRatio="none">
-            <path d="M1 0v100" pathLength={1} className="connector-path" stroke={PATH_STROKE} strokeWidth="2" />
+            <ConnectorPair d={SPINE_D} strokeWidth="2" />
           </svg>
         </div>
 
@@ -119,15 +177,7 @@ export default function PathToWaterloo() {
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <path
-            d="M22.7 8.8 C40 3, 58 14.5, 75 8.8 C96 2, 98 39, 71 50 C51 57.5, 33 51, 22.7 63.9 C39 58, 58 69.5, 75 63.9"
-            pathLength={1}
-            className="connector-path"
-            stroke={PATH_STROKE}
-            strokeWidth="0.4"
-            fill="none"
-            vectorEffect="non-scaling-stroke"
-          />
+          <ConnectorPair d={CURVE_D} strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
         </svg>
 
         {/* ≥1024px — one horizontal path through the disc row */}
@@ -137,20 +187,12 @@ export default function PathToWaterloo() {
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <path
-            d="M127 80 C230 52, 332 108, 437 80 S642 52, 745 80 S952 108, 1055 80"
-            pathLength={1}
-            className="connector-path"
-            stroke={PATH_STROKE}
-            strokeWidth="2"
-            fill="none"
-            vectorEffect="non-scaling-stroke"
-          />
+          <ConnectorPair d={ROW_D} strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
 
         <ol className="relative grid grid-cols-1 gap-10 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-16 lg:grid-cols-4">
           {STAGES.map((stage, i) => (
-            <li key={stage.slug} className="relative">
+            <li key={stage.slug} data-active={activeIdx === i ? "true" : undefined} className="relative">
               <button
                 ref={(el) => {
                   nodeRefs.current[i] = el;
@@ -162,7 +204,16 @@ export default function PathToWaterloo() {
                 aria-controls="stage-dialog"
                 onClick={() => openStage(stage.slug)}
                 onKeyDown={(e) => onNodeKeyDown(e, i)}
-                onFocus={() => setFocusIdx(i)}
+                onMouseEnter={() => setActiveIdx(i)}
+                onPointerDown={() => setActiveIdx(i)}
+                onFocus={(e) => {
+                  setFocusIdx(i);
+                  // Only keyboard focus lights the stage. A mouse click focuses the
+                  // button too, but the pointer handlers have already done that —
+                  // and this keeps the dialog's focus-return from re-lighting a
+                  // stage the parent has moved away from.
+                  if (e.currentTarget.matches(":focus-visible")) setActiveIdx(i);
+                }}
                 className="stage-node group -m-2 flex w-full items-start gap-5 rounded-2xl p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-4 focus-visible:ring-offset-background sm:flex-col sm:items-center sm:gap-4 sm:text-center"
               >
                 <span className="stage-disc flex h-16 w-16 flex-none items-center justify-center rounded-full border border-border-accent bg-surface text-dark shadow-sm sm:h-28 sm:w-28 lg:h-40 lg:w-40">

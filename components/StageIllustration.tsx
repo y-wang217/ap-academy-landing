@@ -41,7 +41,7 @@ function Threshold({ className }: { className?: string }) {
       </g>
       <g id="threshold-line" className="text-accent">
         <path d="M13 20h22" strokeDasharray="3.5 3.5" />
-        <path d="M20 31l3 3 6-6" />
+        <path id="threshold-check" d="M20 31l3 3 6-6" />
       </g>
     </svg>
   );
@@ -64,8 +64,18 @@ function Dawn({ className }: { className?: string }) {
   return (
     <svg {...SHARED} className={className} aria-hidden="true">
       <g id="dawn-sun" className="text-accent">
-        <path d="M15 31a9 9 0 0 1 18 0" />
-        <path d="M24 13v4M11.3 18.3l2.8 2.8M36.7 18.3l-2.8 2.8" />
+        {/* The clip lives on the wrapper, never on the disc: clip-path resolves in
+            the element's own user space, so transforming the clipped element would
+            drag the clip along with it and the sun would slide instead of rise. */}
+        <clipPath id="dawn-clip">
+          <rect x="0" y="0" width="48" height="31.8" />
+        </clipPath>
+        <g clipPath="url(#dawn-clip)">
+          <circle id="dawn-disc" cx="24" cy="31" r="9" />
+        </g>
+        <g id="dawn-rays">
+          <path d="M24 13v4M11.3 18.3l2.8 2.8M36.7 18.3l-2.8 2.8" />
+        </g>
       </g>
       <g id="dawn-path">
         <path d="M6 31h36" />
