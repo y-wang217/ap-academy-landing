@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { GA4_MEASUREMENT_ID } from "./config";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Summer Intensive | 95+ Guarantee | AP Academy",
+  title: "AP Academy | The Path to Waterloo",
   description:
-    "10 focused 1-hour lessons for $600. Grade 11 & 12 Math, Physics, Chemistry, and English. 95+ guarantee on our AP-issued final — or we keep teaching at no extra cost.",
+    "We help students get into Waterloo. The path runs through course selection, the grade threshold, the adjustment factor, and the AIF — and it's navigable with the right guide. Book a call with Mr. Charlie.",
   keywords: [
     "summer tutoring",
     "Grade 11 tutoring",
@@ -29,9 +30,9 @@ export const metadata: Metadata = {
     canonical: "https://ap-academy-landing.vercel.app",
   },
   openGraph: {
-    title: "Summer Intensive | 95+ Guarantee | AP Academy",
+    title: "AP Academy | The Path to Waterloo",
     description:
-      "10 focused 1-hour lessons. Grade 11 & 12 Math, Physics, Chemistry, English. 95+ guarantee.",
+      "Course selection, the grade threshold, the adjustment factor, the AIF. Four stages most families never see — navigable with the right guide.",
     url: "https://ap-academy-landing.vercel.app",
     siteName: "AP Academy",
     locale: "en_CA",
@@ -39,9 +40,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Summer Intensive | 95+ Guarantee | AP Academy",
+    title: "AP Academy | The Path to Waterloo",
     description:
-      "10 focused 1-hour lessons. 95+ guarantee on our AP-issued final.",
+      "Four stages most families never see — navigable with the right guide.",
   },
   robots: {
     index: true,
@@ -75,6 +76,17 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=Hanken+Grotesk:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap"
           rel="stylesheet"
         />
+        {/* GA4 — loads only once a measurement ID is configured */}
+        {GA4_MEASUREMENT_ID && (
+          <>
+            <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA4_MEASUREMENT_ID}`} />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=gtag;gtag('js',new Date());gtag('config','${GA4_MEASUREMENT_ID}');`,
+              }}
+            />
+          </>
+        )}
         {/* JSON-LD Structured Data */}
         <script
           type="application/ld+json"
