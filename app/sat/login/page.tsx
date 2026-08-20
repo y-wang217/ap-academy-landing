@@ -4,7 +4,7 @@ import LoginForm from "./login-form";
 export const metadata: Metadata = {
   title: "Sign in | SAT Vocab",
   description:
-    "Sign in with a magic link to lift the daily quiz limit and track the words you keep missing.",
+    "Sign in with a magic link to save your progress and track the words you keep missing.",
   robots: { index: false, follow: true },
 };
 

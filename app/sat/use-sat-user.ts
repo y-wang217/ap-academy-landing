@@ -33,7 +33,7 @@ export function useSatUser(): SatUserState {
       })
       .catch(() => {
         // Supabase unreachable. Fall back to anonymous rather than leaving
-        // `loading` stuck true, which would silently disable the daily gate.
+        // `loading` stuck true.
         if (active) setState({ user: null, loading: false });
       });
 

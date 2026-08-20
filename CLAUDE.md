@@ -26,7 +26,7 @@
 - `/privacy` — Privacy policy
 - `/thank-you` — Post-booking confirmation
 - `/sat` — SAT vocabulary flashcards (free, ungated)
-- `/sat/quiz` — SAT multiple-choice quiz with a soft 10/day gate for anonymous users
+- `/sat/quiz` — SAT multiple-choice quiz (free, ungated)
 
 ## SAT section (`/sat`)
 A second, parallel self-serve product aimed at **students**, not parents. Phase 1
@@ -41,8 +41,9 @@ is entirely client-side — no backend, no accounts, no new dependencies.
 - Visual skin is deliberately distinct from the main site: chalkboard green +
   index card, Fraunces/Public Sans, tokens prefixed `--color-sat-*` / `--font-sat-*`
   in the `@theme inline` block. Fonts load via `next/font` scoped to `/sat`.
-- The daily gate is soft by design (localStorage only). Clearing it is an accepted
-  bypass — do not add server-side enforcement.
+- No usage limit anywhere under `/sat`. The old soft 10/day localStorage gate on
+  the quiz was removed until there is real traffic to gate — don't reintroduce a
+  limit (and never a server-enforced one) without being asked.
 
 ### Phase 2 — accounts (built, not switched on)
 Supabase magic-link auth, CASL consent capture, and attempt logging.

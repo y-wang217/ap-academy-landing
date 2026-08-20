@@ -24,7 +24,7 @@ export default function LoginForm({ next }: { next: string }) {
         </h1>
         <p className="text-[14.5px] leading-relaxed text-sat-chalk-dim">
           Everything on the trainer still works without an account — the
-          flashcards are unlimited and the quiz gives you 10 questions a day.
+          flashcards and the quiz are both unlimited.
         </p>
         <Link
           href="/sat"
@@ -88,11 +88,11 @@ export default function LoginForm({ next }: { next: string }) {
     <div className="mx-auto flex w-full max-w-[460px] flex-1 flex-col justify-center gap-6 px-5 py-12">
       <header className="text-center">
         <h1 className="font-sat-display text-[clamp(1.5rem,4vw,2rem)] font-semibold">
-          Keep going — it&apos;s free
+          Save your progress
         </h1>
         <p className="mt-2 text-[14.5px] leading-relaxed text-sat-chalk-dim">
-          An account lifts the daily quiz limit and remembers which words you
-          keep missing. No password, takes about ten seconds.
+          The quiz is free and unlimited either way. An account just remembers
+          which words you keep missing. No password, takes about ten seconds.
         </p>
       </header>
 
