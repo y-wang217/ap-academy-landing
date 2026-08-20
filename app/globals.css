@@ -194,6 +194,122 @@ html {
   }
 }
 
+/* ---------- Path to Waterloo (homepage #path) ---------- */
+
+/* Every connector ships pathLength="1", so one dash unit covers the whole
+   path regardless of viewBox. data-drawn on the wrapper is the switch: the
+   server renders "true" so the line is visible without JS, hydration rewinds
+   it to "false" (no transition, so the rewind is instant), and the
+   IntersectionObserver flips it back to play the draw on scroll-in. */
+.connector-path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+[data-drawn="false"] .connector-path {
+  stroke-dashoffset: 1;
+}
+
+[data-drawn="true"] .connector-path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1.5s cubic-bezier(0.33, 0.1, 0.2, 1);
+}
+
+/* Stage cards settle in behind the line, one after the next. Delays live on
+   the <li> so the hover transitions below never inherit them. */
+#path ol > li:nth-child(1) {
+  --stage-delay: 0.15s;
+}
+#path ol > li:nth-child(2) {
+  --stage-delay: 0.4s;
+}
+#path ol > li:nth-child(3) {
+  --stage-delay: 0.65s;
+}
+#path ol > li:nth-child(4) {
+  --stage-delay: 0.9s;
+}
+
+[data-drawn="false"] ol > li,
+[data-drawn="false"] .stage-reveal {
+  opacity: 0;
+}
+
+[data-drawn="true"] ol > li {
+  animation: stage-in 0.6s cubic-bezier(0.33, 0.1, 0.2, 1) var(--stage-delay, 0s) backwards;
+}
+
+[data-drawn="true"] .stage-reveal {
+  animation: stage-reveal-in 0.5s ease calc(var(--stage-delay, 0s) + 0.22s) backwards;
+}
+
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes stage-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Hover / keyboard focus on a node lifts its disc off the line. */
+.stage-disc {
+  transition:
+    transform 0.35s cubic-bezier(0.4, 0.15, 0.2, 1),
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.stage-node:hover .stage-disc,
+.stage-node:focus-visible .stage-disc {
+  transform: translateY(-4px) scale(1.03);
+  border-color: var(--color-accent);
+  box-shadow: 0 12px 26px -14px rgba(210, 80, 42, 0.55);
+}
+
+.stage-node .stage-reveal:last-child {
+  transition: color 0.25s ease;
+}
+
+.stage-node:hover .stage-reveal:last-child,
+.stage-node:focus-visible .stage-reveal:last-child {
+  color: var(--color-accent);
+}
+
+/* The observer bails out under reduced motion and leaves data-drawn="true",
+   so the entrance animations have to be switched off here too. */
+@media (prefers-reduced-motion: reduce) {
+  [data-drawn] .connector-path {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+
+  [data-drawn] ol > li,
+  [data-drawn] .stage-reveal {
+    opacity: 1;
+    animation: none;
+  }
+
+  .stage-disc {
+    transition: none;
+  }
+}
+
 /* Calendly embed container - dynamic height */
 .calendly-inline-widget {
   min-width: 320px;

@@ -165,7 +165,7 @@ export default function PathToWaterloo() {
                 onFocus={() => setFocusIdx(i)}
                 className="stage-node group -m-2 flex w-full items-start gap-5 rounded-2xl p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-4 focus-visible:ring-offset-background sm:flex-col sm:items-center sm:gap-4 sm:text-center"
               >
-                <span className="flex h-16 w-16 flex-none items-center justify-center rounded-full border border-border-accent bg-surface text-dark shadow-sm sm:h-28 sm:w-28 lg:h-40 lg:w-40">
+                <span className="stage-disc flex h-16 w-16 flex-none items-center justify-center rounded-full border border-border-accent bg-surface text-dark shadow-sm sm:h-28 sm:w-28 lg:h-40 lg:w-40">
                   <StageIllustration
                     illustration={stage.illustration}
                     className="h-10 w-10 sm:h-[68px] sm:w-[68px] lg:h-[104px] lg:w-[104px]"
