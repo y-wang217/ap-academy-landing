@@ -13,9 +13,10 @@
 
 import type { Generator } from '../types.ts';
 import { factorTheoremFindK } from './mhf4u/u3-factor-theorem-find-k.ts';
+import { remainderTheoremEvaluate } from './mhf4u/u3-remainder-theorem-evaluate.ts';
 
 /** Every generator in the codebase, in registration order. */
-export const GENERATORS: Generator[] = [factorTheoremFindK];
+export const GENERATORS: Generator[] = [remainderTheoremEvaluate, factorTheoremFindK];
 
 /**
  * Looks up a generator by its `id`, or returns `undefined`.

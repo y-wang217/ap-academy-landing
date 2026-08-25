@@ -23,17 +23,34 @@ const REFERENCE_TYPE = 'mhf4u-u3-factor-theorem-find-k';
 
 // --- the real join ------------------------------------------------------------
 
-test('coverage: the reference generator covers exactly one slot', () => {
+test('coverage: every registered generator lands on the slot it claims', () => {
   const report = buildCoverageReport('MHF4U');
-  assert.equal(report.totals.covered, 1, 'the taxonomy/generator join is broken');
   assert.equal(report.totals.generatorsRegistered, GENERATORS.length);
-  const covered = report.units
+
+  // The join is sound when the number of covered slots equals the number of
+  // distinct problemTypeIds the registry declares. Asserting a fixed count
+  // instead would just need editing every time a generator ships.
+  const claimedTypes = new Set(GENERATORS.map((generator) => generator.problemTypeId));
+  assert.equal(report.totals.covered, claimedTypes.size, 'the taxonomy/generator join is broken');
+
+  const coveredIds = new Set(
+    report.units
+      .flatMap((unit) => unit.problemTypes)
+      .filter((coverage) => coverage.covered)
+      .map((coverage) => coverage.problemTypeId),
+  );
+  assert.deepEqual([...coveredIds].sort(), [...claimedTypes].sort());
+});
+
+test('coverage: the reference generator is among the covered slots', () => {
+  const report = buildCoverageReport('MHF4U');
+  const reference = report.units
     .flatMap((unit) => unit.problemTypes)
-    .filter((coverage) => coverage.covered);
-  assert.equal(covered.length, 1);
-  assert.equal(covered[0].problemTypeId, REFERENCE_TYPE);
-  assert.deepEqual(covered[0].generatorIds, ['mhf4u-u3-factor-theorem-find-k-d2']);
-  assert.equal(covered[0].fullyCovered, true, 'the slot declares only tier 2, which is built');
+    .find((coverage) => coverage.problemTypeId === REFERENCE_TYPE);
+  assert.ok(reference);
+  assert.equal(reference.covered, true);
+  assert.ok(reference.generatorIds.includes('mhf4u-u3-factor-theorem-find-k-d2'));
+  assert.equal(reference.fullyCovered, true, 'the slot declares only tier 2, which is built');
 });
 
 test('coverage: no generator is orphaned', () => {
