@@ -64,10 +64,14 @@ const MAX_DRAWS = 40;
  * loop somehow exhausts its draws.
  *
  * `generate` must never throw for any seed, so there has to be an answer even in
- * the impossible case. Verified by a test, so it cannot rot silently.
- * r = 2, a = 3, b = -4: P(2) = 8 + 12 - 8 = 12, so k = -12.
+ * the impossible case. A test asserts `isUsable(FALLBACK_PARAMS)`, so this
+ * cannot rot silently — and it earned that test: the first tuple written here
+ * had `b = -r^2`, which makes `sign_error_on_root` collide with the correct
+ * answer, and only the test caught it.
+ *
+ * r = 2, a = 3, b = -7: P(2) = 8 + 12 - 14 = 6, so k = -6.
  */
-export const FALLBACK_PARAMS: PolynomialParams = { r: 2, a: 3, b: -4 };
+export const FALLBACK_PARAMS: PolynomialParams = { r: 2, a: 3, b: -7 };
 
 /** The three coefficients that define one instance of this question. */
 export interface PolynomialParams {
