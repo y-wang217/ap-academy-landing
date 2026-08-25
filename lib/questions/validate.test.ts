@@ -27,6 +27,7 @@ const FIXTURE_GENERATOR: Generator = {
 function validInstance(overrides: Partial<QuestionInstance> = {}): QuestionInstance {
   return {
     generatorId: 'fixture-generator',
+    seed: 0,
     unitId: 'fixture-u1',
     problemTypeId: 'fixture-type',
     difficulty: 2,
@@ -80,6 +81,7 @@ test('validate: the reference-shaped fixture passes every rule', () => {
 test('validate: never throws, even on a structurally absent instance', () => {
   const wrecked = {
     generatorId: 'fixture-generator',
+    seed: 0,
     unitId: 'fixture-u1',
     problemTypeId: 'fixture-type',
     difficulty: 2,
