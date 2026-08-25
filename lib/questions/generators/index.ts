@@ -21,6 +21,7 @@ import { countRealRootsFromFactoredForm } from './mhf4u/u3-count-real-roots-from
 import { solvePolynomialInequalityFactored } from './mhf4u/u3-solve-polynomial-inequality-factored.ts';
 import { familyOfPolynomialsFromRoots } from './mhf4u/u3-family-of-polynomials-from-roots.ts';
 import { sumAndProductOfRoots } from './mhf4u/u3-sum-and-product-of-roots.ts';
+import { solveLogEquationMultipleLogs } from './mhf4u/u7-solve-log-equation-multiple-logs.ts';
 
 /** Every generator in the codebase, in registration order. */
 export const GENERATORS: Generator[] = [
@@ -33,6 +34,7 @@ export const GENERATORS: Generator[] = [
   solvePolynomialInequalityFactored,
   familyOfPolynomialsFromRoots,
   sumAndProductOfRoots,
+  solveLogEquationMultipleLogs,
 ];
 
 /**

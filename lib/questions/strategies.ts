@@ -117,6 +117,12 @@ export const STRATEGIES = {
     'law-misapplication',
     'Divided the wrong way round when solving for a scale factor',
   ),
+  applied_log_law_to_sum_of_args: define(
+    'applied_log_law_to_sum_of_args',
+    'law-misapplication',
+    'Read log A + log B as log(A + B) rather than log(AB)',
+    'Not a slip but a wrong rule: the student has fused the addition outside the log with addition inside it. Distinct from any arithmetic error.',
+  ),
   used_the_wrong_coefficient: define(
     'used_the_wrong_coefficient',
     'law-misapplication',
@@ -196,6 +202,17 @@ export const STRATEGIES = {
   ),
 
   // --- domain and restrictions ----------------------------------------------
+  dropped_extraneous_root_check: define(
+    'dropped_extraneous_root_check',
+    'domain-and-restrictions',
+    'Solved correctly but never checked the roots against the domain, so kept one that breaks it',
+    'The highest-value distractor in the course. A student who picks it did the algebra right and skipped the last step, which is a different lesson from getting the algebra wrong.',
+  ),
+  reported_extraneous_root_only: define(
+    'reported_extraneous_root_only',
+    'domain-and-restrictions',
+    'Checked the domain but rejected the wrong root, keeping the one that fails',
+  ),
   wrong_bracket_type_on_endpoints: define(
     'wrong_bracket_type_on_endpoints',
     'domain-and-restrictions',

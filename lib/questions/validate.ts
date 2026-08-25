@@ -123,11 +123,23 @@ export interface ValidateOptions {
   zeroIsPlausible?: boolean;
 }
 
-/** Substrings that mean a template was rendered with a value that was never filled in. */
+/**
+ * Markers that mean a template was rendered with a value that was never filled in.
+ *
+ * `undefined`, `NaN` and `null` need care: they are also ordinary English and
+ * ordinary mathematics. "A logarithm of a non-positive number is undefined" is a
+ * correct sentence, and `\text{undefined}` is a legitimate answer for a rational
+ * function at a restriction. Flagging those would make the validator unusable in
+ * exactly the units that talk about domains most.
+ *
+ * So they are flagged only where a *value* belongs: immediately after `=`, `(`,
+ * `,`, `:` or `[`, or as the entire field. `{{` and `TODO` have no innocent
+ * reading and are matched anywhere.
+ */
 const PLACEHOLDER_PATTERNS: { pattern: RegExp; label: string }[] = [
-  { pattern: /\bundefined\b/, label: 'undefined' },
-  { pattern: /\bNaN\b/, label: 'NaN' },
-  { pattern: /\bnull\b/, label: 'null' },
+  { pattern: /(?:^|[=(,:[]\s*)undefined\b/, label: 'undefined' },
+  { pattern: /(?:^|[=(,:[]\s*)NaN\b/, label: 'NaN' },
+  { pattern: /(?:^|[=(,:[]\s*)null\b/, label: 'null' },
   { pattern: /\{\{/, label: '{{' },
   { pattern: /TODO/, label: 'TODO' },
 ];
@@ -273,8 +285,10 @@ function checkText(value: string, path: string): ValidationError[] {
     errors.push(error('EMPTY_FIELD', `${path || 'field'} is empty.`, path));
     return errors;
   }
+  const trimmed = value.trim();
   for (const { pattern, label } of PLACEHOLDER_PATTERNS) {
-    if (pattern.test(value)) {
+    // A field that is nothing but the marker is always a leak, however it reads.
+    if (pattern.test(trimmed) || trimmed === label) {
       errors.push(
         error(
           'PLACEHOLDER_LEAK',

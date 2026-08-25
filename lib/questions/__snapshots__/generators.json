@@ -3239,6 +3239,409 @@
           "conceptTag": "Root relations: for ax^3 + bx^2 + cx + d, the roots sum to -b/a and multiply to -d/a"
         }
       ]
+    },
+    {
+      "generatorId": "mhf4u-u7-solve-log-equation-multiple-logs-d3",
+      "unitId": "mhf4u-u7-exponential-logarithmic",
+      "problemTypeId": "mhf4u-u7-solve-log-equation-multiple-logs",
+      "difficulty": 3,
+      "strategyIds": [
+        "dropped_extraneous_root_check",
+        "applied_log_law_to_sum_of_args",
+        "reported_extraneous_root_only"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u7-solve-log-equation-multiple-logs-d3",
+          "seed": 0,
+          "unitId": "mhf4u-u7-exponential-logarithmic",
+          "problemTypeId": "mhf4u-u7-solve-log-equation-multiple-logs",
+          "difficulty": 3,
+          "stem": "Solve \\log_{2}\\left(x - 4\\right) + \\log_{2}\\left(x + 11\\right) = 4.",
+          "choices": [
+            {
+              "latex": "\\{-12, 5\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_extraneous_root_check",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "5n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-12n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\frac{9}{2}",
+              "isCorrect": false,
+              "strategyId": "applied_log_law_to_sum_of_args",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "9n",
+                  "den": "2n"
+                }
+              }
+            },
+            {
+              "latex": "-12",
+              "isCorrect": false,
+              "strategyId": "reported_extraneous_root_only",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-12n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Before doing any algebra, notice what the logarithms demand: their arguments have to be strictly positive. That constraint is not decoration — it is what makes the last step of this question necessary, and it is the step most people skip.",
+            "Combine the two logs first. Adding logs of the same base multiplies their arguments, so \\log_{2}\\left(x - 4\\right) + \\log_{2}\\left(x + 11\\right) becomes \\log_{2}\\left((x - 4)(x + 11)\\right). Note that this is a product — reading it as a sum of the arguments is a different equation entirely.",
+            "Now convert to exponential form. A logarithm base 2 equal to 4 means the argument equals 2^{4} = 16. So (x - 4)(x + 11) = 16.",
+            "Expand and collect everything on one side: x^2 + 7x - 60 = 0. That factors, giving the two roots x = 5 and x = -12.",
+            "Here is the step the question is really about. Test each root in the original equation. x = 5 keeps both arguments positive, so it works. But x = -12 makes x - 4 equal -16, and a logarithm is only defined for a strictly positive argument — so that root is extraneous and has to be thrown out.",
+            "So the only solution is x = 5. The quadratic had two roots and the equation has one; that difference is not an arithmetic mistake, it is the domain doing its job."
+          ],
+          "conceptTag": "Logarithmic equations: solving is not finished until each root is checked against the domain"
+        },
+        {
+          "generatorId": "mhf4u-u7-solve-log-equation-multiple-logs-d3",
+          "seed": 1,
+          "unitId": "mhf4u-u7-exponential-logarithmic",
+          "problemTypeId": "mhf4u-u7-solve-log-equation-multiple-logs",
+          "difficulty": 3,
+          "stem": "Solve \\log_{3}\\left(x - 8\\right) + \\log_{3}\\left(x - 14\\right) = 3.",
+          "choices": [
+            {
+              "latex": "17",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "17n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "\\{5, 17\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_extraneous_root_check",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "17n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "5n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": false,
+              "strategyId": "reported_extraneous_root_only",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "\\frac{49}{2}",
+              "isCorrect": false,
+              "strategyId": "applied_log_law_to_sum_of_args",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "49n",
+                  "den": "2n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Before doing any algebra, notice what the logarithms demand: their arguments have to be strictly positive. That constraint is not decoration — it is what makes the last step of this question necessary, and it is the step most people skip.",
+            "Combine the two logs first. Adding logs of the same base multiplies their arguments, so \\log_{3}\\left(x - 8\\right) + \\log_{3}\\left(x - 14\\right) becomes \\log_{3}\\left((x - 8)(x - 14)\\right). Note that this is a product — reading it as a sum of the arguments is a different equation entirely.",
+            "Now convert to exponential form. A logarithm base 3 equal to 3 means the argument equals 3^{3} = 27. So (x - 8)(x - 14) = 27.",
+            "Expand and collect everything on one side: x^2 - 22x + 85 = 0. That factors, giving the two roots x = 17 and x = 5.",
+            "Here is the step the question is really about. Test each root in the original equation. x = 17 keeps both arguments positive, so it works. But x = 5 makes x - 8 equal -3, and a logarithm is only defined for a strictly positive argument — so that root is extraneous and has to be thrown out.",
+            "So the only solution is x = 17. The quadratic had two roots and the equation has one; that difference is not an arithmetic mistake, it is the domain doing its job."
+          ],
+          "conceptTag": "Logarithmic equations: solving is not finished until each root is checked against the domain"
+        },
+        {
+          "generatorId": "mhf4u-u7-solve-log-equation-multiple-logs-d3",
+          "seed": 2,
+          "unitId": "mhf4u-u7-exponential-logarithmic",
+          "problemTypeId": "mhf4u-u7-solve-log-equation-multiple-logs",
+          "difficulty": 3,
+          "stem": "Solve \\log_{5}\\left(x - 3\\right) + \\log_{5}\\left(x - 7\\right) = 1.",
+          "choices": [
+            {
+              "latex": "8",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "8n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "\\frac{15}{2}",
+              "isCorrect": false,
+              "strategyId": "applied_log_law_to_sum_of_args",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "15n",
+                  "den": "2n"
+                }
+              }
+            },
+            {
+              "latex": "2",
+              "isCorrect": false,
+              "strategyId": "reported_extraneous_root_only",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "2n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "\\{2, 8\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_extraneous_root_check",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "8n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "2n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "solution": [
+            "Before doing any algebra, notice what the logarithms demand: their arguments have to be strictly positive. That constraint is not decoration — it is what makes the last step of this question necessary, and it is the step most people skip.",
+            "Combine the two logs first. Adding logs of the same base multiplies their arguments, so \\log_{5}\\left(x - 3\\right) + \\log_{5}\\left(x - 7\\right) becomes \\log_{5}\\left((x - 3)(x - 7)\\right). Note that this is a product — reading it as a sum of the arguments is a different equation entirely.",
+            "Now convert to exponential form. A logarithm base 5 equal to 1 means the argument equals 5^{1} = 5. So (x - 3)(x - 7) = 5.",
+            "Expand and collect everything on one side: x^2 - 10x + 16 = 0. That factors, giving the two roots x = 8 and x = 2.",
+            "Here is the step the question is really about. Test each root in the original equation. x = 8 keeps both arguments positive, so it works. But x = 2 makes x - 3 equal -1, and a logarithm is only defined for a strictly positive argument — so that root is extraneous and has to be thrown out.",
+            "So the only solution is x = 8. The quadratic had two roots and the equation has one; that difference is not an arithmetic mistake, it is the domain doing its job."
+          ],
+          "conceptTag": "Logarithmic equations: solving is not finished until each root is checked against the domain"
+        },
+        {
+          "generatorId": "mhf4u-u7-solve-log-equation-multiple-logs-d3",
+          "seed": 3,
+          "unitId": "mhf4u-u7-exponential-logarithmic",
+          "problemTypeId": "mhf4u-u7-solve-log-equation-multiple-logs",
+          "difficulty": 3,
+          "stem": "Solve \\log_{5}\\left(x - 13\\right) + \\log_{5}\\left(x - 9\\right) = 1.",
+          "choices": [
+            {
+              "latex": "\\frac{27}{2}",
+              "isCorrect": false,
+              "strategyId": "applied_log_law_to_sum_of_args",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "27n",
+                  "den": "2n"
+                }
+              }
+            },
+            {
+              "latex": "8",
+              "isCorrect": false,
+              "strategyId": "reported_extraneous_root_only",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "8n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "14",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "14n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "\\{8, 14\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_extraneous_root_check",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "14n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "8n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "solution": [
+            "Before doing any algebra, notice what the logarithms demand: their arguments have to be strictly positive. That constraint is not decoration — it is what makes the last step of this question necessary, and it is the step most people skip.",
+            "Combine the two logs first. Adding logs of the same base multiplies their arguments, so \\log_{5}\\left(x - 13\\right) + \\log_{5}\\left(x - 9\\right) becomes \\log_{5}\\left((x - 13)(x - 9)\\right). Note that this is a product — reading it as a sum of the arguments is a different equation entirely.",
+            "Now convert to exponential form. A logarithm base 5 equal to 1 means the argument equals 5^{1} = 5. So (x - 13)(x - 9) = 5.",
+            "Expand and collect everything on one side: x^2 - 22x + 112 = 0. That factors, giving the two roots x = 14 and x = 8.",
+            "Here is the step the question is really about. Test each root in the original equation. x = 14 keeps both arguments positive, so it works. But x = 8 makes x - 13 equal -5, and a logarithm is only defined for a strictly positive argument — so that root is extraneous and has to be thrown out.",
+            "So the only solution is x = 14. The quadratic had two roots and the equation has one; that difference is not an arithmetic mistake, it is the domain doing its job."
+          ],
+          "conceptTag": "Logarithmic equations: solving is not finished until each root is checked against the domain"
+        },
+        {
+          "generatorId": "mhf4u-u7-solve-log-equation-multiple-logs-d3",
+          "seed": 4,
+          "unitId": "mhf4u-u7-exponential-logarithmic",
+          "problemTypeId": "mhf4u-u7-solve-log-equation-multiple-logs",
+          "difficulty": 3,
+          "stem": "Solve \\log_{10}\\left(x + 18\\right) + \\log_{10}\\left(x + 9\\right) = 1.",
+          "choices": [
+            {
+              "latex": "\\{-19, -8\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_extraneous_root_check",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-8n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-19n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "-\\frac{17}{2}",
+              "isCorrect": false,
+              "strategyId": "applied_log_law_to_sum_of_args",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-17n",
+                  "den": "2n"
+                }
+              }
+            },
+            {
+              "latex": "-19",
+              "isCorrect": false,
+              "strategyId": "reported_extraneous_root_only",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-19n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-8",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-8n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Before doing any algebra, notice what the logarithms demand: their arguments have to be strictly positive. That constraint is not decoration — it is what makes the last step of this question necessary, and it is the step most people skip.",
+            "Combine the two logs first. Adding logs of the same base multiplies their arguments, so \\log_{10}\\left(x + 18\\right) + \\log_{10}\\left(x + 9\\right) becomes \\log_{10}\\left((x + 18)(x + 9)\\right). Note that this is a product — reading it as a sum of the arguments is a different equation entirely.",
+            "Now convert to exponential form. A logarithm base 10 equal to 1 means the argument equals 10^{1} = 10. So (x + 18)(x + 9) = 10.",
+            "Expand and collect everything on one side: x^2 + 27x + 152 = 0. That factors, giving the two roots x = -8 and x = -19.",
+            "Here is the step the question is really about. Test each root in the original equation. x = -8 keeps both arguments positive, so it works. But x = -19 makes x + 18 equal -1, and a logarithm is only defined for a strictly positive argument — so that root is extraneous and has to be thrown out.",
+            "So the only solution is x = -8. The quadratic had two roots and the equation has one; that difference is not an arithmetic mistake, it is the domain doing its job."
+          ],
+          "conceptTag": "Logarithmic equations: solving is not finished until each root is checked against the domain"
+        }
+      ]
     }
   ]
 }
