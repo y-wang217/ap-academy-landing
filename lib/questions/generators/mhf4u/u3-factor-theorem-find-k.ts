@@ -31,10 +31,17 @@ import {
 import { areEquivalent, isTriviallyDistinguishable } from '../../equivalence.ts';
 import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
 
-/** Stable ids. Permanent once shipped — stored student attempts reference them. */
-const GENERATOR_ID = 'mhf4u-u3-factor-theorem-find-k';
+/**
+ * Stable ids. Permanent once shipped — stored student attempts reference them.
+ *
+ * `PROBLEM_TYPE_ID` must match a `ProblemType.id` in `taxonomy/mhf4u.ts`, or
+ * the coverage report will show this slot as an uncovered gap. `GENERATOR_ID`
+ * carries a `-d<difficulty>` suffix on top of it, because one problem type
+ * spans several difficulty tiers and each tier needs its own generator.
+ */
+const PROBLEM_TYPE_ID = 'mhf4u-u3-factor-theorem-find-k';
+const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
 const UNIT_ID = 'mhf4u-u3-polynomial-equations';
-const PROBLEM_TYPE_ID = 'factor-theorem-find-k';
 
 /**
  * The root `r` of the known factor. Bounded so `r^3` stays small enough that a

@@ -287,9 +287,9 @@ test('generator: metadata matches the declaration on every instance', () => {
 });
 
 test('generator: ids follow the namespaced slug convention', () => {
-  assert.equal(factorTheoremFindK.id, 'mhf4u-u3-factor-theorem-find-k');
+  assert.equal(factorTheoremFindK.id, 'mhf4u-u3-factor-theorem-find-k-d2');
   assert.equal(factorTheoremFindK.unitId, 'mhf4u-u3-polynomial-equations');
-  assert.equal(factorTheoremFindK.problemTypeId, 'factor-theorem-find-k');
+  assert.equal(factorTheoremFindK.problemTypeId, 'mhf4u-u3-factor-theorem-find-k');
   for (const id of [factorTheoremFindK.id, factorTheoremFindK.unitId, factorTheoremFindK.problemTypeId]) {
     assert.match(id, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${id} is not slug-cased`);
   }
@@ -299,9 +299,9 @@ test('generator: ids follow the namespaced slug convention', () => {
 
 test('registry: the reference generator is registered and resolvable by id', () => {
   assert.ok(GENERATORS.includes(factorTheoremFindK));
-  assert.equal(getGenerator('mhf4u-u3-factor-theorem-find-k'), factorTheoremFindK);
+  assert.equal(getGenerator('mhf4u-u3-factor-theorem-find-k-d2'), factorTheoremFindK);
   assert.equal(getGenerator('does-not-exist'), undefined);
-  assert.ok(generatorIds().includes('mhf4u-u3-factor-theorem-find-k'));
+  assert.ok(generatorIds().includes('mhf4u-u3-factor-theorem-find-k-d2'));
 });
 
 test('registry: every registered generator has a unique id and declares strategies', () => {
