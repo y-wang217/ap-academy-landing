@@ -7,7 +7,9 @@
     "prebuild": "node scripts/validate-sat-words.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:questions": "node --test \"lib/questions/**/*.test.ts\"",
+    "verify:questions": "node lib/questions/cli/verify.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
