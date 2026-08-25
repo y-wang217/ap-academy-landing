@@ -10,7 +10,7 @@
  */
 
 import { createRng, type Rng } from '../../rng.ts';
-import { type Rational, equals, fromInt, isZero, neg, toLatex } from '../../rational.ts';
+import { type Rational, equals, fromInt, isZero, toLatex } from '../../rational.ts';
 import { isTriviallyDistinguishable } from '../../equivalence.ts';
 import { qRational } from '../../value.ts';
 import {
