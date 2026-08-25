@@ -632,3 +632,205 @@ Tomorrow morning, with an extracted bank in hand. About ten minutes.
 10. **Commit the edited `mhf4u.ts`** with a note saying which textbook sections
     the confirmations came from, so the next reconciliation knows what has already
     been checked.
+
+---
+
+## Session C: Algebraic generators
+
+**Status: green.** `npm run build`, `test:questions` (611 tests),
+`verify:questions`, `coverage:questions` all pass, and `lib/questions` is
+lint-clean.
+
+**Not finished.** Part 1 and Part 3 are complete; Part 2 is not. Unit 3 shipped
+in full (9 generators). Unit 7 shipped one generator — the flagship
+extraneous-root question the brief singled out. Units 6 and 8, and the rest of
+Unit 7, are not built. See "What is left" below.
+
+### Commands added
+
+```bash
+npm run catalogue:questions                        # docs/generator-catalogue.md
+npm run snapshots:questions                        # regenerate golden snapshots
+npm run coverage:questions -- --markdown           # docs/coverage.md
+```
+
+### Part 1 — the contract patch (complete)
+
+| File | What it is |
+|---|---|
+| `value.ts` | `QValue`: rational, surd, pi multiple, log, power, set, special, opaque. `canonicalize`, `approx`, `valuesEqual`, `toLatex`. |
+| `types.ts` | `Choice.value` is now **required**. |
+| `validate.ts` | Distinctness runs on `value`; `parseRationalLatex` deleted. Severity added. Rules 9, 10, 11. |
+| `strategies.ts` | See Part 3A. |
+
+`canonicalize` collapses the collisions that would otherwise reach a paper:
+`sqrt(12)` and `2sqrt(3)`, `log_2(8)` and `3`, `2^3` and `8`, sets differing only
+in member order. It is idempotent, with a test over every kind.
+
+`valuesEqual` is exact within a kind and falls back to a `1e-9` epsilon across
+kinds. That direction is deliberate — a false positive costs a minute of
+attention, a false negative ships two correct answers. Sets and specials are
+exempt: a set is not "nearly" a number.
+
+Rule 10 is **warning**-level, because rendering an answer as `x = \frac{\pi}{3}`
+when the value renders as `\frac{\pi}{3}` is legitimate. Rule 11 rejects any
+`strategyId` not in the shared registry.
+
+**The required 500-seed comparison:** the reference generator's sweep after the
+patch was byte-identical to before — 500/500 valid, 475 distinct stems (95.0%),
+positions A:125 B:140 C:123 D:112. The patch changed no generated output.
+
+### Part 2 — generators shipped
+
+```
+GENERATOR                                         RESULT  VALID    VARIETY       ANSWER POSITIONS
+mhf4u-u3-remainder-theorem-evaluate-d2            PASS    500/500  497 (99.4%)   A:112 B:145 C:123 D:120
+mhf4u-u3-factor-theorem-verify-factor-d1          PASS    500/500  359 (71.8%)   A:106 B:118 C:139 D:137
+mhf4u-u3-factor-theorem-find-k-d2                 PASS    500/500  475 (95.0%)   A:125 B:140 C:123 D:112
+mhf4u-u3-factor-fully-cubic-d2                    PASS    500/500  436 (87.2%)   A:125 B:128 C:141 D:106
+mhf4u-u3-solve-polynomial-equation-factorable-d2  PASS    500/500  348 (69.6%)   A:125 B:128 C:141 D:106
+mhf4u-u3-count-real-roots-from-factored-form-d2   PASS    500/500  500 (100.0%)  A:115 B:135 C:127 D:123
+mhf4u-u3-solve-polynomial-inequality-factored-d2  PASS    500/500  474 (94.8%)   A:114 B:135 C:141 D:110
+mhf4u-u3-family-of-polynomials-from-roots-d2      PASS    500/500  498 (99.6%)   A:109 B:130 C:127 D:134
+mhf4u-u3-sum-and-product-of-roots-d2              PASS    500/500  500 (100.0%)  A:121 B:130 C:117 D:132
+mhf4u-u7-solve-log-equation-multiple-logs-d3      PASS    500/500  478 (95.6%)   A:133 B:131 C:132 D:104
+```
+
+Ten generators, every one 500/500 valid, variety 69.6%–100%, no answer position
+above 29%. Every declared strategy fires on every seed.
+
+Also shipped: `generators/shared/polynomial.ts` — exact polynomial arithmetic and
+rendering, so eight generators do not carry eight private copies of "render a
+signed term" and eight chances to print `1x^2`.
+
+**Skipped and why.** Nothing in Unit 3 was skipped for being un-generatable. Two
+Unit 3 slots the brief named did not exist in the Session B taxonomy, so they
+were added as provisional entries alongside their generators:
+`count-real-roots-from-factored-form` and `sum-and-product-of-roots`. Both carry
+notes flagging them for checking against the textbook.
+
+**New strategy ids introduced** (24 in the registry total). Reused across
+generators: `sign_error_on_root` (6 generators), `arithmetic_sign_slip` (2). New
+in Unit 3: `remainder_read_off_constant_term`,
+`picked_rational_root_candidate_without_testing`,
+`lifted_coefficient_from_the_question`, `stopped_at_partially_factored_form`,
+`reported_quotient_only`, `dropped_a_root`,
+`reported_factor_constants_not_roots`, `counted_multiplicity_as_separate_roots`,
+`counted_irreducible_quadratic_as_real_roots`, `counted_factors_not_roots`,
+`solved_for_the_opposite_sign`, `wrong_bracket_type_on_endpoints`,
+`treated_cubic_like_a_quadratic`, `omitted_leading_coefficient`,
+`inverted_the_leading_coefficient`,
+`dropped_the_negation_in_the_root_relation`, `ignored_the_leading_coefficient`,
+`used_the_wrong_coefficient`. New in Unit 7: `dropped_extraneous_root_check`,
+`applied_log_law_to_sum_of_args`, `reported_extraneous_root_only`.
+
+### Part 3 — all five shipped
+
+| Item | What it is |
+|---|---|
+| 3A | `strategies.ts` — 24 misconceptions grouped by theme; validator rule 11 makes an unregistered id a build failure. |
+| 3B | `snapshots.ts` + `__snapshots__/generators.json` — seeds 0–4 of every generator frozen. |
+| 3C | `cli/catalogue.ts` → `docs/generator-catalogue.md`. **Read this one first.** |
+| 3D | `export/worksheet.ts` — the worksheet-skill payload plus `generatePair`. |
+| 3E | `coverage:questions -- --markdown` → `docs/coverage.md`. |
+
+`generatePair` is the substantive part of 3D: same problem types in the same
+order, disjoint seed ranges, and uncopyability is **verified rather than
+assumed** — if any homework question comes out identical to its in-class
+counterpart the function throws. Asserted across 60 starting seeds.
+
+### Bugs the harness caught, and one bug *in* the harness
+
+Worth reading, because each is an argument for a piece of the machinery.
+
+1. **`FALLBACK_PARAMS` was broken in two generators**, both with `b = -r²`, which
+   makes the sign-error distractor equal the correct answer. Both sweeps passed
+   anyway, because the rejection loop never reaches the fallback. Only the
+   explicit `isUsable(FALLBACK_PARAMS)` assertion surfaced it.
+2. **The verify test fixture collided at `k = 1`** (`k+1` and `k*2` both 2).
+3. **The importer matched on a single coincidental word** — a question body
+   reading "One." matched a slot mentioning "one point" at score 1.0.
+4. **The validator was wrong about "undefined".** It flagged "a logarithm is
+   undefined" as a leaked interpolation, and would have rejected
+   `\text{undefined}` as an answer — which Unit 4 needs. Now flagged only where
+   a value belongs.
+5. **A generator produced base-2 questions exclusively** and nothing revealed
+   it. Requiring the wrong-law distractor to be a whole number silently rejected
+   every odd `b^r`. The stem-variety check reported 15% but attributed it to the
+   parameter space, not the base; only counting tuples per base found it. **The
+   variety check cannot see a dimension that never varies.** See open question 3.
+
+### Guesses I made
+
+**C1. Branch.** Same as Sessions A and B: the harness binds all work to
+`claude/question-harness-foundation-syito2`, so Parts 1, 2 and 3 are stacked
+there rather than on `feat/*` branches. Part 1 was completed and verified before
+any Part 2 work began, as the brief requires. `main` was fast-forwarded to
+include Sessions A, B and Part 1 at your explicit request.
+
+**C2. Rule 11 is error-severity.** The brief says "add a validation rule"; a rule
+that only warns would not have caught the fixtures using invented ids.
+
+**C3. `opaque` is used for four answer shapes** — binomial factors, factored
+forms, interval notation, and factored equations. The brief says use it
+sparingly. These are genuinely outside the numeric union, and adding four kinds
+for four generators would be worse. Distinctness still holds, because canonical
+renderings differ exactly when the answers do.
+
+**C4. One generator per problem type, at one difficulty.** Coverage therefore
+shows most Unit 3 types as covered but not "full tiers". Deliberate: building
+the tier a lesson actually uses beats padding the count.
+
+**C5. Two taxonomy slots added.** See "Skipped and why" above.
+
+**C6. `-d<tier>` generator id suffix retained** from Session B.
+
+**C7. Enumeration over rejection sampling** where the usable region is sparse
+(the Unit 7 generator). Rejection sampling there gave 15% variety and a live
+fallback path; enumeration gives 95.6% and removes the fallback entirely.
+
+**C8. The both-roots distractor deliberately contains the correct answer.** A
+student picking it did the algebra right and skipped the domain check. That is
+the lesson, so the option has to be available.
+
+### Open questions for Charlie
+
+1. **Unit 3 is 53% covered, everything else is 0–6%.** The remaining brief is
+   three unit sessions. Is the priority breadth (one or two generators per unit
+   across all eight) or depth (finish a unit at a time)? Breadth would make the
+   worksheet adapter useful for a real lesson much sooner.
+2. **Do you want tier coverage?** 114 in-scope types × ~1.6 declared tiers is
+   ~180 generators for full coverage. That is a lot of code for a tutoring
+   business. See Session A open question 5.
+3. **The variety check has a blind spot.** It counts distinct stems, which cannot
+   detect a parameter that never varies — a generator can score 95% variety while
+   every question uses the same base, the same quadrant, or the same identity.
+   Worth adding a per-parameter distribution check to `verify.ts` before Units 6
+   and 7 land, since both have exactly this shape.
+4. **`mhf4u-u3-solve-polynomial-equation-factorable` sits at 69.6% variety**,
+   the lowest shipped. Above the floor but the weakest. Widening its root range
+   would fix it if you want headroom.
+5. **Are these questions actually good?** That is what
+   `docs/generator-catalogue.md` is for. Thirty rendered questions with
+   solutions — worth twenty minutes and a second opinion from Ryan or Anthony
+   before another 20 generators get built on the same template.
+
+### What is left
+
+Against the Session C brief:
+
+- **Part 1** — complete.
+- **Part 2 Unit 3** — complete, 9 generators.
+- **Part 2 Unit 7** — 1 of ~9. Only the extraneous-root generator. The other
+  eight slots (evaluate a log, condense, expand, change of base, common-base
+  exponential, exponential by logs, single-log equation, half-life, log scale)
+  are not built.
+- **Part 2 Unit 6** — not started, 0 of ~9.
+- **Part 2 Unit 8** — not started, 0 of ~5.
+- **Part 3** — complete, all five.
+
+Everything shipped is verified and green. The remaining units are new sessions
+against the same brief; the procedure in "How to add a new generator" above
+still applies, with two additions from this session: import strategy ids from
+`strategies.ts` rather than declaring them inline, and check that every
+*parameter* varies, not just the stems.
