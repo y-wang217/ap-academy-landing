@@ -201,10 +201,14 @@ test('verify-factor: stems never show a unit coefficient, double sign, or (x - -
 });
 
 test('verify-factor: uses every declared stem phrasing', () => {
+  // Split on a sentinel to recover each phrasing's literal prefix. Taking
+  // the first two words instead breaks whenever an interpolation lands
+  // inside them, as it does for "Solve <polynomial> = 0.".
+  const MARKER = '\u0000';
   const used = new Set<number>();
   for (const instance of instances) {
     __testing.PHRASINGS.forEach((phrasing, index) => {
-      const marker = phrasing('POLY').split(' ').slice(0, 2).join(' ');
+      const marker = phrasing(MARKER).split(MARKER)[0];
       if (instance.stem.startsWith(marker)) used.add(index);
     });
   }

@@ -269,11 +269,15 @@ test('generator: renderPolynomial always ends in + k and starts monic', () => {
 });
 
 test('generator: uses every declared stem phrasing across the sweep', () => {
+  // Split on a sentinel to recover each phrasing's literal prefix. Taking
+  // the first two words instead breaks whenever an interpolation lands
+  // inside them, as it does for "Solve <polynomial> = 0.".
+  const MARKER = '\u0000';
   const used = new Set<number>();
   for (const instance of instances) {
     __testing.PHRASINGS.forEach((phrasing, index) => {
       // Each phrasing has a distinctive opening clause.
-      const marker = phrasing('POLY', 'FACTOR').split(' ').slice(0, 2).join(' ');
+      const marker = phrasing(MARKER, MARKER).split(MARKER)[0];
       if (instance.stem.startsWith(marker)) used.add(index);
     });
   }

@@ -170,10 +170,14 @@ test('factor-cubic: renderings never show a unit coefficient or a double sign', 
 });
 
 test('factor-cubic: uses every declared stem phrasing', () => {
+  // Split on a sentinel to recover each phrasing's literal prefix. Taking
+  // the first two words instead breaks whenever an interpolation lands
+  // inside them, as it does for "Solve <polynomial> = 0.".
+  const MARKER = '\u0000';
   const used = new Set<number>();
   for (const instance of instances) {
     __testing.PHRASINGS.forEach((phrasing, index) => {
-      const marker = phrasing('POLY', 'FAC').split(' ').slice(0, 2).join(' ');
+      const marker = phrasing(MARKER, MARKER).split(MARKER)[0];
       if (instance.stem.startsWith(marker)) used.add(index);
     });
   }
