@@ -11,6 +11,7 @@
  * gate on a build.
  */
 
+import { pathToFileURL } from 'node:url';
 import { GENERATORS, generatorIds, getGenerator } from '../generators/index.ts';
 import { formatPercent, verifyGenerator, type VerificationReport } from '../verify.ts';
 import type { Generator } from '../types.ts';
@@ -216,4 +217,20 @@ function main(): number {
   return 0;
 }
 
-process.exitCode = main();
+/**
+ * Run `main` only when this file is the process entry point.
+ *
+ * Without this, importing anything from a CLI module executes it — the
+ * catalogue test imports `buildCatalogue` and would silently rewrite
+ * `docs/generator-catalogue.md` on every test run. A test suite that mutates
+ * tracked files is a test suite nobody trusts.
+ */
+function isEntryPoint(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return import.meta.url === pathToFileURL(entry).href;
+}
+
+if (isEntryPoint()) {
+  process.exitCode = main();
+}
