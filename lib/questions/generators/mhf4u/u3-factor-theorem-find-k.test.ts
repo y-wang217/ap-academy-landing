@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FALLBACK_PARAMS, __testing, factorTheoremFindK } from './u3-factor-theorem-find-k.ts';
 import { validateInstance } from '../../validate.ts';
-import { verifyGenerator } from '../../verify.ts';
+import { fingerprint, verifyGenerator } from '../../verify.ts';
+import { canonicalize, toLatex as valueToLatex, valuesEqual } from '../../value.ts';
 import { GENERATORS, generatorIds, getGenerator } from '../index.ts';
-import { parseRationalLatex } from '../../validate.ts';
 import { add, fromInt, isZero, mul, pow, toString as ratToString } from '../../rational.ts';
 import { createRng } from '../../rng.ts';
 
@@ -49,8 +49,8 @@ test('generator: every seed produces a valid instance', () => {
 test('generator: is deterministic across 500 seeds', () => {
   for (let seed = 0; seed < SEEDS; seed += 1) {
     assert.equal(
-      JSON.stringify(factorTheoremFindK.generate(seed)),
-      JSON.stringify(instances[seed]),
+      fingerprint(factorTheoremFindK.generate(seed)),
+      fingerprint(instances[seed]),
       `seed ${seed} is not reproducible`,
     );
   }
@@ -81,9 +81,39 @@ test('generator: the correct answer is always a clean integer', () => {
   for (const instance of instances) {
     const correct = instance.choices.find((c) => c.isCorrect);
     assert.ok(correct);
-    const value = parseRationalLatex(correct.latex);
-    assert.ok(value, `correct answer ${correct.latex} did not parse as a number`);
-    assert.equal(value.den, BigInt(1), `correct answer ${correct.latex} is not an integer`);
+    const value = canonicalize(correct.value);
+    assert.equal(value.kind, 'rational', `correct answer ${correct.latex} is not a rational`);
+    assert.ok(
+      value.kind === 'rational' && value.value.den === BigInt(1),
+      `correct answer ${correct.latex} is not an integer`,
+    );
+  }
+});
+
+test('generator: every choice carries a value that matches its rendering', () => {
+  for (const [seed, instance] of instances.entries()) {
+    for (const choice of instance.choices) {
+      assert.ok(choice.value, `seed ${seed}: a choice has no value`);
+      assert.equal(
+        valueToLatex(choice.value),
+        choice.latex,
+        `seed ${seed}: value and rendering disagree`,
+      );
+    }
+  }
+});
+
+test('generator: the four choice values are pairwise distinct', () => {
+  for (const [seed, instance] of instances.entries()) {
+    const values = instance.choices.map((c) => c.value);
+    for (let a = 0; a < values.length; a += 1) {
+      for (let b = a + 1; b < values.length; b += 1) {
+        assert.ok(
+          !valuesEqual(values[a], values[b]),
+          `seed ${seed}: choices ${a} and ${b} carry the same value`,
+        );
+      }
+    }
   }
 });
 

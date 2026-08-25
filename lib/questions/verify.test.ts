@@ -10,6 +10,7 @@ import {
   type FindingCode,
 } from './verify.ts';
 import { createRng } from './rng.ts';
+import { qInt } from './value.ts';
 import type { Choice, Generator, QuestionInstance } from './types.ts';
 
 /**
@@ -41,10 +42,10 @@ function makeFixture(overrides: {
       // zero. The harness caught this on its first run against the fixture.
       const k = rng.intExcluding(-400, 400, [0, 1, -1]);
       const choices: Choice[] = rng.shuffle([
-        { latex: String(k), isCorrect: true },
-        { latex: String(-k), isCorrect: false, strategyId: 'sign_error' },
-        { latex: String(k + 1), isCorrect: false, strategyId: 'off_by_one' },
-        { latex: String(k * 2), isCorrect: false, strategyId: 'wrong_variable' },
+        { latex: String(k), isCorrect: true, value: qInt(k) },
+        { latex: String(-k), isCorrect: false, strategyId: 'sign_error', value: qInt(-k) },
+        { latex: String(k + 1), isCorrect: false, strategyId: 'off_by_one', value: qInt(k + 1) },
+        { latex: String(k * 2), isCorrect: false, strategyId: 'wrong_variable', value: qInt(k * 2) },
       ]);
       const base: QuestionInstance = {
         generatorId: overrides.id ?? 'fixture',

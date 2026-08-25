@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRationalLatex, validateInstance, type ValidationCode } from './validate.ts';
-import { fromFraction, fromInt, toString as ratToString } from './rational.ts';
+import {
+  normalizeForValueComparison,
+  validateInstance,
+  type ValidationCode,
+} from './validate.ts';
+import { qFraction, qInt, qLog, qPi, qSet, qSurd, type QValue } from './value.ts';
+import { fromInt as i } from './rational.ts';
 import type { Choice, Generator, QuestionInstance } from './types.ts';
 
 /**
@@ -23,6 +28,11 @@ const FIXTURE_GENERATOR: Generator = {
   },
 };
 
+/** An integer choice whose rendering and value agree, which is the normal case. */
+function intChoice(n: number, extra: Partial<Choice> = {}): Choice {
+  return { latex: String(n), isCorrect: false, value: qInt(n), ...extra };
+}
+
 /** A fully valid instance. Every failing fixture below is this with one thing broken. */
 function validInstance(overrides: Partial<QuestionInstance> = {}): QuestionInstance {
   return {
@@ -33,10 +43,10 @@ function validInstance(overrides: Partial<QuestionInstance> = {}): QuestionInsta
     difficulty: 2,
     stem: 'Given f(x) = x^3 + 2x^2 - 5x + k, and that (x - 2) is a factor, find k.',
     choices: [
-      { latex: '2', isCorrect: false, strategyId: 'sign_error' },
-      { latex: '-6', isCorrect: true },
-      { latex: '6', isCorrect: false, strategyId: 'off_by_one' },
-      { latex: '-2', isCorrect: false, strategyId: 'wrong_variable' },
+      intChoice(2, { strategyId: 'sign_error' }),
+      intChoice(-6, { isCorrect: true }),
+      intChoice(6, { strategyId: 'off_by_one' }),
+      intChoice(-2, { strategyId: 'wrong_variable' }),
     ],
     solution: [
       'A factor of (x - 2) means f(2) = 0, so substitute x = 2 and set the whole thing to zero.',
@@ -47,7 +57,15 @@ function validInstance(overrides: Partial<QuestionInstance> = {}): QuestionInsta
   };
 }
 
-/** The codes reported for an instance, deduplicated and sorted. */
+/** Replaces one choice wholesale. */
+function withChoice(index: number, replacement: Choice): QuestionInstance {
+  const instance = validInstance();
+  const choices = instance.choices.slice();
+  choices[index] = replacement;
+  return validInstance({ choices });
+}
+
+/** The error codes reported, deduplicated and sorted. */
 function codesFor(
   instance: QuestionInstance,
   options?: Parameters<typeof validateInstance>[2],
@@ -56,25 +74,39 @@ function codesFor(
   return [...new Set(errors.map((e) => e.code))].sort();
 }
 
-/** Asserts the instance is rejected specifically for `code`. */
-function assertRejects(instance: QuestionInstance, code: ValidationCode, options?: Parameters<typeof validateInstance>[2]): void {
+/** Asserts the instance is rejected specifically for `code`, at error severity. */
+function assertRejects(
+  instance: QuestionInstance,
+  code: ValidationCode,
+  options?: Parameters<typeof validateInstance>[2],
+): void {
   const result = validateInstance(instance, FIXTURE_GENERATOR, options);
   assert.equal(result.valid, false, `expected ${code}, but the instance validated clean`);
   assert.ok(
     result.errors.some((e) => e.code === code),
     `expected ${code}, got [${result.errors.map((e) => e.code).join(', ')}]`,
   );
-  for (const error of result.errors) {
-    assert.ok(error.message.length > 0, `${error.code} has an empty message`);
-    assert.equal(typeof error.path, 'string');
+  for (const finding of result.findings) {
+    assert.ok(finding.message.length > 0, `${finding.code} has an empty message`);
+    assert.equal(typeof finding.path, 'string');
+    assert.ok(finding.severity === 'error' || finding.severity === 'warning');
   }
+}
+
+/** Asserts the instance produces `code` at warning severity, and still validates. */
+function assertWarns(instance: QuestionInstance, code: ValidationCode): void {
+  const result = validateInstance(instance, FIXTURE_GENERATOR);
+  assert.ok(
+    result.warnings.some((w) => w.code === code),
+    `expected warning ${code}, got [${result.findings.map((f) => `${f.severity}:${f.code}`).join(', ')}]`,
+  );
 }
 
 // --- the baseline -------------------------------------------------------------
 
 test('validate: the reference-shaped fixture passes every rule', () => {
   const result = validateInstance(validInstance(), FIXTURE_GENERATOR);
-  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.findings, []);
   assert.equal(result.valid, true);
 });
 
@@ -96,9 +128,9 @@ test('validate: reports every violation in one pass, not just the first', () => 
     stem: '',
     solution: ['only one step'],
     choices: [
-      { latex: '2', isCorrect: false, strategyId: 'not_declared' },
-      { latex: '-6', isCorrect: true },
-      { latex: '6', isCorrect: false, strategyId: 'off_by_one' },
+      intChoice(2, { strategyId: 'not_declared' }),
+      intChoice(-6, { isCorrect: true }),
+      intChoice(6, { strategyId: 'off_by_one' }),
     ],
   });
   const codes = codesFor(instance);
@@ -108,64 +140,55 @@ test('validate: reports every violation in one pass, not just the first', () => 
   assert.ok(codes.includes('SOLUTION_TOO_SHORT'));
 });
 
-// --- Rule 1: choice count and correct count -----------------------------------
-
-test('validate rule 1: passes with exactly 4 choices and exactly 1 correct', () => {
-  assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
+test('validate: partitions findings into errors and warnings', () => {
+  const result = validateInstance(validInstance(), FIXTURE_GENERATOR);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.findings.length, 0);
+  // errors + warnings always reconstruct findings.
+  const broken = validateInstance(validInstance({ stem: '' }), FIXTURE_GENERATOR);
+  assert.equal(broken.errors.length + broken.warnings.length, broken.findings.length);
 });
 
+// --- Rule 1: choice count and correct count -----------------------------------
+
 test('validate rule 1: rejects three choices', () => {
-  assertRejects(
-    validInstance({ choices: validInstance().choices.slice(0, 3) }),
-    'CHOICE_COUNT',
-  );
+  assertRejects(validInstance({ choices: validInstance().choices.slice(0, 3) }), 'CHOICE_COUNT');
 });
 
 test('validate rule 1: rejects five choices', () => {
-  const choices: Choice[] = [
-    ...validInstance().choices,
-    { latex: '9', isCorrect: false, strategyId: 'sign_error' },
-  ];
+  const choices: Choice[] = [...validInstance().choices, intChoice(9, { strategyId: 'sign_error' })];
   assertRejects(validInstance({ choices }), 'CHOICE_COUNT');
 });
 
 test('validate rule 1: rejects zero correct answers', () => {
-  const choices = validInstance().choices.map((c) => ({ ...c, isCorrect: false, strategyId: c.strategyId ?? 'sign_error' }));
+  const choices = validInstance().choices.map((c) => ({
+    ...c,
+    isCorrect: false,
+    strategyId: c.strategyId ?? 'sign_error',
+  }));
   assertRejects(validInstance({ choices }), 'CORRECT_COUNT');
 });
 
 test('validate rule 1: rejects two correct answers', () => {
   const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { latex: c.latex, isCorrect: true } : c,
+    index === 0 ? { ...c, isCorrect: true, strategyId: undefined } : c,
   );
   assertRejects(validInstance({ choices }), 'CORRECT_COUNT');
 });
 
 // --- Rule 2: strategy attribution ---------------------------------------------
 
-test('validate rule 2: passes when every distractor names a declared strategy', () => {
-  assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
-});
-
 test('validate rule 2: rejects a distractor with no strategyId', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { latex: c.latex, isCorrect: false } : c,
-  );
-  assertRejects(validInstance({ choices }), 'MISSING_STRATEGY_ID');
+  assertRejects(withChoice(0, intChoice(2)), 'MISSING_STRATEGY_ID');
 });
 
 test('validate rule 2: rejects a blank strategyId', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { ...c, strategyId: '   ' } : c,
-  );
-  assertRejects(validInstance({ choices }), 'MISSING_STRATEGY_ID');
+  assertRejects(withChoice(0, intChoice(2, { strategyId: '   ' })), 'MISSING_STRATEGY_ID');
 });
 
 test('validate rule 2: rejects a strategyId the generator does not declare', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { ...c, strategyId: 'invented_on_the_spot' } : c,
-  );
-  assertRejects(validInstance({ choices }), 'UNKNOWN_STRATEGY_ID');
+  assertRejects(withChoice(0, intChoice(2, { strategyId: 'invented' })), 'UNKNOWN_STRATEGY_ID');
 });
 
 test('validate rule 2: the correct choice needs no strategyId', () => {
@@ -175,112 +198,129 @@ test('validate rule 2: the correct choice needs no strategyId', () => {
   assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
 });
 
-// --- Rule 3: duplicate choices ------------------------------------------------
-
-test('validate rule 3: passes when all four choices are distinct', () => {
-  assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
-});
+// --- Rule 3: duplicate choices, now checked on value --------------------------
 
 test('validate rule 3: rejects two choices rendering identically', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 2 ? { ...c, latex: '2' } : c,
-  );
-  assertRejects(validInstance({ choices }), 'DUPLICATE_LATEX');
+  assertRejects(withChoice(2, intChoice(2, { strategyId: 'off_by_one' })), 'DUPLICATE_LATEX');
 });
 
 test('validate rule 3: rejects choices differing only in whitespace', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 2 ? { ...c, latex: ' 2 ' } : c,
-  );
-  assertRejects(validInstance({ choices }), 'DUPLICATE_LATEX');
+  const spaced: Choice = { latex: ' 2 ', isCorrect: false, strategyId: 'off_by_one', value: qInt(2) };
+  assertRejects(withChoice(2, spaced), 'DUPLICATE_LATEX');
 });
 
 test('validate rule 3: rejects the same value written two ways', () => {
   const choices: Choice[] = [
-    { latex: '\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error' },
-    { latex: '\\frac{1}{3}', isCorrect: true },
-    { latex: '\\frac{2}{4}', isCorrect: false, strategyId: 'off_by_one' },
-    { latex: '\\frac{1}{4}', isCorrect: false, strategyId: 'wrong_variable' },
+    { latex: '\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error', value: qFraction(1, 2) },
+    { latex: '\\frac{1}{3}', isCorrect: true, value: qFraction(1, 3) },
+    { latex: '\\frac{2}{4}', isCorrect: false, strategyId: 'off_by_one', value: qFraction(2, 4) },
+    { latex: '\\frac{1}{4}', isCorrect: false, strategyId: 'wrong_variable', value: qFraction(1, 4) },
   ];
   assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
 });
 
+test('validate rule 3: catches a symbolic duplicate the old LaTeX parser could not', () => {
+  // 2*sqrt(3) and sqrt(12) are the same number rendered two ways. The previous
+  // implementation parsed LaTeX into a Rational, could parse neither, and
+  // shipped both as separate options.
+  const choices: Choice[] = [
+    { latex: '2\\sqrt{3}', isCorrect: false, strategyId: 'sign_error', value: qSurd(i(2), 3) },
+    { latex: '\\sqrt{5}', isCorrect: true, value: qSurd(i(1), 5) },
+    { latex: '\\sqrt{12}', isCorrect: false, strategyId: 'off_by_one', value: qSurd(i(1), 12) },
+    { latex: '\\sqrt{7}', isCorrect: false, strategyId: 'wrong_variable', value: qSurd(i(1), 7) },
+  ];
+  assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
+});
+
+test('validate rule 3: catches log and integer forms of the same number', () => {
+  const choices: Choice[] = [
+    { latex: '\\log_{2}\\left(8\\right)', isCorrect: false, strategyId: 'sign_error', value: qLog(i(2), i(8)) },
+    { latex: '5', isCorrect: true, value: qInt(5) },
+    { latex: '3', isCorrect: false, strategyId: 'off_by_one', value: qInt(3) },
+    { latex: '4', isCorrect: false, strategyId: 'wrong_variable', value: qInt(4) },
+  ];
+  assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
+});
+
+test('validate rule 3: catches two solution sets that differ only in member order', () => {
+  const setA = qSet([qPi(i(1)), qPi(qFractionCoeff(1, 3))]);
+  const setB = qSet([qPi(qFractionCoeff(1, 3)), qPi(i(1))]);
+  const choices: Choice[] = [
+    { latex: '\\{\\frac{\\pi}{3}, \\pi\\}', isCorrect: true, value: setA },
+    { latex: '\\{\\pi, \\frac{\\pi}{3}\\}', isCorrect: false, strategyId: 'sign_error', value: setB },
+    { latex: '\\{\\frac{\\pi}{6}\\}', isCorrect: false, strategyId: 'off_by_one', value: qSet([qPi(qFractionCoeff(1, 6))]) },
+    { latex: '\\{\\frac{\\pi}{4}\\}', isCorrect: false, strategyId: 'wrong_variable', value: qSet([qPi(qFractionCoeff(1, 4))]) },
+  ];
+  assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
+});
+
+/** Rational coefficient helper, kept local so the set fixtures read clearly. */
+function qFractionCoeff(num: number, den: number) {
+  const value = qFraction(num, den);
+  if (value.kind !== 'rational') throw new Error('unreachable');
+  return value.value;
+}
+
+test('validate rule 3: distinct symbolic values are left alone', () => {
+  const choices: Choice[] = [
+    { latex: '\\frac{\\pi}{3}', isCorrect: true, value: qPi(qFractionCoeff(1, 3)) },
+    { latex: '\\frac{\\pi}{6}', isCorrect: false, strategyId: 'sign_error', value: qPi(qFractionCoeff(1, 6)) },
+    { latex: '\\frac{2\\pi}{3}', isCorrect: false, strategyId: 'off_by_one', value: qPi(qFractionCoeff(2, 3)) },
+    { latex: '\\frac{5\\pi}{6}', isCorrect: false, strategyId: 'wrong_variable', value: qPi(qFractionCoeff(5, 6)) },
+  ];
+  assert.deepEqual(validateInstance(validInstance({ choices }), FIXTURE_GENERATOR).findings, []);
+});
+
 test('validate rule 3: identical text is reported once, not also as a duplicate value', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 2 ? { ...c, latex: '2' } : c,
-  );
-  const codes = codesFor(validInstance({ choices }));
+  const codes = codesFor(withChoice(2, intChoice(2, { strategyId: 'off_by_one' })));
   assert.ok(codes.includes('DUPLICATE_LATEX'));
   assert.ok(!codes.includes('DUPLICATE_VALUE'), 'the same defect must not be reported twice');
 });
 
-test('validate rule 3: non-numeric choices are still compared textually', () => {
-  const choices: Choice[] = [
-    { latex: 'x^2 + 1', isCorrect: true },
-    { latex: 'x^2 + 1', isCorrect: false, strategyId: 'sign_error' },
-    { latex: 'x^2 - 1', isCorrect: false, strategyId: 'off_by_one' },
-    { latex: 'x^3 + 1', isCorrect: false, strategyId: 'wrong_variable' },
-  ];
-  assertRejects(validInstance({ choices }), 'DUPLICATE_LATEX');
-});
-
 // --- Rule 4: trivial distractors ----------------------------------------------
 
-test('validate rule 4: passes when distractors are plausible', () => {
-  assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
-});
-
 test('validate rule 4: rejects an implausible zero distractor', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { ...c, latex: '0' } : c,
-  );
-  assertRejects(validInstance({ choices }), 'TRIVIAL_DISTRACTOR');
+  assertRejects(withChoice(0, intChoice(0, { strategyId: 'sign_error' })), 'TRIVIAL_DISTRACTOR');
 });
 
 test('validate rule 4: accepts a zero distractor when zero is a declared outcome', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { ...c, latex: '0' } : c,
-  );
-  const result = validateInstance(validInstance({ choices }), FIXTURE_GENERATOR, {
-    zeroIsPlausible: true,
-  });
-  assert.deepEqual(result.errors, []);
+  const instance = withChoice(0, intChoice(0, { strategyId: 'sign_error' }));
+  const result = validateInstance(instance, FIXTURE_GENERATOR, { zeroIsPlausible: true });
+  assert.deepEqual(result.findings, []);
+});
+
+test('validate rule 4: a zero of any kind is caught, because zero canonicalizes to rational', () => {
+  const zeroPi: Choice = { latex: '0', isCorrect: false, strategyId: 'sign_error', value: qPi(i(0)) };
+  assertRejects(withChoice(0, zeroPi), 'TRIVIAL_DISTRACTOR');
 });
 
 test('validate rule 4: rejects a distractor off by a whole scale', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { ...c, latex: '-60000' } : c,
-  );
-  assertRejects(validInstance({ choices }), 'TRIVIAL_DISTRACTOR');
+  assertRejects(withChoice(0, intChoice(-60000, { strategyId: 'sign_error' })), 'TRIVIAL_DISTRACTOR');
 });
 
 test('validate rule 4: names which heuristic fired', () => {
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { ...c, latex: '0' } : c,
+  const { errors } = validateInstance(
+    withChoice(0, intChoice(0, { strategyId: 'sign_error' })),
+    FIXTURE_GENERATOR,
   );
-  const { errors } = validateInstance(validInstance({ choices }), FIXTURE_GENERATOR);
   const trivial = errors.find((e) => e.code === 'TRIVIAL_DISTRACTOR');
   assert.ok(trivial);
   assert.match(trivial.message, /implausible_zero/);
   assert.equal(trivial.path, 'choices[0].latex');
 });
 
-test('validate rule 4: stays silent on choices it cannot parse as numbers', () => {
+test('validate rule 4: stays silent on symbolic values, where the heuristics have no competence', () => {
   const choices: Choice[] = [
-    { latex: 'x = 2 \\text{ or } x = -3', isCorrect: true },
-    { latex: 'x = -2 \\text{ or } x = 3', isCorrect: false, strategyId: 'sign_error' },
-    { latex: 'x = 2 \\text{ or } x = 3', isCorrect: false, strategyId: 'off_by_one' },
-    { latex: 'x = -2 \\text{ or } x = -3', isCorrect: false, strategyId: 'wrong_variable' },
+    { latex: '\\frac{\\pi}{3}', isCorrect: true, value: qPi(qFractionCoeff(1, 3)) },
+    { latex: '\\{1, 2\\}', isCorrect: false, strategyId: 'sign_error', value: qSet([qInt(1), qInt(2)]) },
+    { latex: '\\sqrt{2}', isCorrect: false, strategyId: 'off_by_one', value: qSurd(i(1), 2) },
+    { latex: '\\text{no solution}', isCorrect: false, strategyId: 'wrong_variable', value: { kind: 'special', token: 'no-solution' } },
   ];
   const result = validateInstance(validInstance({ choices }), FIXTURE_GENERATOR);
-  assert.deepEqual(result.errors, []);
+  assert.ok(!result.errors.some((e) => e.code === 'TRIVIAL_DISTRACTOR'));
 });
 
 // --- Rule 5: empty fields and placeholder leaks -------------------------------
-
-test('validate rule 5: passes on fully interpolated text', () => {
-  assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
-});
 
 test('validate rule 5: rejects an empty stem', () => {
   assertRejects(validInstance({ stem: '   ' }), 'EMPTY_FIELD');
@@ -312,36 +352,30 @@ test('validate rule 5: rejects each placeholder marker', () => {
 });
 
 test('validate rule 5: placeholder markers are matched on word boundaries', () => {
-  // "annulled" contains "null"; a naive substring scan would reject this stem.
   const result = validateInstance(
     validInstance({ stem: 'The contract was annulled; find the undefinedness later.' }),
     FIXTURE_GENERATOR,
   );
-  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.findings, []);
 });
 
-test('validate rule 5: scans solution steps and choices too', () => {
+test('validate rule 5: scans solution steps too', () => {
   assertRejects(
     validInstance({ solution: ['Step one is fine.', 'Then k = undefined.'] }),
     'PLACEHOLDER_LEAK',
   );
-  const choices = validInstance().choices.map((c, index) =>
-    index === 0 ? { ...c, latex: 'NaN' } : c,
-  );
-  assertRejects(validInstance({ choices }), 'PLACEHOLDER_LEAK');
 });
 
 // --- Rule 6: well-formed LaTeX ------------------------------------------------
 
 test('validate rule 6: passes on balanced LaTeX with a well-formed frac', () => {
   const choices: Choice[] = [
-    { latex: '\\frac{1}{2}', isCorrect: true },
-    { latex: '-\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error' },
-    { latex: '\\frac{1}{3}', isCorrect: false, strategyId: 'off_by_one' },
-    { latex: '\\frac{2}{3}', isCorrect: false, strategyId: 'wrong_variable' },
+    { latex: '\\frac{1}{2}', isCorrect: true, value: qFraction(1, 2) },
+    { latex: '-\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error', value: qFraction(-1, 2) },
+    { latex: '\\frac{1}{3}', isCorrect: false, strategyId: 'off_by_one', value: qFraction(1, 3) },
+    { latex: '\\frac{2}{3}', isCorrect: false, strategyId: 'wrong_variable', value: qFraction(2, 3) },
   ];
-  const result = validateInstance(validInstance({ choices }), FIXTURE_GENERATOR);
-  assert.deepEqual(result.errors, []);
+  assert.deepEqual(validateInstance(validInstance({ choices }), FIXTURE_GENERATOR).findings, []);
 });
 
 test('validate rule 6: rejects an unclosed brace', () => {
@@ -369,7 +403,7 @@ test('validate rule 6: treats escaped braces as literal characters', () => {
     validInstance({ stem: 'The solution set is \\{2, -3\\}. Find k.' }),
     FIXTURE_GENERATOR,
   );
-  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.findings, []);
 });
 
 test('validate rule 6: accepts a nested frac', () => {
@@ -377,14 +411,21 @@ test('validate rule 6: accepts a nested frac', () => {
     validInstance({ stem: 'Simplify \\frac{\\frac{1}{2}}{3} and find k.' }),
     FIXTURE_GENERATOR,
   );
-  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.findings, []);
+});
+
+test('validate rule 6: a rendered solution set has balanced braces', () => {
+  const set = qSet([qInt(1), qInt(2)]);
+  const choices: Choice[] = [
+    { latex: '\\{1, 2\\}', isCorrect: true, value: set },
+    { latex: '\\{1, 3\\}', isCorrect: false, strategyId: 'sign_error', value: qSet([qInt(1), qInt(3)]) },
+    { latex: '\\{2, 3\\}', isCorrect: false, strategyId: 'off_by_one', value: qSet([qInt(2), qInt(3)]) },
+    { latex: '\\{4, 5\\}', isCorrect: false, strategyId: 'wrong_variable', value: qSet([qInt(4), qInt(5)]) },
+  ];
+  assert.deepEqual(validateInstance(validInstance({ choices }), FIXTURE_GENERATOR).findings, []);
 });
 
 // --- Rule 7: instance agrees with its generator -------------------------------
-
-test('validate rule 7: passes when the metadata matches', () => {
-  assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
-});
 
 test('validate rule 7: rejects a mismatched unitId', () => {
   assertRejects(validInstance({ unitId: 'some-other-unit' }), 'UNIT_MISMATCH');
@@ -405,10 +446,8 @@ test('validate rule 7: rejects a mismatched generatorId', () => {
 // --- Rule 8: a worked solution ------------------------------------------------
 
 test('validate rule 8: passes with two or more steps', () => {
-  assert.equal(validateInstance(validInstance(), FIXTURE_GENERATOR).valid, true);
   assert.equal(
-    validateInstance(validInstance({ solution: ['One.', 'Two.', 'Three.'] }), FIXTURE_GENERATOR)
-      .valid,
+    validateInstance(validInstance({ solution: ['One.', 'Two.', 'Three.'] }), FIXTURE_GENERATOR).valid,
     true,
   );
 });
@@ -421,29 +460,122 @@ test('validate rule 8: rejects an empty solution', () => {
   assertRejects(validInstance({ solution: [] }), 'SOLUTION_TOO_SHORT');
 });
 
-// --- parseRationalLatex -------------------------------------------------------
+// --- Rule 9: every choice carries a canonicalizable value ---------------------
 
-test('validate: parseRationalLatex round-trips what toLatex produces', () => {
-  const values = [fromInt(0), fromInt(7), fromInt(-7), fromFraction(1, 2), fromFraction(-3, 4)];
-  for (const value of values) {
-    const parsed = parseRationalLatex(
-      value.den === BigInt(1)
-        ? value.num.toString()
-        : `${value.num < BigInt(0) ? '-' : ''}\\frac{${(value.num < BigInt(0) ? -value.num : value.num).toString()}}{${value.den.toString()}}`,
-    );
-    assert.ok(parsed, `failed to parse ${ratToString(value)}`);
-    assert.equal(ratToString(parsed), ratToString(value));
+test('validate rule 9: passes when every choice has a well-formed value', () => {
+  assert.deepEqual(validateInstance(validInstance(), FIXTURE_GENERATOR).findings, []);
+});
+
+test('validate rule 9: rejects a choice with no value at all', () => {
+  const missing = { latex: '2', isCorrect: false, strategyId: 'sign_error' } as unknown as Choice;
+  assertRejects(withChoice(0, missing), 'INVALID_VALUE');
+});
+
+test('validate rule 9: rejects a value that fails to canonicalize', () => {
+  const cases: QValue[] = [
+    { kind: 'surd', coeff: i(1), radicand: BigInt(-4) },
+    { kind: 'log', base: i(1), argument: i(5) },
+    { kind: 'log', base: i(2), argument: i(0) },
+    { kind: 'power', base: i(0), exponent: i(0) },
+    { kind: 'power', base: i(0), exponent: i(-1) },
+  ];
+  for (const value of cases) {
+    const bad: Choice = { latex: '2', isCorrect: false, strategyId: 'sign_error', value };
+    assertRejects(withChoice(0, bad), 'INVALID_VALUE');
   }
 });
 
-test('validate: parseRationalLatex returns null for anything it does not recognise', () => {
-  for (const input of ['x^2 + 1', '\\sqrt{2}', '2x', '', '\\frac{1}{0}', '1.5', '\\frac{x}{2}']) {
-    assert.equal(parseRationalLatex(input), null, `unexpectedly parsed ${JSON.stringify(input)}`);
-  }
+test('validate rule 9: a malformed value does not stop the other rules running', () => {
+  const bad: Choice = {
+    latex: '2',
+    isCorrect: false,
+    strategyId: 'not_declared',
+    value: { kind: 'surd', coeff: i(1), radicand: BigInt(-4) },
+  };
+  const codes = codesFor(validInstance({ choices: [bad, ...validInstance().choices.slice(1)] }));
+  assert.ok(codes.includes('INVALID_VALUE'));
+  assert.ok(codes.includes('UNKNOWN_STRATEGY_ID'), 'later rules must still run');
 });
 
-test('validate: parseRationalLatex tolerates surrounding whitespace', () => {
-  const parsed = parseRationalLatex('  -\\frac{3}{4} ');
-  assert.ok(parsed);
-  assert.equal(ratToString(parsed), '-3/4');
+test('validate rule 9: reports the path of the offending choice', () => {
+  const bad: Choice = {
+    latex: '2',
+    isCorrect: false,
+    strategyId: 'sign_error',
+    value: { kind: 'log', base: i(2), argument: i(-1) },
+  };
+  const { errors } = validateInstance(withChoice(2, bad), FIXTURE_GENERATOR);
+  const finding = errors.find((e) => e.code === 'INVALID_VALUE');
+  assert.ok(finding);
+  assert.equal(finding.path, 'choices[2].value');
+});
+
+// --- Rule 10: rendering agrees with value (warning) ---------------------------
+
+test('validate rule 10: silent when latex matches the canonical rendering', () => {
+  assert.deepEqual(validateInstance(validInstance(), FIXTURE_GENERATOR).warnings, []);
+});
+
+test('validate rule 10: warns when the generator displays something else', () => {
+  const lying: Choice = { latex: '99', isCorrect: false, strategyId: 'sign_error', value: qInt(2) };
+  assertWarns(withChoice(0, lying), 'VALUE_LATEX_MISMATCH');
+});
+
+test('validate rule 10: a mismatch is a warning, not an error', () => {
+  const lying: Choice = { latex: '99', isCorrect: false, strategyId: 'sign_error', value: qInt(2) };
+  const result = validateInstance(withChoice(0, lying), FIXTURE_GENERATOR);
+  assert.equal(result.valid, true, 'a display mismatch must not fail the sweep');
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.warnings.length, 1);
+});
+
+test('validate rule 10: tolerates an assignment prefix', () => {
+  const prefixed: Choice = {
+    latex: 'x = \\frac{\\pi}{3}',
+    isCorrect: false,
+    strategyId: 'sign_error',
+    value: qPi(qFractionCoeff(1, 3)),
+  };
+  const result = validateInstance(withChoice(0, prefixed), FIXTURE_GENERATOR);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('validate rule 10: tolerates a Greek-letter assignment prefix', () => {
+  const prefixed: Choice = {
+    latex: '\\theta = \\frac{\\pi}{6}',
+    isCorrect: false,
+    strategyId: 'sign_error',
+    value: qPi(qFractionCoeff(1, 6)),
+  };
+  assert.deepEqual(validateInstance(withChoice(0, prefixed), FIXTURE_GENERATOR).warnings, []);
+});
+
+test('validate rule 10: tolerates whitespace differences', () => {
+  const spaced: Choice = {
+    latex: '\\frac{1} {2}',
+    isCorrect: false,
+    strategyId: 'sign_error',
+    value: qFraction(1, 2),
+  };
+  assert.deepEqual(validateInstance(withChoice(0, spaced), FIXTURE_GENERATOR).warnings, []);
+});
+
+test('validate rule 10: catches the compute-one-thing-display-another bug', () => {
+  // The generator computed pi/3 but rendered pi/6 — a real transposition bug.
+  const wrong: Choice = {
+    latex: '\\frac{\\pi}{6}',
+    isCorrect: false,
+    strategyId: 'sign_error',
+    value: qPi(qFractionCoeff(1, 3)),
+  };
+  assertWarns(withChoice(0, wrong), 'VALUE_LATEX_MISMATCH');
+});
+
+test('validate: normalizeForValueComparison strips prefixes and whitespace', () => {
+  assert.equal(normalizeForValueComparison('x = \\frac{\\pi}{3}'), '\\frac{\\pi}{3}');
+  assert.equal(normalizeForValueComparison('\\theta =\\pi'), '\\pi');
+  assert.equal(normalizeForValueComparison('  k  =  -6 '), '-6');
+  assert.equal(normalizeForValueComparison('\\frac{1} {2}'), '\\frac{1}{2}');
+  // Not an assignment: must be left alone.
+  assert.equal(normalizeForValueComparison('2x'), '2x');
 });

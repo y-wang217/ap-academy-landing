@@ -14,6 +14,8 @@
  * - LaTeX is produced without `$` delimiters. The rendering layer wraps it.
  */
 
+import type { QValue } from './value.ts';
+
 /**
  * Stable identifier for a curriculum unit, e.g. `"mhf4u-u3-polynomial-equations"`.
  *
@@ -98,6 +100,24 @@ export interface Choice {
    * correct choice is meaningless but not currently an error.
    */
   strategyId?: string;
+  /**
+   * The structured value this choice represents, supplied by the generator.
+   *
+   * **Required.** Distinctness checking runs on this, not on `latex` — the
+   * validator does not parse a rendering back into a number, because that only
+   * works for integers and simple fractions and silently gives up on
+   * `\frac{\pi}{3}`, `\log_2 5`, or a solution set. The generator already knows
+   * what it computed, so it says so.
+   *
+   * Required rather than optional on purpose: an optional field degrades to
+   * *no* distinctness checking on exactly the generators most likely to ship
+   * two correct answers.
+   *
+   * The UI ignores this and renders `latex`. Validator rule
+   * `VALUE_LATEX_MISMATCH` warns when the two disagree, which catches the class
+   * of bug where a generator computes one thing and displays another.
+   */
+  value: QValue;
 }
 
 /**

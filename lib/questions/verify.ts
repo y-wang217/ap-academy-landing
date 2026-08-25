@@ -35,7 +35,9 @@ export type FindingCode =
   /** The correct answer sits in one position too often. */
   | 'POSITION_BIAS'
   /** A declared strategy never appeared across the whole sweep. */
-  | 'UNUSED_STRATEGY';
+  | 'UNUSED_STRATEGY'
+  /** An instance raised validator warnings. Does not fail the sweep. */
+  | 'INSTANCE_WARNING';
 
 /** One thing the sweep found. */
 export interface Finding {
@@ -60,6 +62,8 @@ export interface VerificationReport {
   validCount: number;
   /** Seeds where `generate` threw. */
   crashCount: number;
+  /** Seeds whose instance raised at least one validator warning. */
+  warningInstanceCount: number;
   /** Distinct stem strings seen. */
   distinctStems: number;
   /** `distinctStems / seedCount`, as a fraction of 1. */
@@ -112,6 +116,18 @@ export interface VerifyOptions {
 }
 
 /**
+ * `JSON.stringify` replacer that survives `bigint`.
+ *
+ * `Choice.value` carries `Rational`s, whose numerator and denominator are
+ * `bigint`, and `JSON.stringify` throws on those rather than serializing them.
+ * Tagging with a trailing `n` keeps the output unambiguous — `1` and `"1n"`
+ * do not collide — so the fingerprint stays a faithful structural comparison.
+ */
+export function bigintSafeReplacer(_key: string, value: unknown): unknown {
+  return typeof value === 'bigint' ? `${value.toString()}n` : value;
+}
+
+/**
  * Deep structural comparison used for the determinism check.
  *
  * `JSON.stringify` is the right tool here precisely because it is
@@ -119,8 +135,8 @@ export interface VerifyOptions {
  * determinism failure, and a comparison that normalized order would hide
  * exactly the bug being looked for.
  */
-function fingerprint(instance: QuestionInstance): string {
-  return JSON.stringify(instance);
+export function fingerprint(instance: QuestionInstance): string {
+  return JSON.stringify(instance, bigintSafeReplacer);
 }
 
 /**
@@ -150,6 +166,8 @@ export function verifyGenerator(
   let reportedCrashes = 0;
   let reportedInvalid = 0;
   let reportedNonDeterministic = 0;
+  let reportedWarnings = 0;
+  let warningInstanceCount = 0;
 
   for (let seed = 0; seed < seeds; seed += 1) {
     // --- crash safety: a throw is data, not the end of the run ---------------
@@ -211,6 +229,22 @@ export function verifyGenerator(
         message: `generate(${seed}) is invalid: ${result.errors.map((e) => `${e.code} at ${e.path || 'instance'}`).join('; ')}`,
         errors: result.errors,
       });
+    }
+    // Validator warnings do not invalidate an instance, but they are worth
+    // surfacing: a value/rendering mismatch on every seed is a real bug even
+    // though the question still renders.
+    if (result.warnings.length > 0) {
+      warningInstanceCount += 1;
+      if (reportedWarnings < MAX_REPORTED_FAILURES) {
+        reportedWarnings += 1;
+        findings.push({
+          code: 'INSTANCE_WARNING',
+          severity: 'warning',
+          seed,
+          message: `generate(${seed}) raised ${result.warnings.length} validator warning${result.warnings.length === 1 ? '' : 's'}: ${result.warnings.map((w) => `${w.code} at ${w.path || 'instance'}`).join('; ')}`,
+          errors: result.warnings,
+        });
+      }
     }
 
     // --- variety, position, and strategy coverage ----------------------------
@@ -276,6 +310,7 @@ export function verifyGenerator(
     passed: !findings.some((finding) => finding.severity === 'fatal'),
     validCount,
     crashCount,
+    warningInstanceCount,
     distinctStems,
     varietyRatio,
     answerPositionCounts,

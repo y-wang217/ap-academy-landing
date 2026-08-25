@@ -29,6 +29,7 @@ import {
   toLatex,
 } from '../../rational.ts';
 import { areEquivalent, isTriviallyDistinguishable } from '../../equivalence.ts';
+import { qRational } from '../../value.ts';
 import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
 
 /**
@@ -291,12 +292,16 @@ export const factorTheoremFindK: Generator = {
     const params = drawParams(rng);
     const k = solveForK(params);
 
+    // Every choice carries both its rendering and the exact value it stands
+    // for. The value is what distinctness checking runs on; the latex is only
+    // what a student reads. Every generator must supply both.
     const choices: Choice[] = [
-      { latex: toLatex(k), isCorrect: true },
+      { latex: toLatex(k), isCorrect: true, value: qRational(k) },
       ...buildDistractors(params).map((distractor) => ({
         latex: toLatex(distractor.value),
         isCorrect: false,
         strategyId: distractor.strategyId,
+        value: qRational(distractor.value),
       })),
     ];
 

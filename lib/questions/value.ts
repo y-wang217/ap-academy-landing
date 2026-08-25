@@ -129,19 +129,6 @@ export function qOpaque(canonical: string, approxValue: number): QValue {
 
 // --- canonicalization ---------------------------------------------------------
 
-/** Integer square root of a non-negative bigint, by Newton's method. */
-function bigintSqrt(n: bigint): bigint {
-  if (n < ZERO_B) throw new RangeError('bigintSqrt of a negative value');
-  if (n < BigInt(2)) return n;
-  let x = n;
-  let y = (x + ONE_B) / BigInt(2);
-  while (y < x) {
-    x = y;
-    y = (x + n / x) / BigInt(2);
-  }
-  return x;
-}
-
 /**
  * Splits `radicand` into `(outside, inside)` with `radicand = outside^2 * inside`
  * and `inside` square-free.

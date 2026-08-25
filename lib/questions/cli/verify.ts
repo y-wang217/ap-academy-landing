@@ -111,6 +111,7 @@ function renderDetail(report: VerificationReport): string {
   lines.push(`  seeds swept        ${report.seedCount} (0..${report.seedCount - 1})`);
   lines.push(`  valid instances    ${report.validCount}/${report.seedCount}`);
   lines.push(`  crashes            ${report.crashCount}`);
+  lines.push(`  validator warnings ${report.warningInstanceCount} instance(s)`);
   lines.push(
     `  distinct stems     ${report.distinctStems} (${formatPercent(report.varietyRatio)})`,
   );
