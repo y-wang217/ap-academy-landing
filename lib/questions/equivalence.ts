@@ -19,7 +19,7 @@
  * touching the validator.
  */
 
-import { type Rational, abs, compare, equals, isZero, mul, toNumber } from './rational.ts';
+import { type Rational, abs, compare, equals, isZero, mul } from './rational.ts';
 import type { LatexString } from './types.ts';
 
 /**

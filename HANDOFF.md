@@ -347,3 +347,288 @@ a problem type you already understand.
 - The number of `rng` calls is part of the generator's identity. Inserting one
   extra `rng.int()` early changes every value after it. That is fine, but it
   means every previously generated seed produces a different question.
+
+---
+
+## Session B: Taxonomy registry
+
+Built the typed registry mapping MHF4U's curriculum to generator slots, plus the
+coverage tooling that reports what is built versus what is missing. No new
+generators.
+
+**Status: green.** `npm run build`, `npm run test:questions` (260 tests),
+`npm run verify:questions`, and `npm run coverage:questions` all pass.
+
+### Commands added
+
+```bash
+npm run coverage:questions                    # the work queue — read this first
+npm run coverage:questions -- --gaps all      # every gap, not just the first 20
+npm run coverage:questions -- --json          # machine-readable
+```
+
+Always exits 0, including on a usage error. It is a report, not a gate.
+
+### Files shipped
+
+| File | What it is |
+|---|---|
+| `taxonomy/types.ts` | `Course`, `Unit`, `ProblemType`, `ProblemTypeStatus`. TSDoc on every export. |
+| `taxonomy/mhf4u.ts` | The MHF4U course tree as data. 8 units, 118 problem types, all `provisional`. |
+| `taxonomy/index.ts` | `getCourse`, `getUnit`, `getProblemType`, `getCourseForUnit`, `allProblemTypes`, `allUnits`, `validateCourse`, `validateAllCourses`. |
+| `taxonomy/coverage.ts` | `buildCoverageReport(courseCode, generators?)` — the taxonomy joined against the generator registry. |
+| `taxonomy/import.ts` | `reconcileExtractedBank`, `formatReconciliation`. The tooling for tomorrow morning. |
+| `cli/coverage.ts` | The `coverage:questions` CLI. |
+| `taxonomy/*.test.ts` (3 files) | 77 further tests. |
+
+Session A's `types.ts` was **not modified**. Session A's reference generator was
+touched only to align its ids — see guess B2.
+
+### `coverage:questions` output
+
+Verbatim, trimmed to the first 20 gaps for length. Run with `-- --gaps all` for
+the rest.
+
+```
+MHF4U — Advanced Functions, Grade 12, University Preparation
+1 generator registered against 118 problem types.
+Status: 0 confirmed, 118 provisional, 0 rejected.
+6 excluded from coverage (non-parameterizable or rejected), leaving 112 in scope.
+
+#  UNIT                                    TYPES  EXCL  SCOPE  BUILT  FULL  COVERAGE
+-  --------------------------------------  -----  ----  -----  -----  ----  --------
+1  Characteristics of functions               16     1     15      0     0        0%
+2  Polynomial functions                       14     1     13      0     0        0%
+3  Polynomial equations and inequalities      15     0     15      1     1        7%
+4  Rational functions                         14     1     13      0     0        0%
+5  Trigonometric functions                    16     1     15      0     0        0%
+6  Trigonometric identities and equations     14     1     13      0     0        0%
+7  Exponential and logarithmic functions      17     0     17      0     0        0%
+8  Combining functions                        12     1     11      0     0        0%
+-  --------------------------------------  -----  ----  -----  -----  ----  --------
+   TOTAL                                     118     6    112      1     1        1%
+
+Covered problem types
+  [x] u3  mhf4u-u3-factor-theorem-find-k
+        Find k given a known factor
+        tiers declared 2 | built 2 | missing -
+        generators: mhf4u-u3-factor-theorem-find-k-d2
+
+Gaps (111 total, showing 20, in unit order)
+  Unit 1 — Characteristics of functions
+    [ ] mhf4u-u1-domain-range-from-equation                  tiers 1,2
+    [ ] mhf4u-u1-interval-notation-conversion                tiers 1
+    [ ] mhf4u-u1-evaluate-function-notation                  tiers 1,2
+    [ ] mhf4u-u1-solve-function-notation-equation            tiers 2
+    [ ] mhf4u-u1-find-inverse-algebraically                  tiers 2
+    [ ] mhf4u-u1-inverse-domain-restriction                  tiers 3
+    [ ] mhf4u-u1-verify-inverse-by-composition               tiers 2
+    [ ] mhf4u-u1-single-transformation-of-parent             tiers 1
+    [ ] mhf4u-u1-combined-transformation-mapping             tiers 2
+    [ ] mhf4u-u1-write-equation-from-transformations         tiers 2
+    [ ] mhf4u-u1-transformed-point-image                     tiers 2
+    [ ] mhf4u-u1-classify-even-odd-algebraically             tiers 2
+    [ ] mhf4u-u1-average-rate-of-change                      tiers 1,2
+    [ ] mhf4u-u1-instantaneous-rate-of-change-estimate       tiers 2,3
+    [ ] mhf4u-u1-compare-average-vs-instantaneous            tiers 3
+  Unit 2 — Polynomial functions
+    [ ] mhf4u-u2-degree-and-leading-coefficient              tiers 1
+    [ ] mhf4u-u2-end-behaviour-from-equation                 tiers 1,2
+    [ ] mhf4u-u2-end-behaviour-to-degree-sign                tiers 2
+    [ ] mhf4u-u2-zeros-from-factored-form                    tiers 1
+    [ ] mhf4u-u2-multiplicity-and-graph-behaviour            tiers 2
+  ... and 91 more. Use --gaps all to see them.
+
+1 of 112 in-scope problem types have a generator (1%). 1 covers every declared difficulty tier.
+```
+
+The `[x]` / `[~]` markers mean fully covered / partially covered. A `[~]` in the
+gap list is a type with a generator at some tiers but not all.
+
+### Counts
+
+- **118 problem types** across 8 units, every one `status: 'provisional'`.
+- **6 marked non-parameterizable**, excluded from the coverage denominator,
+  leaving **112 in scope**. One is covered.
+
+The six, with the reason each:
+
+| Problem type | Why excluded |
+|---|---|
+| `mhf4u-u1-domain-range-from-graph` | Input is a graph. Blocked on tooling, not mathematics. |
+| `mhf4u-u2-sketch-from-factored-form` | Output is a sketch; a multiple-choice version needs four candidate graph images. |
+| `mhf4u-u4-sketch-rational` | Output is a sketch. Same blocker. |
+| `mhf4u-u5-graph-sinusoidal` | Output is a graph. Same blocker. |
+| `mhf4u-u6-prove-trig-identity` | Needs a written multi-step justification; no single final answer to put in four options. Genuinely bespoke. |
+| `mhf4u-u8-graph-of-sum` | Both input and output are graphs. Same blocker. |
+
+Five of the six are one blocker, not five: **no graph-rendering pipeline
+exists.** If graphs ever become renderable, five slots come back into scope at
+once. Only the identity proof is bespoke in the sense the brief meant.
+
+### Guesses I made
+
+**B1. Branch.** The brief said `feat/taxonomy-registry` off `main`, run after
+Session A merged. This session's harness binds all work to
+`claude/question-harness-foundation-syito2` and forbids pushing elsewhere, so
+Session B is **stacked on Session A's branch**, not branched from `main`.
+Session A was complete and verified first. `main` was never touched.
+
+**B2. Id convention forced a change to Session A's generator.** The brief
+specifies namespaced problem-type ids (`mhf4u-u3-factor-theorem-find-k`), but
+Session A's generator declared `problemTypeId: 'factor-theorem-find-k'`. Left
+alone, the coverage join would have matched nothing. Resolved by:
+
+- `ProblemType.id` = `mhf4u-u3-factor-theorem-find-k`
+- `Generator.problemTypeId` = the same, so the join works
+- `Generator.id` = `mhf4u-u3-factor-theorem-find-k-**d2**`
+
+The `-d<tier>` suffix exists because `Generator` declares a single `Difficulty`,
+so one problem type spanning tiers 1 and 2 needs two generators. Session A's
+`types.ts` was not modified. Nothing has shipped, so no stored attempt was
+orphaned — but this is the last moment that is true.
+
+**B3. Problem-type ids are namespaced by unit *number*, not unit slug.** So
+`mhf4u-u3-factor-theorem-find-k`, not
+`mhf4u-u3-polynomial-equations-factor-theorem-find-k`. The unit number makes them
+unique; the descriptive slug adds length without information.
+
+**B4. Unit ordering is teaching order, and `strand` records the curriculum
+grouping separately.** The brief's eight units are a course-outline sequence, not
+the Ontario strand order (which is A: exponential/log, B: trigonometric, C:
+polynomial/rational, D: characteristics). Both are recorded so the report can be
+read either way.
+
+**B5. Granularity target: ~14 types per unit, 118 total.** Erring fine as
+instructed. Some neighbours are plausibly one slot — the three log-equation
+types, the two sketch-adjacent rational types. Merging is trivial; splitting
+after generators exist is not.
+
+**B6. Graph-dependent types are `parameterizable: false`.** Arguably wrong: the
+*mathematics* is parameterizable, it is the *rendering* that is blocked. Marked
+false so they leave the denominator and stop reading as work nobody is doing,
+with the reason in `notes`. If you disagree, flipping six booleans moves them
+back into scope.
+
+**B7. `validateCourse` requires a reason on every non-parameterizable type.**
+Not in the brief. Added because an exclusion with no explanation is
+indistinguishable from a mistake once the tree is large.
+
+**B8. Coverage is "at least one generator", fully-covered is "every declared
+tier".** Both are reported. `coverageRatio` uses the looser one, so early
+progress is visible.
+
+**B9. `rejected` types are excluded from the denominator too.** The brief only
+said to exclude non-parameterizable ones, but a rejected type is by definition
+not work to do.
+
+**B10. Gap ordering: untouched types before partial tier gaps, within each
+unit.** Starting a type is worth more than adding its second tier.
+
+**B11. The importer scopes matching to the resolved unit.** Falls back to the
+whole course when the source unit heading does not resolve. Without this, a
+rational-functions question matches the unit-3 factor theorem slot on the word
+"factor".
+
+**B12. The importer reports `unitWasExtracted` on every uncovered slot.** Not in
+the brief, and the most useful field in the output: a slot that got nothing from
+a section that *was* extracted is evidence the guess was wrong; a slot in a unit
+nobody extracted is unexamined and means nothing.
+
+**B13. `buildCoverageReport` and `reconcileExtractedBank` throw on an unknown
+course code**, while the accessors return `undefined`. A report for a
+non-existent course is a caller mistake, not an empty result. The CLIs catch it
+and still exit 0.
+
+**B14. Two matcher thresholds are guesses:** `MATCH_FLOOR = 0.25` (deliberately
+low — a weak suggestion dismissed in two seconds costs less than a missed match
+found by scrolling) and `MIN_TEXT_TERMS_FOR_MATCH = 2`.
+
+### Open questions for Charlie
+
+These are in addition to Session A's, which still stand.
+
+1. **The tree is a guess and needs your eyes, not just the extraction.** 118
+   types written from the standard course structure. The extraction will confirm
+   what the textbook covers; it will not tell you what *you* teach. Units 1 and 8
+   are the ones I am least sure about — both are "characteristics of functions"
+   in the curriculum document and courses split them differently.
+2. **Is the graph-rendering blocker worth solving?** Five of six exclusions are
+   one missing capability. If MHF4U questions are meaningfully graph-based, that
+   is the highest-leverage thing not currently on any list.
+3. **Should `mhf4u-u5-sinusoidal-word-problem-model` be one slot or several?**
+   Marked parameterizable with a note. Fine if the scenario is templated and only
+   numbers vary; if the textbook varies the scenario itself (tides, Ferris
+   wheels, temperature), it should be one type per context.
+4. **`mhf4u-u1-compare-average-vs-instantaneous`** may be a written-justification
+   question rather than a multiple-choice one. Included as MC pending a look at
+   how the textbook asks it.
+5. **How many generators per problem type do you actually want?** 112 in-scope
+   types at one generator each is 112 generators. If a tutor needs 20 questions
+   per lesson, a much smaller set of high-variety generators may serve better.
+   Worth deciding before Session C works down the queue.
+6. **Does the `-d<tier>` generator id suffix stay?** It follows from
+   `Generator` carrying a single `Difficulty` (Session A open question 5). If
+   that changes to a difficulty parameter, the suffix should go — and that is
+   easier now than after 100 generators exist.
+
+### How to reconcile the extracted bank
+
+Tomorrow morning, with an extracted bank in hand. About ten minutes.
+
+1. **Shape the bank into `ExtractedQuestion[]`.** Three fields per row:
+   `unitLabel`, `outcome`, `questionText`, all free text exactly as they appear in
+   the source. Do not clean them up — the matcher normalizes. There is
+   deliberately no file parser, so write a throwaway script or paste a literal.
+
+2. **Put it in a scratch file** — anywhere; nothing here needs it committed.
+
+   ```ts
+   // scratch/reconcile.ts
+   import { reconcileExtractedBank, formatReconciliation } from '../lib/questions/taxonomy/import.ts';
+
+   const bank = [
+     { unitLabel: 'Polynomial Equations', outcome: 'Factor theorem', questionText: '...' },
+     // ...
+   ];
+
+   console.log(formatReconciliation(reconcileExtractedBank('MHF4U', bank)));
+   ```
+
+3. **Run it:** `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scratch/reconcile.ts`
+
+4. **Check the unresolved unit headings first.** Anything under "Source unit
+   headings that did not resolve" means those questions were matched against the
+   whole course instead of one unit, so their matches are weaker. Either fix the
+   heading in your input or accept the looser matching.
+
+5. **Work the "extracted outcomes with no slot" list.** For each one:
+   - It has a **near miss** listed → usually the same topic under different
+     wording. Confirm the existing slot rather than adding a new one.
+   - It has **no near miss** → a topic the guess missed. Add a `ProblemType` to
+     the right unit in `mhf4u.ts`. New ids are free.
+
+6. **Work the "slots with no extracted questions, in units that WERE extracted"
+   list.** These are the guesses that look wrong. For each:
+   - The textbook genuinely does not cover it → set `status: 'rejected'` and add
+     a `notes` line saying why. **Do not delete it** — a deleted guess gets made
+     again next time.
+   - The extraction just missed it → leave `provisional` and move on.
+   Ignore the unexamined count at the bottom; those units were not extracted.
+
+7. **Mark everything that matched as `status: 'confirmed'`.** This is the only
+   step that must be done by hand. Nothing sets `confirmed` automatically, by
+   design — a machine match is a suggestion.
+
+8. **Re-run the tests:** `npm run test:questions`. `validateCourse` will catch a
+   duplicate id, an orphan `unitId`, a broken unit order, or a new
+   non-parameterizable type with no reason. There is also a test asserting every
+   MHF4U type is `provisional` — **it will fail once you start confirming
+   things.** That is the intended signal, not a bug. Update or delete it then.
+
+9. **Re-run `npm run coverage:questions`.** The denominator will have moved. That
+   table is Session C's work queue.
+
+10. **Commit the edited `mhf4u.ts`** with a note saying which textbook sections
+    the confirmations came from, so the next reconciliation knows what has already
+    been checked.

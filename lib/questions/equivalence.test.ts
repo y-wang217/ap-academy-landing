@@ -122,13 +122,15 @@ test('equivalence: magnitude_gap works on fractions', () => {
 // --- heuristic: length_gap ----------------------------------------------------
 
 test('equivalence: length_gap fires when the rendering is far longer', () => {
-  // 1 digit vs 4 digits: 4 > 1 * 3.
-  assert.ok(fires('length_gap', i(1), i(1234)));
+  // 1 digit vs LENGTH_RATIO_LIMIT + 1 digits.
+  const tooLong = Number('1'.repeat(LENGTH_RATIO_LIMIT + 1));
+  assert.ok(fires('length_gap', i(1), i(tooLong)));
 });
 
 test('equivalence: length_gap does not fire exactly at the limit', () => {
-  // 1 digit vs 3 digits: 3 is not > 3.
-  assert.ok(!fires('length_gap', i(1), i(123)));
+  // 1 digit vs exactly LENGTH_RATIO_LIMIT digits: the limit itself is allowed.
+  const atLimit = Number('1'.repeat(LENGTH_RATIO_LIMIT));
+  assert.ok(!fires('length_gap', i(1), i(atLimit)));
 });
 
 test('equivalence: length_gap counts digits, not LaTeX markup', () => {
