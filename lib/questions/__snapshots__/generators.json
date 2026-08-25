@@ -1,0 +1,3244 @@
+{
+  "version": 1,
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "generators": [
+    {
+      "generatorId": "mhf4u-u3-remainder-theorem-evaluate-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-remainder-theorem-evaluate",
+      "difficulty": 2,
+      "strategyIds": [
+        "sign_error_on_root",
+        "arithmetic_sign_slip",
+        "remainder_read_off_constant_term"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-remainder-theorem-evaluate-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-remainder-theorem-evaluate",
+          "difficulty": 2,
+          "stem": "When f(x) = x^3 - 6x^2 + 6x - 2 is divided by (x + 2), what is the remainder?",
+          "choices": [
+            {
+              "latex": "-46",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-46n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-6",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-6n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-2",
+              "isCorrect": false,
+              "strategyId": "remainder_read_off_constant_term",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-2n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-22",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-22n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "The point of the remainder theorem is that you do not have to do the division at all. Dividing by (x + 2) means the number that matters is x = -2, and the remainder is just f(-2).",
+            "So substitute x = -2 into f(x) = x^3 - 6x^2 + 6x - 2: f(-2) = (-2)^3 + (-6)(-2)^2 + (6)(-2) + (-2).",
+            "Take the terms one at a time. (-2)^3 = -8. Then (-6)(-2)^2 = -24. Then (6)(-2) = -12. The constant stays -2.",
+            "Add them up: -8 + -24 + -12 + -2 = -46. So the remainder is -46.",
+            "Notice what that tells you: the remainder is not zero, so (x + 2) is not a factor of f(x). If it had come out to zero, it would have been."
+          ],
+          "conceptTag": "Remainder theorem: dividing f(x) by (x - r) leaves remainder f(r)"
+        },
+        {
+          "generatorId": "mhf4u-u3-remainder-theorem-evaluate-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-remainder-theorem-evaluate",
+          "difficulty": 2,
+          "stem": "Find the remainder when f(x) = x^3 - 7x^2 + 7x + 9 is divided by (x - 1).",
+          "choices": [
+            {
+              "latex": "-6",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-6n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "10",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "10n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "9",
+              "isCorrect": false,
+              "strategyId": "remainder_read_off_constant_term",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "9n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-4",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-4n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "The point of the remainder theorem is that you do not have to do the division at all. Dividing by (x - 1) means the number that matters is x = 1, and the remainder is just f(1).",
+            "So substitute x = 1 into f(x) = x^3 - 7x^2 + 7x + 9: f(1) = (1)^3 + (-7)(1)^2 + (7)(1) + (9).",
+            "Take the terms one at a time. (1)^3 = 1. Then (-7)(1)^2 = -7. Then (7)(1) = 7. The constant stays 9.",
+            "Add them up: 1 + -7 + 7 + 9 = 10. So the remainder is 10.",
+            "Notice what that tells you: the remainder is not zero, so (x - 1) is not a factor of f(x). If it had come out to zero, it would have been."
+          ],
+          "conceptTag": "Remainder theorem: dividing f(x) by (x - r) leaves remainder f(r)"
+        },
+        {
+          "generatorId": "mhf4u-u3-remainder-theorem-evaluate-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-remainder-theorem-evaluate",
+          "difficulty": 2,
+          "stem": "When f(x) = x^3 - 3x^2 - 3x + 1 is divided by (x - 2), what is the remainder?",
+          "choices": [
+            {
+              "latex": "1",
+              "isCorrect": false,
+              "strategyId": "remainder_read_off_constant_term",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-9",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-9n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-13",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-13n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "3",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "3n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "The point of the remainder theorem is that you do not have to do the division at all. Dividing by (x - 2) means the number that matters is x = 2, and the remainder is just f(2).",
+            "So substitute x = 2 into f(x) = x^3 - 3x^2 - 3x + 1: f(2) = (2)^3 + (-3)(2)^2 + (-3)(2) + (1).",
+            "Take the terms one at a time. (2)^3 = 8. Then (-3)(2)^2 = -12. Then (-3)(2) = -6. The constant stays 1.",
+            "Add them up: 8 + -12 + -6 + 1 = -9. So the remainder is -9.",
+            "Notice what that tells you: the remainder is not zero, so (x - 2) is not a factor of f(x). If it had come out to zero, it would have been."
+          ],
+          "conceptTag": "Remainder theorem: dividing f(x) by (x - r) leaves remainder f(r)"
+        },
+        {
+          "generatorId": "mhf4u-u3-remainder-theorem-evaluate-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-remainder-theorem-evaluate",
+          "difficulty": 2,
+          "stem": "When f(x) = x^3 - 7x^2 - x - 8 is divided by (x - 2), what is the remainder?",
+          "choices": [
+            {
+              "latex": "-26",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-26n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-30",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-30n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-8",
+              "isCorrect": false,
+              "strategyId": "remainder_read_off_constant_term",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-8n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-42",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-42n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "The point of the remainder theorem is that you do not have to do the division at all. Dividing by (x - 2) means the number that matters is x = 2, and the remainder is just f(2).",
+            "So substitute x = 2 into f(x) = x^3 - 7x^2 - x - 8: f(2) = (2)^3 + (-7)(2)^2 + (-1)(2) + (-8).",
+            "Take the terms one at a time. (2)^3 = 8. Then (-7)(2)^2 = -28. Then (-1)(2) = -2. The constant stays -8.",
+            "Add them up: 8 + -28 + -2 + -8 = -30. So the remainder is -30.",
+            "Notice what that tells you: the remainder is not zero, so (x - 2) is not a factor of f(x). If it had come out to zero, it would have been."
+          ],
+          "conceptTag": "Remainder theorem: dividing f(x) by (x - r) leaves remainder f(r)"
+        },
+        {
+          "generatorId": "mhf4u-u3-remainder-theorem-evaluate-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-remainder-theorem-evaluate",
+          "difficulty": 2,
+          "stem": "When f(x) = x^3 + 4x^2 - 2x + 4 is divided by (x - 2), what is the remainder?",
+          "choices": [
+            {
+              "latex": "16",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "16n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "24",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "24n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "4",
+              "isCorrect": false,
+              "strategyId": "remainder_read_off_constant_term",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "4n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "32",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "32n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "The point of the remainder theorem is that you do not have to do the division at all. Dividing by (x - 2) means the number that matters is x = 2, and the remainder is just f(2).",
+            "So substitute x = 2 into f(x) = x^3 + 4x^2 - 2x + 4: f(2) = (2)^3 + (4)(2)^2 + (-2)(2) + (4).",
+            "Take the terms one at a time. (2)^3 = 8. Then (4)(2)^2 = 16. Then (-2)(2) = -4. The constant stays 4.",
+            "Add them up: 8 + 16 + -4 + 4 = 24. So the remainder is 24.",
+            "Notice what that tells you: the remainder is not zero, so (x - 2) is not a factor of f(x). If it had come out to zero, it would have been."
+          ],
+          "conceptTag": "Remainder theorem: dividing f(x) by (x - r) leaves remainder f(r)"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-factor-theorem-verify-factor-d1",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-factor-theorem-verify-factor",
+      "difficulty": 1,
+      "strategyIds": [
+        "sign_error_on_root",
+        "picked_rational_root_candidate_without_testing",
+        "lifted_coefficient_from_the_question"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-verify-factor-d1",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-verify-factor",
+          "difficulty": 1,
+          "stem": "For f(x) = x^3 + 13x^2 + 54x + 72, which binomial below is a factor?",
+          "choices": [
+            {
+              "latex": "(x + 3)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 3)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(x - 13)",
+              "isCorrect": false,
+              "strategyId": "lifted_coefficient_from_the_question",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 13)",
+                "approx": 13
+              }
+            },
+            {
+              "latex": "(x - 3)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)",
+                "approx": 3
+              }
+            },
+            {
+              "latex": "(x + 9)",
+              "isCorrect": false,
+              "strategyId": "picked_rational_root_candidate_without_testing",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 9)",
+                "approx": -9
+              }
+            }
+          ],
+          "solution": [
+            "Do not divide anything. The factor theorem says (x + 3) is a factor of f(x) exactly when f(-3) = 0, so this is a testing question: substitute each candidate and look for the one that gives zero.",
+            "Start with the answer. Substituting x = -3 into f(x) = x^3 + 13x^2 + 54x + 72 gives f(-3) = 0, so (x + 3) is a factor.",
+            "Check that the others are not. Substituting x = 3 gives f(3) = 378, which is not zero, so (x - 3) is not a factor. This is the one to be careful about: the binomial (x - 3) corresponds to x = 3, not x = -3.",
+            "Similarly f(-9) = -90, so (x + 9) is out too. A number dividing the constant term is only a *candidate* root — it still has to be tested.",
+            "So the factor is (x + 3). If you wanted the other two, you could now divide f(x) by (x + 3) and factor the quadratic that comes out."
+          ],
+          "conceptTag": "Factor theorem: (x - r) is a factor of f(x) exactly when f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-verify-factor-d1",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-verify-factor",
+          "difficulty": 1,
+          "stem": "One of these binomials divides f(x) = x^3 - 8x^2 + 9x + 18 exactly. Which one?",
+          "choices": [
+            {
+              "latex": "(x - 1)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 1)",
+                "approx": 1
+              }
+            },
+            {
+              "latex": "(x + 6)",
+              "isCorrect": false,
+              "strategyId": "picked_rational_root_candidate_without_testing",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 6)",
+                "approx": -6
+              }
+            },
+            {
+              "latex": "(x - 18)",
+              "isCorrect": false,
+              "strategyId": "lifted_coefficient_from_the_question",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 18)",
+                "approx": 18
+              }
+            },
+            {
+              "latex": "(x + 1)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 1)",
+                "approx": -1
+              }
+            }
+          ],
+          "solution": [
+            "Do not divide anything. The factor theorem says (x + 1) is a factor of f(x) exactly when f(-1) = 0, so this is a testing question: substitute each candidate and look for the one that gives zero.",
+            "Start with the answer. Substituting x = -1 into f(x) = x^3 - 8x^2 + 9x + 18 gives f(-1) = 0, so (x + 1) is a factor.",
+            "Check that the others are not. Substituting x = 1 gives f(1) = 20, which is not zero, so (x - 1) is not a factor. This is the one to be careful about: the binomial (x - 1) corresponds to x = 1, not x = -1.",
+            "Similarly f(-6) = -540, so (x + 6) is out too. A number dividing the constant term is only a *candidate* root — it still has to be tested.",
+            "So the factor is (x + 1). If you wanted the other two, you could now divide f(x) by (x + 1) and factor the quadratic that comes out."
+          ],
+          "conceptTag": "Factor theorem: (x - r) is a factor of f(x) exactly when f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-verify-factor-d1",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-verify-factor",
+          "difficulty": 1,
+          "stem": "One of these binomials divides f(x) = x^3 + 2x^2 - 9x - 18 exactly. Which one?",
+          "choices": [
+            {
+              "latex": "(x + 9)",
+              "isCorrect": false,
+              "strategyId": "lifted_coefficient_from_the_question",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 9)",
+                "approx": -9
+              }
+            },
+            {
+              "latex": "(x + 2)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 2)",
+                "approx": -2
+              }
+            },
+            {
+              "latex": "(x + 18)",
+              "isCorrect": false,
+              "strategyId": "picked_rational_root_candidate_without_testing",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 18)",
+                "approx": -18
+              }
+            },
+            {
+              "latex": "(x - 2)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 2)",
+                "approx": 2
+              }
+            }
+          ],
+          "solution": [
+            "Do not divide anything. The factor theorem says (x + 2) is a factor of f(x) exactly when f(-2) = 0, so this is a testing question: substitute each candidate and look for the one that gives zero.",
+            "Start with the answer. Substituting x = -2 into f(x) = x^3 + 2x^2 - 9x - 18 gives f(-2) = 0, so (x + 2) is a factor.",
+            "Check that the others are not. Substituting x = 2 gives f(2) = -20, which is not zero, so (x - 2) is not a factor. This is the one to be careful about: the binomial (x - 2) corresponds to x = 2, not x = -2.",
+            "Similarly f(-18) = -5040, so (x + 18) is out too. A number dividing the constant term is only a *candidate* root — it still has to be tested.",
+            "So the factor is (x + 2). If you wanted the other two, you could now divide f(x) by (x + 2) and factor the quadratic that comes out."
+          ],
+          "conceptTag": "Factor theorem: (x - r) is a factor of f(x) exactly when f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-verify-factor-d1",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-verify-factor",
+          "difficulty": 1,
+          "stem": "One of these binomials divides f(x) = x^3 + 4x^2 - 15x - 18 exactly. Which one?",
+          "choices": [
+            {
+              "latex": "(x - 18)",
+              "isCorrect": false,
+              "strategyId": "picked_rational_root_candidate_without_testing",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 18)",
+                "approx": 18
+              }
+            },
+            {
+              "latex": "(x + 3)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 3)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(x + 15)",
+              "isCorrect": false,
+              "strategyId": "lifted_coefficient_from_the_question",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 15)",
+                "approx": -15
+              }
+            },
+            {
+              "latex": "(x - 3)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)",
+                "approx": 3
+              }
+            }
+          ],
+          "solution": [
+            "Do not divide anything. The factor theorem says (x - 3) is a factor of f(x) exactly when f(3) = 0, so this is a testing question: substitute each candidate and look for the one that gives zero.",
+            "Start with the answer. Substituting x = 3 into f(x) = x^3 + 4x^2 - 15x - 18 gives f(3) = 0, so (x - 3) is a factor.",
+            "Check that the others are not. Substituting x = -3 gives f(-3) = 36, which is not zero, so (x + 3) is not a factor. This is the one to be careful about: the binomial (x + 3) corresponds to x = -3, not x = 3.",
+            "Similarly f(18) = 6840, so (x - 18) is out too. A number dividing the constant term is only a *candidate* root — it still has to be tested.",
+            "So the factor is (x - 3). If you wanted the other two, you could now divide f(x) by (x - 3) and factor the quadratic that comes out."
+          ],
+          "conceptTag": "Factor theorem: (x - r) is a factor of f(x) exactly when f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-verify-factor-d1",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-verify-factor",
+          "difficulty": 1,
+          "stem": "Which of the following is a factor of f(x) = x^3 - 28x - 48?",
+          "choices": [
+            {
+              "latex": "(x - 6)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 6)",
+                "approx": 6
+              }
+            },
+            {
+              "latex": "(x - 3)",
+              "isCorrect": false,
+              "strategyId": "picked_rational_root_candidate_without_testing",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)",
+                "approx": 3
+              }
+            },
+            {
+              "latex": "(x + 6)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 6)",
+                "approx": -6
+              }
+            },
+            {
+              "latex": "(x + 28)",
+              "isCorrect": false,
+              "strategyId": "lifted_coefficient_from_the_question",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 28)",
+                "approx": -28
+              }
+            }
+          ],
+          "solution": [
+            "Do not divide anything. The factor theorem says (x - 6) is a factor of f(x) exactly when f(6) = 0, so this is a testing question: substitute each candidate and look for the one that gives zero.",
+            "Start with the answer. Substituting x = 6 into f(x) = x^3 - 28x - 48 gives f(6) = 0, so (x - 6) is a factor.",
+            "Check that the others are not. Substituting x = -6 gives f(-6) = -96, which is not zero, so (x + 6) is not a factor. This is the one to be careful about: the binomial (x + 6) corresponds to x = -6, not x = 6.",
+            "Similarly f(3) = -105, so (x - 3) is out too. A number dividing the constant term is only a *candidate* root — it still has to be tested.",
+            "So the factor is (x - 6). If you wanted the other two, you could now divide f(x) by (x - 6) and factor the quadratic that comes out."
+          ],
+          "conceptTag": "Factor theorem: (x - r) is a factor of f(x) exactly when f(r) = 0"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-factor-theorem-find-k-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-factor-theorem-find-k",
+      "difficulty": 2,
+      "strategyIds": [
+        "sign_error_on_root",
+        "arithmetic_sign_slip",
+        "solved_for_wrong_variable"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-find-k-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-find-k",
+          "difficulty": 2,
+          "stem": "Given that (x + 3) divides f(x) = x^3 + x^2 + 2x + k exactly, determine k.",
+          "choices": [
+            {
+              "latex": "12",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "12n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "24",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "24n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-24",
+              "isCorrect": false,
+              "strategyId": "solved_for_wrong_variable",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-24n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-42",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-42n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Start with what the word \"factor\" buys you. If (x + 3) is a factor of f(x), then x = -3 is a root, so f(-3) = 0. That is the factor theorem, and it is the whole question — everything after this is arithmetic.",
+            "So substitute x = -3 into f(x) = x^3 + x^2 + 2x + k and set the result equal to zero: (-3)^3 + (1)(-3)^2 + (2)(-3) + k = 0.",
+            "Work the three known terms one at a time. (-3)^3 = -27. Then (1)(-3)^2 = 9. And (2)(-3) = -6.",
+            "Add those up: -27 + 9 + -6 = -24. So the equation is now -24 + k = 0.",
+            "Move it across: k = 24, so k = 24. Check it back — that is the value that makes f(-3) come out to exactly zero, which is what having (x + 3) as a factor means."
+          ],
+          "conceptTag": "Factor theorem: if (x - r) is a factor of f(x), then f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-find-k-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-find-k",
+          "difficulty": 2,
+          "stem": "Find k so that (x - 1) is a factor of f(x) = x^3 - 7x^2 + 7x + k.",
+          "choices": [
+            {
+              "latex": "-1",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-1n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "13",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "13n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "1",
+              "isCorrect": false,
+              "strategyId": "solved_for_wrong_variable",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "15",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "15n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Start with what the word \"factor\" buys you. If (x - 1) is a factor of f(x), then x = 1 is a root, so f(1) = 0. That is the factor theorem, and it is the whole question — everything after this is arithmetic.",
+            "So substitute x = 1 into f(x) = x^3 - 7x^2 + 7x + k and set the result equal to zero: (1)^3 + (-7)(1)^2 + (7)(1) + k = 0.",
+            "Work the three known terms one at a time. (1)^3 = 1. Then (-7)(1)^2 = -7. And (7)(1) = 7.",
+            "Add those up: 1 + -7 + 7 = 1. So the equation is now 1 + k = 0.",
+            "Move it across: k = -1, so k = -1. Check it back — that is the value that makes f(1) come out to exactly zero, which is what having (x - 1) as a factor means."
+          ],
+          "conceptTag": "Factor theorem: if (x - r) is a factor of f(x), then f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-find-k-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-find-k",
+          "difficulty": 2,
+          "stem": "Given that (x - 2) divides f(x) = x^3 - 3x^2 - 3x + k exactly, determine k.",
+          "choices": [
+            {
+              "latex": "-2",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-2n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "10",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "10n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "14",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "14n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-10",
+              "isCorrect": false,
+              "strategyId": "solved_for_wrong_variable",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-10n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Start with what the word \"factor\" buys you. If (x - 2) is a factor of f(x), then x = 2 is a root, so f(2) = 0. That is the factor theorem, and it is the whole question — everything after this is arithmetic.",
+            "So substitute x = 2 into f(x) = x^3 - 3x^2 - 3x + k and set the result equal to zero: (2)^3 + (-3)(2)^2 + (-3)(2) + k = 0.",
+            "Work the three known terms one at a time. (2)^3 = 8. Then (-3)(2)^2 = -12. And (-3)(2) = -6.",
+            "Add those up: 8 + -12 + -6 = -10. So the equation is now -10 + k = 0.",
+            "Move it across: k = 10, so k = 10. Check it back — that is the value that makes f(2) come out to exactly zero, which is what having (x - 2) as a factor means."
+          ],
+          "conceptTag": "Factor theorem: if (x - r) is a factor of f(x), then f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-find-k-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-find-k",
+          "difficulty": 2,
+          "stem": "The polynomial f(x) = x^3 - 7x^2 - x + k has (x - 2) as a factor. Find the value of k.",
+          "choices": [
+            {
+              "latex": "18",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "18n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "22",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "22n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "34",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "34n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-22",
+              "isCorrect": false,
+              "strategyId": "solved_for_wrong_variable",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-22n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Start with what the word \"factor\" buys you. If (x - 2) is a factor of f(x), then x = 2 is a root, so f(2) = 0. That is the factor theorem, and it is the whole question — everything after this is arithmetic.",
+            "So substitute x = 2 into f(x) = x^3 - 7x^2 - x + k and set the result equal to zero: (2)^3 + (-7)(2)^2 + (-1)(2) + k = 0.",
+            "Work the three known terms one at a time. (2)^3 = 8. Then (-7)(2)^2 = -28. And (-1)(2) = -2.",
+            "Add those up: 8 + -28 + -2 = -22. So the equation is now -22 + k = 0.",
+            "Move it across: k = 22, so k = 22. Check it back — that is the value that makes f(2) come out to exactly zero, which is what having (x - 2) as a factor means."
+          ],
+          "conceptTag": "Factor theorem: if (x - r) is a factor of f(x), then f(r) = 0"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-theorem-find-k-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-theorem-find-k",
+          "difficulty": 2,
+          "stem": "Find k so that (x + 4) is a factor of f(x) = x^3 - 4x^2 - 6x + k.",
+          "choices": [
+            {
+              "latex": "104",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "104n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "24",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "24n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-104",
+              "isCorrect": false,
+              "strategyId": "solved_for_wrong_variable",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-104n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "152",
+              "isCorrect": false,
+              "strategyId": "arithmetic_sign_slip",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "152n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Start with what the word \"factor\" buys you. If (x + 4) is a factor of f(x), then x = -4 is a root, so f(-4) = 0. That is the factor theorem, and it is the whole question — everything after this is arithmetic.",
+            "So substitute x = -4 into f(x) = x^3 - 4x^2 - 6x + k and set the result equal to zero: (-4)^3 + (-4)(-4)^2 + (-6)(-4) + k = 0.",
+            "Work the three known terms one at a time. (-4)^3 = -64. Then (-4)(-4)^2 = -64. And (-6)(-4) = 24.",
+            "Add those up: -64 + -64 + 24 = -104. So the equation is now -104 + k = 0.",
+            "Move it across: k = 104, so k = 104. Check it back — that is the value that makes f(-4) come out to exactly zero, which is what having (x + 4) as a factor means."
+          ],
+          "conceptTag": "Factor theorem: if (x - r) is a factor of f(x), then f(r) = 0"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-factor-fully-cubic-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-factor-fully-cubic",
+      "difficulty": 2,
+      "strategyIds": [
+        "stopped_at_partially_factored_form",
+        "sign_error_on_root",
+        "reported_quotient_only"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-factor-fully-cubic-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-fully-cubic",
+          "difficulty": 2,
+          "stem": "Given that (x + 3) is a factor of f(x) = x^3 + 13x^2 + 54x + 72, factor f(x) fully.",
+          "choices": [
+            {
+              "latex": "(x + 3)(x + 6)(x + 4)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 3)(x + 6)(x + 4)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(x + 3)(x - 6)(x - 4)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 3)(x - 6)(x - 4)",
+                "approx": -1
+              }
+            },
+            {
+              "latex": "(x + 6)(x + 4)",
+              "isCorrect": false,
+              "strategyId": "reported_quotient_only",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 6)(x + 4)",
+                "approx": 0
+              }
+            },
+            {
+              "latex": "(x + 3)(x^2 + 10x + 24)",
+              "isCorrect": false,
+              "strategyId": "stopped_at_partially_factored_form",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 3)(x^2 + 10x + 24)",
+                "approx": -2
+              }
+            }
+          ],
+          "solution": [
+            "You are given one factor, so the first move is to divide it out and see what is left. Divide f(x) = x^3 + 13x^2 + 54x + 72 by (x + 3) — synthetic division with x = -3 is quickest.",
+            "The division leaves the quadratic x^2 + 10x + 24, with no remainder, which is what \"is a factor\" guarantees. So far f(x) = (x + 3)(x^2 + 10x + 24).",
+            "Now factor that quadratic. You need two numbers that multiply to give the constant term and add to give the middle coefficient; here they give roots x = -6 and x = -4.",
+            "Be careful turning roots into brackets: a root of x = -6 means the factor is (x + 6), not (x - 6). The sign flips.",
+            "Putting it together, f(x) = (x + 3)(x + 6)(x + 4). Check it by confirming the three roots are x = -3, x = -6 and x = -4 — those are the values that make each bracket zero."
+          ],
+          "conceptTag": "Factoring a cubic: divide out a known factor, then factor the quadratic quotient"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-fully-cubic-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-fully-cubic",
+          "difficulty": 2,
+          "stem": "Factor f(x) = x^3 - 4x^2 - 15x + 18 completely, using the fact that (x - 6) divides it exactly.",
+          "choices": [
+            {
+              "latex": "(x + 3)(x - 1)",
+              "isCorrect": false,
+              "strategyId": "reported_quotient_only",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 3)(x - 1)",
+                "approx": 9
+              }
+            },
+            {
+              "latex": "(x - 6)(x + 3)(x - 1)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 6)(x + 3)(x - 1)",
+                "approx": 6
+              }
+            },
+            {
+              "latex": "(x - 6)(x - 3)(x + 1)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 6)(x - 3)(x + 1)",
+                "approx": 8
+              }
+            },
+            {
+              "latex": "(x - 6)(x^2 + 2x - 3)",
+              "isCorrect": false,
+              "strategyId": "stopped_at_partially_factored_form",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 6)(x^2 + 2x - 3)",
+                "approx": 7
+              }
+            }
+          ],
+          "solution": [
+            "You are given one factor, so the first move is to divide it out and see what is left. Divide f(x) = x^3 - 4x^2 - 15x + 18 by (x - 6) — synthetic division with x = 6 is quickest.",
+            "The division leaves the quadratic x^2 + 2x - 3, with no remainder, which is what \"is a factor\" guarantees. So far f(x) = (x - 6)(x^2 + 2x - 3).",
+            "Now factor that quadratic. You need two numbers that multiply to give the constant term and add to give the middle coefficient; here they give roots x = -3 and x = 1.",
+            "Be careful turning roots into brackets: a root of x = -3 means the factor is (x + 3), not (x - 3). The sign flips.",
+            "Putting it together, f(x) = (x - 6)(x + 3)(x - 1). Check it by confirming the three roots are x = 6, x = -3 and x = 1 — those are the values that make each bracket zero."
+          ],
+          "conceptTag": "Factoring a cubic: divide out a known factor, then factor the quadratic quotient"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-fully-cubic-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-fully-cubic",
+          "difficulty": 2,
+          "stem": "f(x) = x^3 + 2x^2 - 9x - 18 has (x - 3) as a factor. Write f(x) as a product of three linear factors.",
+          "choices": [
+            {
+              "latex": "(x - 3)(x - 2)(x - 3)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)(x - 2)(x - 3)",
+                "approx": 5
+              }
+            },
+            {
+              "latex": "(x - 3)(x + 2)(x + 3)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)(x + 2)(x + 3)",
+                "approx": 3
+              }
+            },
+            {
+              "latex": "(x - 3)(x^2 + 5x + 6)",
+              "isCorrect": false,
+              "strategyId": "stopped_at_partially_factored_form",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)(x^2 + 5x + 6)",
+                "approx": 4
+              }
+            },
+            {
+              "latex": "(x + 2)(x + 3)",
+              "isCorrect": false,
+              "strategyId": "reported_quotient_only",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 2)(x + 3)",
+                "approx": 6
+              }
+            }
+          ],
+          "solution": [
+            "You are given one factor, so the first move is to divide it out and see what is left. Divide f(x) = x^3 + 2x^2 - 9x - 18 by (x - 3) — synthetic division with x = 3 is quickest.",
+            "The division leaves the quadratic x^2 + 5x + 6, with no remainder, which is what \"is a factor\" guarantees. So far f(x) = (x - 3)(x^2 + 5x + 6).",
+            "Now factor that quadratic. You need two numbers that multiply to give the constant term and add to give the middle coefficient; here they give roots x = -2 and x = -3.",
+            "Be careful turning roots into brackets: a root of x = -2 means the factor is (x + 2), not (x - 2). The sign flips.",
+            "Putting it together, f(x) = (x - 3)(x + 2)(x + 3). Check it by confirming the three roots are x = 3, x = -2 and x = -3 — those are the values that make each bracket zero."
+          ],
+          "conceptTag": "Factoring a cubic: divide out a known factor, then factor the quadratic quotient"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-fully-cubic-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-fully-cubic",
+          "difficulty": 2,
+          "stem": "Given that (x - 3) is a factor of f(x) = x^3 + 4x^2 - 15x - 18, factor f(x) fully.",
+          "choices": [
+            {
+              "latex": "(x - 3)(x - 6)(x - 1)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)(x - 6)(x - 1)",
+                "approx": 5
+              }
+            },
+            {
+              "latex": "(x - 3)(x + 6)(x + 1)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)(x + 6)(x + 1)",
+                "approx": 3
+              }
+            },
+            {
+              "latex": "(x - 3)(x^2 + 7x + 6)",
+              "isCorrect": false,
+              "strategyId": "stopped_at_partially_factored_form",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)(x^2 + 7x + 6)",
+                "approx": 4
+              }
+            },
+            {
+              "latex": "(x + 6)(x + 1)",
+              "isCorrect": false,
+              "strategyId": "reported_quotient_only",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 6)(x + 1)",
+                "approx": 6
+              }
+            }
+          ],
+          "solution": [
+            "You are given one factor, so the first move is to divide it out and see what is left. Divide f(x) = x^3 + 4x^2 - 15x - 18 by (x - 3) — synthetic division with x = 3 is quickest.",
+            "The division leaves the quadratic x^2 + 7x + 6, with no remainder, which is what \"is a factor\" guarantees. So far f(x) = (x - 3)(x^2 + 7x + 6).",
+            "Now factor that quadratic. You need two numbers that multiply to give the constant term and add to give the middle coefficient; here they give roots x = -6 and x = -1.",
+            "Be careful turning roots into brackets: a root of x = -6 means the factor is (x + 6), not (x - 6). The sign flips.",
+            "Putting it together, f(x) = (x - 3)(x + 6)(x + 1). Check it by confirming the three roots are x = 3, x = -6 and x = -1 — those are the values that make each bracket zero."
+          ],
+          "conceptTag": "Factoring a cubic: divide out a known factor, then factor the quadratic quotient"
+        },
+        {
+          "generatorId": "mhf4u-u3-factor-fully-cubic-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-factor-fully-cubic",
+          "difficulty": 2,
+          "stem": "Given that (x - 6) is a factor of f(x) = x^3 - 28x - 48, factor f(x) fully.",
+          "choices": [
+            {
+              "latex": "(x - 6)(x - 2)(x - 4)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 6)(x - 2)(x - 4)",
+                "approx": 8
+              }
+            },
+            {
+              "latex": "(x + 2)(x + 4)",
+              "isCorrect": false,
+              "strategyId": "reported_quotient_only",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 2)(x + 4)",
+                "approx": 9
+              }
+            },
+            {
+              "latex": "(x - 6)(x^2 + 6x + 8)",
+              "isCorrect": false,
+              "strategyId": "stopped_at_partially_factored_form",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 6)(x^2 + 6x + 8)",
+                "approx": 7
+              }
+            },
+            {
+              "latex": "(x - 6)(x + 2)(x + 4)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 6)(x + 2)(x + 4)",
+                "approx": 6
+              }
+            }
+          ],
+          "solution": [
+            "You are given one factor, so the first move is to divide it out and see what is left. Divide f(x) = x^3 - 28x - 48 by (x - 6) — synthetic division with x = 6 is quickest.",
+            "The division leaves the quadratic x^2 + 6x + 8, with no remainder, which is what \"is a factor\" guarantees. So far f(x) = (x - 6)(x^2 + 6x + 8).",
+            "Now factor that quadratic. You need two numbers that multiply to give the constant term and add to give the middle coefficient; here they give roots x = -2 and x = -4.",
+            "Be careful turning roots into brackets: a root of x = -2 means the factor is (x + 2), not (x - 2). The sign flips.",
+            "Putting it together, f(x) = (x - 6)(x + 2)(x + 4). Check it by confirming the three roots are x = 6, x = -2 and x = -4 — those are the values that make each bracket zero."
+          ],
+          "conceptTag": "Factoring a cubic: divide out a known factor, then factor the quadratic quotient"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-solve-polynomial-equation-factorable-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-solve-polynomial-equation-factorable",
+      "difficulty": 2,
+      "strategyIds": [
+        "sign_error_on_root",
+        "dropped_a_root",
+        "reported_factor_constants_not_roots"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-equation-factorable-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-equation-factorable",
+          "difficulty": 2,
+          "stem": "Solve x^3 + 13x^2 + 54x + 72 = 0.",
+          "choices": [
+            {
+              "latex": "\\{-6, -4, -3\\}",
+              "isCorrect": true,
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-4n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-6, -3\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_a_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-6n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-3, 4, 6\\}",
+              "isCorrect": false,
+              "strategyId": "reported_factor_constants_not_roots",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "4n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{3, 4, 6\\}",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "4n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "solution": [
+            "A polynomial equation set equal to zero is asking you to factor, because a product is zero only when one of its factors is zero. So the whole job is turning x^3 + 13x^2 + 54x + 72 into brackets.",
+            "Start by hunting for one root. Try the divisors of the constant term until one gives zero; x = -3 works, so (x + 3) is a factor. Divide it out and factor the quadratic that is left.",
+            "That gives x^3 + 13x^2 + 54x + 72 = (x + 3)(x + 6)(x + 4).",
+            "Now set each bracket to zero in turn. This is the step to slow down on: the bracket that reads with a plus sign gives x = -6, because you solve the bracket rather than copying the number out of it.",
+            "Doing that for all three brackets gives x = -3, x = -6 and x = -4. So the solution set is \\{-6, -4, -3\\}."
+          ],
+          "conceptTag": "Solving by factoring: a product is zero exactly when one factor is zero"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-equation-factorable-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-equation-factorable",
+          "difficulty": 2,
+          "stem": "Determine the values of x that satisfy x^3 - 4x^2 - 15x + 18 = 0.",
+          "choices": [
+            {
+              "latex": "\\{-1, 3, 6\\}",
+              "isCorrect": false,
+              "strategyId": "reported_factor_constants_not_roots",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-1n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-3, 1, 6\\}",
+              "isCorrect": true,
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "1n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-3, 6\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_a_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-6, -1, 3\\}",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-1n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "solution": [
+            "A polynomial equation set equal to zero is asking you to factor, because a product is zero only when one of its factors is zero. So the whole job is turning x^3 - 4x^2 - 15x + 18 into brackets.",
+            "Start by hunting for one root. Try the divisors of the constant term until one gives zero; x = 6 works, so (x - 6) is a factor. Divide it out and factor the quadratic that is left.",
+            "That gives x^3 - 4x^2 - 15x + 18 = (x - 6)(x + 3)(x - 1).",
+            "Now set each bracket to zero in turn. This is the step to slow down on: the bracket that reads with a plus sign gives x = -3, because you solve the bracket rather than copying the number out of it.",
+            "Doing that for all three brackets gives x = 6, x = -3 and x = 1. So the solution set is \\{-3, 1, 6\\}."
+          ],
+          "conceptTag": "Solving by factoring: a product is zero exactly when one factor is zero"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-equation-factorable-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-equation-factorable",
+          "difficulty": 2,
+          "stem": "Find all real solutions of the equation x^3 + 2x^2 - 9x - 18 = 0.",
+          "choices": [
+            {
+              "latex": "\\{-2, 3\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_a_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-2n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-3, -2, 3\\}",
+              "isCorrect": true,
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-2n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-3, 2, 3\\}",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "2n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{2, 3\\}",
+              "isCorrect": false,
+              "strategyId": "reported_factor_constants_not_roots",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "2n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "solution": [
+            "A polynomial equation set equal to zero is asking you to factor, because a product is zero only when one of its factors is zero. So the whole job is turning x^3 + 2x^2 - 9x - 18 into brackets.",
+            "Start by hunting for one root. Try the divisors of the constant term until one gives zero; x = 3 works, so (x - 3) is a factor. Divide it out and factor the quadratic that is left.",
+            "That gives x^3 + 2x^2 - 9x - 18 = (x - 3)(x + 2)(x + 3).",
+            "Now set each bracket to zero in turn. This is the step to slow down on: the bracket that reads with a plus sign gives x = -2, because you solve the bracket rather than copying the number out of it.",
+            "Doing that for all three brackets gives x = 3, x = -2 and x = -3. So the solution set is \\{-3, -2, 3\\}."
+          ],
+          "conceptTag": "Solving by factoring: a product is zero exactly when one factor is zero"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-equation-factorable-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-equation-factorable",
+          "difficulty": 2,
+          "stem": "Solve x^3 + 4x^2 - 15x - 18 = 0.",
+          "choices": [
+            {
+              "latex": "\\{-6, 3\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_a_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-6n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-6, -1, 3\\}",
+              "isCorrect": true,
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-1n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-3, 1, 6\\}",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "1n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{1, 3, 6\\}",
+              "isCorrect": false,
+              "strategyId": "reported_factor_constants_not_roots",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "3n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "1n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "solution": [
+            "A polynomial equation set equal to zero is asking you to factor, because a product is zero only when one of its factors is zero. So the whole job is turning x^3 + 4x^2 - 15x - 18 into brackets.",
+            "Start by hunting for one root. Try the divisors of the constant term until one gives zero; x = 3 works, so (x - 3) is a factor. Divide it out and factor the quadratic that is left.",
+            "That gives x^3 + 4x^2 - 15x - 18 = (x - 3)(x + 6)(x + 1).",
+            "Now set each bracket to zero in turn. This is the step to slow down on: the bracket that reads with a plus sign gives x = -6, because you solve the bracket rather than copying the number out of it.",
+            "Doing that for all three brackets gives x = 3, x = -6 and x = -1. So the solution set is \\{-6, -1, 3\\}."
+          ],
+          "conceptTag": "Solving by factoring: a product is zero exactly when one factor is zero"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-equation-factorable-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-equation-factorable",
+          "difficulty": 2,
+          "stem": "Solve x^3 - 28x - 48 = 0.",
+          "choices": [
+            {
+              "latex": "\\{-2, 6\\}",
+              "isCorrect": false,
+              "strategyId": "dropped_a_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-2n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{2, 4, 6\\}",
+              "isCorrect": false,
+              "strategyId": "reported_factor_constants_not_roots",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "2n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "4n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-6, 2, 4\\}",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "2n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "4n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "latex": "\\{-4, -2, 6\\}",
+              "isCorrect": true,
+              "value": {
+                "kind": "set",
+                "members": [
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "6n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-2n",
+                      "den": "1n"
+                    }
+                  },
+                  {
+                    "kind": "rational",
+                    "value": {
+                      "num": "-4n",
+                      "den": "1n"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "solution": [
+            "A polynomial equation set equal to zero is asking you to factor, because a product is zero only when one of its factors is zero. So the whole job is turning x^3 - 28x - 48 into brackets.",
+            "Start by hunting for one root. Try the divisors of the constant term until one gives zero; x = 6 works, so (x - 6) is a factor. Divide it out and factor the quadratic that is left.",
+            "That gives x^3 - 28x - 48 = (x - 6)(x + 2)(x + 4).",
+            "Now set each bracket to zero in turn. This is the step to slow down on: the bracket that reads with a plus sign gives x = -2, because you solve the bracket rather than copying the number out of it.",
+            "Doing that for all three brackets gives x = 6, x = -2 and x = -4. So the solution set is \\{-4, -2, 6\\}."
+          ],
+          "conceptTag": "Solving by factoring: a product is zero exactly when one factor is zero"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-count-real-roots-from-factored-form-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-count-real-roots-from-factored-form",
+      "difficulty": 2,
+      "strategyIds": [
+        "counted_multiplicity_as_separate_roots",
+        "counted_irreducible_quadratic_as_real_roots",
+        "counted_factors_not_roots"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-count-real-roots-from-factored-form-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-count-real-roots-from-factored-form",
+          "difficulty": 2,
+          "stem": "The polynomial f(x) = (x - 2)(x - 1)^3(x + 3)^2(x^2 + 7) is already factored. How many different real values of x make f(x) = 0?",
+          "choices": [
+            {
+              "latex": "3",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "3n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": false,
+              "strategyId": "counted_irreducible_quadratic_as_real_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "6",
+              "isCorrect": false,
+              "strategyId": "counted_multiplicity_as_separate_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "6n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "4",
+              "isCorrect": false,
+              "strategyId": "counted_factors_not_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "4n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Everything you need is already on the page — do not expand anything. A product is zero when one of its factors is zero, so go through the factors one at a time and ask which ones can be zero for a real x.",
+            "The linear factors give the roots x = 2, x = 1, x = -3. That is 3 different values of x.",
+            "Watch the exponents. (x - 1)^3 is one root repeated 3 times, not 3 separate roots — the question asks how many *distinct* roots there are, and x = 1 is a single value however many times the bracket appears.",
+            "Now the quadratic. x^2 + 7 = 0 would need x^2 = -7, and no real number squares to a negative. So that factor contributes no real roots at all — it never touches the x-axis.",
+            "So the count is 3. The degree is higher than that, and there are more factors than that, but neither of those is what was asked."
+          ],
+          "conceptTag": "Reading a factored form: multiplicity does not add roots, and an irreducible quadratic contributes none"
+        },
+        {
+          "generatorId": "mhf4u-u3-count-real-roots-from-factored-form-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-count-real-roots-from-factored-form",
+          "difficulty": 2,
+          "stem": "The polynomial f(x) = (x + 5)^2(x - 5)^3(x + 2)^2(x^2 + 9) is already factored. How many different real values of x make f(x) = 0?",
+          "choices": [
+            {
+              "latex": "4",
+              "isCorrect": false,
+              "strategyId": "counted_factors_not_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "4n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": false,
+              "strategyId": "counted_irreducible_quadratic_as_real_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "3",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "3n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "7",
+              "isCorrect": false,
+              "strategyId": "counted_multiplicity_as_separate_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "7n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Everything you need is already on the page — do not expand anything. A product is zero when one of its factors is zero, so go through the factors one at a time and ask which ones can be zero for a real x.",
+            "The linear factors give the roots x = -5, x = 5, x = -2. That is 3 different values of x.",
+            "Watch the exponents. (x + 5)^2 is one root repeated 2 times, not 2 separate roots — the question asks how many *distinct* roots there are, and x = -5 is a single value however many times the bracket appears.",
+            "Now the quadratic. x^2 + 9 = 0 would need x^2 = -9, and no real number squares to a negative. So that factor contributes no real roots at all — it never touches the x-axis.",
+            "So the count is 3. The degree is higher than that, and there are more factors than that, but neither of those is what was asked."
+          ],
+          "conceptTag": "Reading a factored form: multiplicity does not add roots, and an irreducible quadratic contributes none"
+        },
+        {
+          "generatorId": "mhf4u-u3-count-real-roots-from-factored-form-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-count-real-roots-from-factored-form",
+          "difficulty": 2,
+          "stem": "The polynomial f(x) = (x + 2)(x - 4)^3(x - 1)(x - 3)^2(x^2 + 8) is already factored. How many different real values of x make f(x) = 0?",
+          "choices": [
+            {
+              "latex": "7",
+              "isCorrect": false,
+              "strategyId": "counted_multiplicity_as_separate_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "7n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": false,
+              "strategyId": "counted_factors_not_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "6",
+              "isCorrect": false,
+              "strategyId": "counted_irreducible_quadratic_as_real_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "6n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "4",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "4n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Everything you need is already on the page — do not expand anything. A product is zero when one of its factors is zero, so go through the factors one at a time and ask which ones can be zero for a real x.",
+            "The linear factors give the roots x = -2, x = 4, x = 1, x = 3. That is 4 different values of x.",
+            "Watch the exponents. (x - 4)^3 is one root repeated 3 times, not 3 separate roots — the question asks how many *distinct* roots there are, and x = 4 is a single value however many times the bracket appears.",
+            "Now the quadratic. x^2 + 8 = 0 would need x^2 = -8, and no real number squares to a negative. So that factor contributes no real roots at all — it never touches the x-axis.",
+            "So the count is 4. The degree is higher than that, and there are more factors than that, but neither of those is what was asked."
+          ],
+          "conceptTag": "Reading a factored form: multiplicity does not add roots, and an irreducible quadratic contributes none"
+        },
+        {
+          "generatorId": "mhf4u-u3-count-real-roots-from-factored-form-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-count-real-roots-from-factored-form",
+          "difficulty": 2,
+          "stem": "Determine the number of distinct real zeros of f(x) = (x + 5)^2(x - 3)(x + 4)(x + 3)^3(x^2 + 5).",
+          "choices": [
+            {
+              "latex": "6",
+              "isCorrect": false,
+              "strategyId": "counted_irreducible_quadratic_as_real_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "6n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "7",
+              "isCorrect": false,
+              "strategyId": "counted_multiplicity_as_separate_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "7n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "4",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "4n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": false,
+              "strategyId": "counted_factors_not_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Everything you need is already on the page — do not expand anything. A product is zero when one of its factors is zero, so go through the factors one at a time and ask which ones can be zero for a real x.",
+            "The linear factors give the roots x = -5, x = 3, x = -4, x = -3. That is 4 different values of x.",
+            "Watch the exponents. (x + 5)^2 is one root repeated 2 times, not 2 separate roots — the question asks how many *distinct* roots there are, and x = -5 is a single value however many times the bracket appears.",
+            "Now the quadratic. x^2 + 5 = 0 would need x^2 = -5, and no real number squares to a negative. So that factor contributes no real roots at all — it never touches the x-axis.",
+            "So the count is 4. The degree is higher than that, and there are more factors than that, but neither of those is what was asked."
+          ],
+          "conceptTag": "Reading a factored form: multiplicity does not add roots, and an irreducible quadratic contributes none"
+        },
+        {
+          "generatorId": "mhf4u-u3-count-real-roots-from-factored-form-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-count-real-roots-from-factored-form",
+          "difficulty": 2,
+          "stem": "Determine the number of distinct real zeros of f(x) = (x + 2)^2(x + 3)^3(x + 5)^3(x - 5)^2(x^2 + 7).",
+          "choices": [
+            {
+              "latex": "10",
+              "isCorrect": false,
+              "strategyId": "counted_multiplicity_as_separate_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "10n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "4",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "4n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": false,
+              "strategyId": "counted_factors_not_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "6",
+              "isCorrect": false,
+              "strategyId": "counted_irreducible_quadratic_as_real_roots",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "6n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "Everything you need is already on the page — do not expand anything. A product is zero when one of its factors is zero, so go through the factors one at a time and ask which ones can be zero for a real x.",
+            "The linear factors give the roots x = -2, x = -3, x = -5, x = 5. That is 4 different values of x.",
+            "Watch the exponents. (x + 2)^2 is one root repeated 2 times, not 2 separate roots — the question asks how many *distinct* roots there are, and x = -2 is a single value however many times the bracket appears.",
+            "Now the quadratic. x^2 + 7 = 0 would need x^2 = -7, and no real number squares to a negative. So that factor contributes no real roots at all — it never touches the x-axis.",
+            "So the count is 4. The degree is higher than that, and there are more factors than that, but neither of those is what was asked."
+          ],
+          "conceptTag": "Reading a factored form: multiplicity does not add roots, and an irreducible quadratic contributes none"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-solve-polynomial-inequality-factored-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-solve-polynomial-inequality-factored",
+      "difficulty": 2,
+      "strategyIds": [
+        "solved_for_the_opposite_sign",
+        "wrong_bracket_type_on_endpoints",
+        "treated_cubic_like_a_quadratic"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-inequality-factored-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-inequality-factored",
+          "difficulty": 2,
+          "stem": "For which values of x is (x + 6)(x + 4)(x + 3) < 0? State the solution in interval notation.",
+          "choices": [
+            {
+              "latex": "(-\\infty, -6) \\cup (-4, -3)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -6) \\cup (-4, -3)",
+                "approx": -6
+              }
+            },
+            {
+              "latex": "(-6, -3)",
+              "isCorrect": false,
+              "strategyId": "treated_cubic_like_a_quadratic",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-6, -3)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(-6, -4) \\cup (-3, \\infty)",
+              "isCorrect": false,
+              "strategyId": "solved_for_the_opposite_sign",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-6, -4) \\cup (-3, \\infty)",
+                "approx": -5
+              }
+            },
+            {
+              "latex": "(-\\infty, -6] \\cup [-4, -3]",
+              "isCorrect": false,
+              "strategyId": "wrong_bracket_type_on_endpoints",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -6] \\cup [-4, -3]",
+                "approx": -4
+              }
+            }
+          ],
+          "solution": [
+            "An inequality like this is a sign question, not a solving question. The factors are already there, so the first job is to find where the whole product can change sign — and that only happens where a factor is zero, at x = -6, x = -4 and x = -3.",
+            "Those three values cut the number line into four stretches: below -6, between -6 and -4, between -4 and -3, and above -3. Inside each stretch the sign of (x + 6)(x + 4)(x + 3) cannot change, so testing one convenient number in each is enough.",
+            "Doing that gives negative, then positive, then negative, then positive, reading left to right. That alternation is what you should expect: each factor is simple, so the product flips sign at every root.",
+            "You want where the product is negative, so take the first and third stretches.",
+            "Last, decide the brackets. The inequality is strict, so the roots make the product exactly zero and are excluded, which means round brackets. Either way infinity always gets a round bracket, because you never reach it.",
+            "So the solution is (-\\infty, -6) \\cup (-4, -3)."
+          ],
+          "conceptTag": "Polynomial inequalities: the sign can only change at a root, so test one point per interval"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-inequality-factored-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-inequality-factored",
+          "difficulty": 2,
+          "stem": "Use a sign chart to solve (x + 6)x(x - 2) \\ge 0, and write the solution set in interval notation.",
+          "choices": [
+            {
+              "latex": "[-6, 0] \\cup [2, \\infty)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "[-6, 0] \\cup [2, \\infty)",
+                "approx": -6
+              }
+            },
+            {
+              "latex": "(-6, 0) \\cup (2, \\infty)",
+              "isCorrect": false,
+              "strategyId": "wrong_bracket_type_on_endpoints",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-6, 0) \\cup (2, \\infty)",
+                "approx": -4
+              }
+            },
+            {
+              "latex": "[-6, 2]",
+              "isCorrect": false,
+              "strategyId": "treated_cubic_like_a_quadratic",
+              "value": {
+                "kind": "opaque",
+                "canonical": "[-6, 2]",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(-\\infty, -6] \\cup [0, 2]",
+              "isCorrect": false,
+              "strategyId": "solved_for_the_opposite_sign",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -6] \\cup [0, 2]",
+                "approx": -5
+              }
+            }
+          ],
+          "solution": [
+            "An inequality like this is a sign question, not a solving question. The factors are already there, so the first job is to find where the whole product can change sign — and that only happens where a factor is zero, at x = -6, x = 0 and x = 2.",
+            "Those three values cut the number line into four stretches: below -6, between -6 and 0, between 0 and 2, and above 2. Inside each stretch the sign of (x + 6)x(x - 2) cannot change, so testing one convenient number in each is enough.",
+            "Doing that gives negative, then positive, then negative, then positive, reading left to right. That alternation is what you should expect: each factor is simple, so the product flips sign at every root.",
+            "You want where the product is positive, so take the second and fourth stretches.",
+            "Last, decide the brackets. The inequality is inclusive, so the roots themselves satisfy it and the finite endpoints get square brackets. Either way infinity always gets a round bracket, because you never reach it.",
+            "So the solution is [-6, 0] \\cup [2, \\infty)."
+          ],
+          "conceptTag": "Polynomial inequalities: the sign can only change at a root, so test one point per interval"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-inequality-factored-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-inequality-factored",
+          "difficulty": 2,
+          "stem": "Use a sign chart to solve (x + 3)(x + 2)(x - 3) > 0, and write the solution set in interval notation.",
+          "choices": [
+            {
+              "latex": "(-3, 3)",
+              "isCorrect": false,
+              "strategyId": "treated_cubic_like_a_quadratic",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-3, 3)",
+                "approx": 0
+              }
+            },
+            {
+              "latex": "(-3, -2) \\cup (3, \\infty)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-3, -2) \\cup (3, \\infty)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(-\\infty, -3) \\cup (-2, 3)",
+              "isCorrect": false,
+              "strategyId": "solved_for_the_opposite_sign",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -3) \\cup (-2, 3)",
+                "approx": -2
+              }
+            },
+            {
+              "latex": "[-3, -2] \\cup [3, \\infty)",
+              "isCorrect": false,
+              "strategyId": "wrong_bracket_type_on_endpoints",
+              "value": {
+                "kind": "opaque",
+                "canonical": "[-3, -2] \\cup [3, \\infty)",
+                "approx": -1
+              }
+            }
+          ],
+          "solution": [
+            "An inequality like this is a sign question, not a solving question. The factors are already there, so the first job is to find where the whole product can change sign — and that only happens where a factor is zero, at x = -3, x = -2 and x = 3.",
+            "Those three values cut the number line into four stretches: below -3, between -3 and -2, between -2 and 3, and above 3. Inside each stretch the sign of (x + 3)(x + 2)(x - 3) cannot change, so testing one convenient number in each is enough.",
+            "Doing that gives negative, then positive, then negative, then positive, reading left to right. That alternation is what you should expect: each factor is simple, so the product flips sign at every root.",
+            "You want where the product is positive, so take the second and fourth stretches.",
+            "Last, decide the brackets. The inequality is strict, so the roots make the product exactly zero and are excluded, which means round brackets. Either way infinity always gets a round bracket, because you never reach it.",
+            "So the solution is (-3, -2) \\cup (3, \\infty)."
+          ],
+          "conceptTag": "Polynomial inequalities: the sign can only change at a root, so test one point per interval"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-inequality-factored-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-inequality-factored",
+          "difficulty": 2,
+          "stem": "Use a sign chart to solve (x + 6)(x + 1)(x - 3) < 0, and write the solution set in interval notation.",
+          "choices": [
+            {
+              "latex": "(-\\infty, -6] \\cup [-1, 3]",
+              "isCorrect": false,
+              "strategyId": "wrong_bracket_type_on_endpoints",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -6] \\cup [-1, 3]",
+                "approx": -4
+              }
+            },
+            {
+              "latex": "(-\\infty, -6) \\cup (-1, 3)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -6) \\cup (-1, 3)",
+                "approx": -6
+              }
+            },
+            {
+              "latex": "(-6, 3)",
+              "isCorrect": false,
+              "strategyId": "treated_cubic_like_a_quadratic",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-6, 3)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(-6, -1) \\cup (3, \\infty)",
+              "isCorrect": false,
+              "strategyId": "solved_for_the_opposite_sign",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-6, -1) \\cup (3, \\infty)",
+                "approx": -5
+              }
+            }
+          ],
+          "solution": [
+            "An inequality like this is a sign question, not a solving question. The factors are already there, so the first job is to find where the whole product can change sign — and that only happens where a factor is zero, at x = -6, x = -1 and x = 3.",
+            "Those three values cut the number line into four stretches: below -6, between -6 and -1, between -1 and 3, and above 3. Inside each stretch the sign of (x + 6)(x + 1)(x - 3) cannot change, so testing one convenient number in each is enough.",
+            "Doing that gives negative, then positive, then negative, then positive, reading left to right. That alternation is what you should expect: each factor is simple, so the product flips sign at every root.",
+            "You want where the product is negative, so take the first and third stretches.",
+            "Last, decide the brackets. The inequality is strict, so the roots make the product exactly zero and are excluded, which means round brackets. Either way infinity always gets a round bracket, because you never reach it.",
+            "So the solution is (-\\infty, -6) \\cup (-1, 3)."
+          ],
+          "conceptTag": "Polynomial inequalities: the sign can only change at a root, so test one point per interval"
+        },
+        {
+          "generatorId": "mhf4u-u3-solve-polynomial-inequality-factored-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-solve-polynomial-inequality-factored",
+          "difficulty": 2,
+          "stem": "Solve (x + 4)(x + 2)(x - 6) < 0. Give your answer in interval notation.",
+          "choices": [
+            {
+              "latex": "(-4, 6)",
+              "isCorrect": false,
+              "strategyId": "treated_cubic_like_a_quadratic",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-4, 6)",
+                "approx": -1
+              }
+            },
+            {
+              "latex": "(-4, -2) \\cup (6, \\infty)",
+              "isCorrect": false,
+              "strategyId": "solved_for_the_opposite_sign",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-4, -2) \\cup (6, \\infty)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "(-\\infty, -4) \\cup (-2, 6)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -4) \\cup (-2, 6)",
+                "approx": -4
+              }
+            },
+            {
+              "latex": "(-\\infty, -4] \\cup [-2, 6]",
+              "isCorrect": false,
+              "strategyId": "wrong_bracket_type_on_endpoints",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(-\\infty, -4] \\cup [-2, 6]",
+                "approx": -2
+              }
+            }
+          ],
+          "solution": [
+            "An inequality like this is a sign question, not a solving question. The factors are already there, so the first job is to find where the whole product can change sign — and that only happens where a factor is zero, at x = -4, x = -2 and x = 6.",
+            "Those three values cut the number line into four stretches: below -4, between -4 and -2, between -2 and 6, and above 6. Inside each stretch the sign of (x + 4)(x + 2)(x - 6) cannot change, so testing one convenient number in each is enough.",
+            "Doing that gives negative, then positive, then negative, then positive, reading left to right. That alternation is what you should expect: each factor is simple, so the product flips sign at every root.",
+            "You want where the product is negative, so take the first and third stretches.",
+            "Last, decide the brackets. The inequality is strict, so the roots make the product exactly zero and are excluded, which means round brackets. Either way infinity always gets a round bracket, because you never reach it.",
+            "So the solution is (-\\infty, -4) \\cup (-2, 6)."
+          ],
+          "conceptTag": "Polynomial inequalities: the sign can only change at a root, so test one point per interval"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-family-of-polynomials-from-roots-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-family-of-polynomials-from-roots",
+      "difficulty": 2,
+      "strategyIds": [
+        "omitted_leading_coefficient",
+        "sign_error_on_root",
+        "inverted_the_leading_coefficient"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-family-of-polynomials-from-roots-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-family-of-polynomials-from-roots",
+          "difficulty": 2,
+          "stem": "Write the equation of the cubic whose zeros are x = -3, x = -5 and x = -4 and whose graph contains (1, 360).",
+          "choices": [
+            {
+              "latex": "3(x - 3)(x - 5)(x - 4)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "3(x - 3)(x - 5)(x - 4)",
+                "approx": 5
+              }
+            },
+            {
+              "latex": "3(x + 3)(x + 5)(x + 4)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "3(x + 3)(x + 5)(x + 4)",
+                "approx": 3
+              }
+            },
+            {
+              "latex": "\\frac{1}{3}(x + 3)(x + 5)(x + 4)",
+              "isCorrect": false,
+              "strategyId": "inverted_the_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "\\frac{1}{3}(x + 3)(x + 5)(x + 4)",
+                "approx": 6
+              }
+            },
+            {
+              "latex": "(x + 3)(x + 5)(x + 4)",
+              "isCorrect": false,
+              "strategyId": "omitted_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x + 3)(x + 5)(x + 4)",
+                "approx": 4
+              }
+            }
+          ],
+          "solution": [
+            "Zeros tell you the factors, but they do not tell you the whole function. Every cubic with zeros at x = -3, x = -5 and x = -4 looks like f(x) = a(x + 3)(x + 5)(x + 4), for some constant a. That a is what the point is for.",
+            "Watch the signs turning zeros into factors: a zero at x = -3 gives the factor (x + 3), because that is the bracket that becomes zero when x = -3. The sign flips.",
+            "Now substitute the point (1, 360). That gives 360 = a(1 - -3)(1 - -5)(1 - -4).",
+            "The bracket product works out to 120, so 360 = 120a. Solve for a by dividing the y-value by the product — that way round, not the other — giving a = 3.",
+            "So the equation is f(x) = 3(x + 3)(x + 5)(x + 4). Sanity check it by putting x = 1 back in: you should land on 360."
+          ],
+          "conceptTag": "Family of polynomials: the zeros fix the factors, and one extra point fixes the scale factor"
+        },
+        {
+          "generatorId": "mhf4u-u3-family-of-polynomials-from-roots-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-family-of-polynomials-from-roots",
+          "difficulty": 2,
+          "stem": "Write the equation of the cubic whose zeros are x = 1, x = -5 and x = 5 and whose graph contains (2, 105).",
+          "choices": [
+            {
+              "latex": "-5(x + 1)(x - 5)(x + 5)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-5(x + 1)(x - 5)(x + 5)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "-5(x - 1)(x + 5)(x - 5)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "-5(x - 1)(x + 5)(x - 5)",
+                "approx": -5
+              }
+            },
+            {
+              "latex": "(x - 1)(x + 5)(x - 5)",
+              "isCorrect": false,
+              "strategyId": "omitted_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 1)(x + 5)(x - 5)",
+                "approx": -4
+              }
+            },
+            {
+              "latex": "-\\frac{1}{5}(x - 1)(x + 5)(x - 5)",
+              "isCorrect": false,
+              "strategyId": "inverted_the_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-\\frac{1}{5}(x - 1)(x + 5)(x - 5)",
+                "approx": -2
+              }
+            }
+          ],
+          "solution": [
+            "Zeros tell you the factors, but they do not tell you the whole function. Every cubic with zeros at x = 1, x = -5 and x = 5 looks like f(x) = a(x - 1)(x + 5)(x - 5), for some constant a. That a is what the point is for.",
+            "Watch the signs turning zeros into factors: a zero at x = 1 gives the factor (x - 1), because that is the bracket that becomes zero when x = 1. The sign flips.",
+            "Now substitute the point (2, 105). That gives 105 = a(2 - 1)(2 - -5)(2 - 5).",
+            "The bracket product works out to -21, so 105 = -21a. Solve for a by dividing the y-value by the product — that way round, not the other — giving a = -5.",
+            "So the equation is f(x) = -5(x - 1)(x + 5)(x - 5). Sanity check it by putting x = 2 back in: you should land on 105."
+          ],
+          "conceptTag": "Family of polynomials: the zeros fix the factors, and one extra point fixes the scale factor"
+        },
+        {
+          "generatorId": "mhf4u-u3-family-of-polynomials-from-roots-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-family-of-polynomials-from-roots",
+          "difficulty": 2,
+          "stem": "Members of a family of cubics share the zeros x = 3, x = -2 and x = 4. Find the member that passes through (-1, -80).",
+          "choices": [
+            {
+              "latex": "(x - 3)(x + 2)(x - 4)",
+              "isCorrect": false,
+              "strategyId": "omitted_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 3)(x + 2)(x - 4)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "-\\frac{1}{4}(x - 3)(x + 2)(x - 4)",
+              "isCorrect": false,
+              "strategyId": "inverted_the_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-\\frac{1}{4}(x - 3)(x + 2)(x - 4)",
+                "approx": -1
+              }
+            },
+            {
+              "latex": "-4(x + 3)(x - 2)(x + 4)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-4(x + 3)(x - 2)(x + 4)",
+                "approx": -2
+              }
+            },
+            {
+              "latex": "-4(x - 3)(x + 2)(x - 4)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "-4(x - 3)(x + 2)(x - 4)",
+                "approx": -4
+              }
+            }
+          ],
+          "solution": [
+            "Zeros tell you the factors, but they do not tell you the whole function. Every cubic with zeros at x = 3, x = -2 and x = 4 looks like f(x) = a(x - 3)(x + 2)(x - 4), for some constant a. That a is what the point is for.",
+            "Watch the signs turning zeros into factors: a zero at x = 3 gives the factor (x - 3), because that is the bracket that becomes zero when x = 3. The sign flips.",
+            "Now substitute the point (-1, -80). That gives -80 = a(-1 - 3)(-1 - -2)(-1 - 4).",
+            "The bracket product works out to 20, so -80 = 20a. Solve for a by dividing the y-value by the product — that way round, not the other — giving a = -4.",
+            "So the equation is f(x) = -4(x - 3)(x + 2)(x - 4). Sanity check it by putting x = -1 back in: you should land on -80."
+          ],
+          "conceptTag": "Family of polynomials: the zeros fix the factors, and one extra point fixes the scale factor"
+        },
+        {
+          "generatorId": "mhf4u-u3-family-of-polynomials-from-roots-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-family-of-polynomials-from-roots",
+          "difficulty": 2,
+          "stem": "A cubic function has zeros at x = 2, x = -5 and x = 3 and passes through the point (-2, -180). Determine its equation in factored form.",
+          "choices": [
+            {
+              "latex": "(x - 2)(x + 5)(x - 3)",
+              "isCorrect": false,
+              "strategyId": "omitted_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 2)(x + 5)(x - 3)",
+                "approx": -2
+              }
+            },
+            {
+              "latex": "-\\frac{1}{3}(x - 2)(x + 5)(x - 3)",
+              "isCorrect": false,
+              "strategyId": "inverted_the_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-\\frac{1}{3}(x - 2)(x + 5)(x - 3)",
+                "approx": 0
+              }
+            },
+            {
+              "latex": "-3(x - 2)(x + 5)(x - 3)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "-3(x - 2)(x + 5)(x - 3)",
+                "approx": -3
+              }
+            },
+            {
+              "latex": "-3(x + 2)(x - 5)(x + 3)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-3(x + 2)(x - 5)(x + 3)",
+                "approx": -1
+              }
+            }
+          ],
+          "solution": [
+            "Zeros tell you the factors, but they do not tell you the whole function. Every cubic with zeros at x = 2, x = -5 and x = 3 looks like f(x) = a(x - 2)(x + 5)(x - 3), for some constant a. That a is what the point is for.",
+            "Watch the signs turning zeros into factors: a zero at x = 2 gives the factor (x - 2), because that is the bracket that becomes zero when x = 2. The sign flips.",
+            "Now substitute the point (-2, -180). That gives -180 = a(-2 - 2)(-2 - -5)(-2 - 3).",
+            "The bracket product works out to 60, so -180 = 60a. Solve for a by dividing the y-value by the product — that way round, not the other — giving a = -3.",
+            "So the equation is f(x) = -3(x - 2)(x + 5)(x - 3). Sanity check it by putting x = -2 back in: you should land on -180."
+          ],
+          "conceptTag": "Family of polynomials: the zeros fix the factors, and one extra point fixes the scale factor"
+        },
+        {
+          "generatorId": "mhf4u-u3-family-of-polynomials-from-roots-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-family-of-polynomials-from-roots",
+          "difficulty": 2,
+          "stem": "A cubic function has zeros at x = 5, x = -2 and x = -3 and passes through the point (0, 60). Determine its equation in factored form.",
+          "choices": [
+            {
+              "latex": "-2(x - 5)(x + 2)(x + 3)",
+              "isCorrect": true,
+              "value": {
+                "kind": "opaque",
+                "canonical": "-2(x - 5)(x + 2)(x + 3)",
+                "approx": -2
+              }
+            },
+            {
+              "latex": "-2(x + 5)(x - 2)(x - 3)",
+              "isCorrect": false,
+              "strategyId": "sign_error_on_root",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-2(x + 5)(x - 2)(x - 3)",
+                "approx": 0
+              }
+            },
+            {
+              "latex": "(x - 5)(x + 2)(x + 3)",
+              "isCorrect": false,
+              "strategyId": "omitted_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "(x - 5)(x + 2)(x + 3)",
+                "approx": -1
+              }
+            },
+            {
+              "latex": "-\\frac{1}{2}(x - 5)(x + 2)(x + 3)",
+              "isCorrect": false,
+              "strategyId": "inverted_the_leading_coefficient",
+              "value": {
+                "kind": "opaque",
+                "canonical": "-\\frac{1}{2}(x - 5)(x + 2)(x + 3)",
+                "approx": 1
+              }
+            }
+          ],
+          "solution": [
+            "Zeros tell you the factors, but they do not tell you the whole function. Every cubic with zeros at x = 5, x = -2 and x = -3 looks like f(x) = a(x - 5)(x + 2)(x + 3), for some constant a. That a is what the point is for.",
+            "Watch the signs turning zeros into factors: a zero at x = 5 gives the factor (x - 5), because that is the bracket that becomes zero when x = 5. The sign flips.",
+            "Now substitute the point (0, 60). That gives 60 = a(0 - 5)(0 - -2)(0 - -3).",
+            "The bracket product works out to -30, so 60 = -30a. Solve for a by dividing the y-value by the product — that way round, not the other — giving a = -2.",
+            "So the equation is f(x) = -2(x - 5)(x + 2)(x + 3). Sanity check it by putting x = 0 back in: you should land on 60."
+          ],
+          "conceptTag": "Family of polynomials: the zeros fix the factors, and one extra point fixes the scale factor"
+        }
+      ]
+    },
+    {
+      "generatorId": "mhf4u-u3-sum-and-product-of-roots-d2",
+      "unitId": "mhf4u-u3-polynomial-equations",
+      "problemTypeId": "mhf4u-u3-sum-and-product-of-roots",
+      "difficulty": 2,
+      "strategyIds": [
+        "dropped_the_negation_in_the_root_relation",
+        "ignored_the_leading_coefficient",
+        "used_the_wrong_coefficient"
+      ],
+      "instances": [
+        {
+          "generatorId": "mhf4u-u3-sum-and-product-of-roots-d2",
+          "seed": 0,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-sum-and-product-of-roots",
+          "difficulty": 2,
+          "stem": "Without solving it, determine the product of the roots of -3x^3 - 5x^2 - 7x - 1 = 0.",
+          "choices": [
+            {
+              "latex": "-\\frac{1}{3}",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-1n",
+                  "den": "3n"
+                }
+              }
+            },
+            {
+              "latex": "-\\frac{7}{3}",
+              "isCorrect": false,
+              "strategyId": "used_the_wrong_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-7n",
+                  "den": "3n"
+                }
+              }
+            },
+            {
+              "latex": "\\frac{1}{3}",
+              "isCorrect": false,
+              "strategyId": "dropped_the_negation_in_the_root_relation",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "3n"
+                }
+              }
+            },
+            {
+              "latex": "1",
+              "isCorrect": false,
+              "strategyId": "ignored_the_leading_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "You are not being asked to solve anything, and you should not try. The roots are hiding in the coefficients already, because -3x^3 - 5x^2 - 7x - 1 is the expanded form of -3(x - r_1)(x - r_2)(x - r_3).",
+            "Multiply that out and match terms. The x^2 coefficient comes out as --3(r_1 + r_2 + r_3), and the constant term as --3r_1r_2r_3. So the sum of the roots is -b/a and the product is -d/a.",
+            "Here you want the product, so take the constant term, which is -1, put it over the leading coefficient -3, and negate.",
+            "That gives product = -(-1)/(-3) = -\\frac{1}{3}.",
+            "Two things to keep straight: the minus sign is part of the relation and not optional, and you divide by the leading coefficient even when it is not 1. Skip either and you land on one of the other options here."
+          ],
+          "conceptTag": "Root relations: for ax^3 + bx^2 + cx + d, the roots sum to -b/a and multiply to -d/a"
+        },
+        {
+          "generatorId": "mhf4u-u3-sum-and-product-of-roots-d2",
+          "seed": 1,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-sum-and-product-of-roots",
+          "difficulty": 2,
+          "stem": "Without solving it, determine the sum of the roots of -5x^3 + x^2 + 9x + 9 = 0.",
+          "choices": [
+            {
+              "latex": "\\frac{1}{5}",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "5n"
+                }
+              }
+            },
+            {
+              "latex": "\\frac{9}{5}",
+              "isCorrect": false,
+              "strategyId": "used_the_wrong_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "9n",
+                  "den": "5n"
+                }
+              }
+            },
+            {
+              "latex": "-\\frac{1}{5}",
+              "isCorrect": false,
+              "strategyId": "dropped_the_negation_in_the_root_relation",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-1n",
+                  "den": "5n"
+                }
+              }
+            },
+            {
+              "latex": "-1",
+              "isCorrect": false,
+              "strategyId": "ignored_the_leading_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-1n",
+                  "den": "1n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "You are not being asked to solve anything, and you should not try. The roots are hiding in the coefficients already, because -5x^3 + x^2 + 9x + 9 is the expanded form of -5(x - r_1)(x - r_2)(x - r_3).",
+            "Multiply that out and match terms. The x^2 coefficient comes out as --5(r_1 + r_2 + r_3), and the constant term as --5r_1r_2r_3. So the sum of the roots is -b/a and the product is -d/a.",
+            "Here you want the sum, so take the x^2 coefficient, which is 1, put it over the leading coefficient -5, and negate.",
+            "That gives sum = -(1)/(-5) = \\frac{1}{5}.",
+            "Two things to keep straight: the minus sign is part of the relation and not optional, and you divide by the leading coefficient even when it is not 1. Skip either and you land on one of the other options here."
+          ],
+          "conceptTag": "Root relations: for ax^3 + bx^2 + cx + d, the roots sum to -b/a and multiply to -d/a"
+        },
+        {
+          "generatorId": "mhf4u-u3-sum-and-product-of-roots-d2",
+          "seed": 2,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-sum-and-product-of-roots",
+          "difficulty": 2,
+          "stem": "Without solving it, determine the product of the roots of -5x^3 - 4x^2 + x + 7 = 0.",
+          "choices": [
+            {
+              "latex": "\\frac{1}{5}",
+              "isCorrect": false,
+              "strategyId": "used_the_wrong_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "5n"
+                }
+              }
+            },
+            {
+              "latex": "\\frac{7}{5}",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "7n",
+                  "den": "5n"
+                }
+              }
+            },
+            {
+              "latex": "-7",
+              "isCorrect": false,
+              "strategyId": "ignored_the_leading_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-7n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "-\\frac{7}{5}",
+              "isCorrect": false,
+              "strategyId": "dropped_the_negation_in_the_root_relation",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-7n",
+                  "den": "5n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "You are not being asked to solve anything, and you should not try. The roots are hiding in the coefficients already, because -5x^3 - 4x^2 + x + 7 is the expanded form of -5(x - r_1)(x - r_2)(x - r_3).",
+            "Multiply that out and match terms. The x^2 coefficient comes out as --5(r_1 + r_2 + r_3), and the constant term as --5r_1r_2r_3. So the sum of the roots is -b/a and the product is -d/a.",
+            "Here you want the product, so take the constant term, which is 7, put it over the leading coefficient -5, and negate.",
+            "That gives product = -(7)/(-5) = \\frac{7}{5}.",
+            "Two things to keep straight: the minus sign is part of the relation and not optional, and you divide by the leading coefficient even when it is not 1. Skip either and you land on one of the other options here."
+          ],
+          "conceptTag": "Root relations: for ax^3 + bx^2 + cx + d, the roots sum to -b/a and multiply to -d/a"
+        },
+        {
+          "generatorId": "mhf4u-u3-sum-and-product-of-roots-d2",
+          "seed": 3,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-sum-and-product-of-roots",
+          "difficulty": 2,
+          "stem": "Without solving it, determine the sum of the roots of -5x^3 - x^2 - 8x + 5 = 0.",
+          "choices": [
+            {
+              "latex": "1",
+              "isCorrect": false,
+              "strategyId": "ignored_the_leading_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "\\frac{1}{5}",
+              "isCorrect": false,
+              "strategyId": "dropped_the_negation_in_the_root_relation",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "1n",
+                  "den": "5n"
+                }
+              }
+            },
+            {
+              "latex": "-\\frac{8}{5}",
+              "isCorrect": false,
+              "strategyId": "used_the_wrong_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-8n",
+                  "den": "5n"
+                }
+              }
+            },
+            {
+              "latex": "-\\frac{1}{5}",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-1n",
+                  "den": "5n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "You are not being asked to solve anything, and you should not try. The roots are hiding in the coefficients already, because -5x^3 - x^2 - 8x + 5 is the expanded form of -5(x - r_1)(x - r_2)(x - r_3).",
+            "Multiply that out and match terms. The x^2 coefficient comes out as --5(r_1 + r_2 + r_3), and the constant term as --5r_1r_2r_3. So the sum of the roots is -b/a and the product is -d/a.",
+            "Here you want the sum, so take the x^2 coefficient, which is -1, put it over the leading coefficient -5, and negate.",
+            "That gives sum = -(-1)/(-5) = -\\frac{1}{5}.",
+            "Two things to keep straight: the minus sign is part of the relation and not optional, and you divide by the leading coefficient even when it is not 1. Skip either and you land on one of the other options here."
+          ],
+          "conceptTag": "Root relations: for ax^3 + bx^2 + cx + d, the roots sum to -b/a and multiply to -d/a"
+        },
+        {
+          "generatorId": "mhf4u-u3-sum-and-product-of-roots-d2",
+          "seed": 4,
+          "unitId": "mhf4u-u3-polynomial-equations",
+          "problemTypeId": "mhf4u-u3-sum-and-product-of-roots",
+          "difficulty": 2,
+          "stem": "The equation -6x^3 - 5x^2 - 8x - 5 = 0 has three roots. Find the product of the roots.",
+          "choices": [
+            {
+              "latex": "-\\frac{5}{6}",
+              "isCorrect": true,
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-5n",
+                  "den": "6n"
+                }
+              }
+            },
+            {
+              "latex": "5",
+              "isCorrect": false,
+              "strategyId": "ignored_the_leading_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "1n"
+                }
+              }
+            },
+            {
+              "latex": "\\frac{5}{6}",
+              "isCorrect": false,
+              "strategyId": "dropped_the_negation_in_the_root_relation",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "5n",
+                  "den": "6n"
+                }
+              }
+            },
+            {
+              "latex": "-\\frac{4}{3}",
+              "isCorrect": false,
+              "strategyId": "used_the_wrong_coefficient",
+              "value": {
+                "kind": "rational",
+                "value": {
+                  "num": "-4n",
+                  "den": "3n"
+                }
+              }
+            }
+          ],
+          "solution": [
+            "You are not being asked to solve anything, and you should not try. The roots are hiding in the coefficients already, because -6x^3 - 5x^2 - 8x - 5 is the expanded form of -6(x - r_1)(x - r_2)(x - r_3).",
+            "Multiply that out and match terms. The x^2 coefficient comes out as --6(r_1 + r_2 + r_3), and the constant term as --6r_1r_2r_3. So the sum of the roots is -b/a and the product is -d/a.",
+            "Here you want the product, so take the constant term, which is -5, put it over the leading coefficient -6, and negate.",
+            "That gives product = -(-5)/(-6) = -\\frac{5}{6}.",
+            "Two things to keep straight: the minus sign is part of the relation and not optional, and you divide by the leading coefficient even when it is not 1. Skip either and you land on one of the other options here."
+          ],
+          "conceptTag": "Root relations: for ax^3 + bx^2 + cx + d, the roots sum to -b/a and multiply to -d/a"
+        }
+      ]
+    }
+  ]
+}

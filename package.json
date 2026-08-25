@@ -11,7 +11,8 @@
     "test:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/questions/**/*.test.ts\"",
     "verify:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/verify.ts",
     "coverage:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/coverage.ts",
-    "catalogue:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/catalogue.ts"
+    "catalogue:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/catalogue.ts",
+    "snapshots:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/snapshot.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
