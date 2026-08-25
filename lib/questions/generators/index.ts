@@ -18,6 +18,7 @@ import { factorTheoremVerifyFactor } from './mhf4u/u3-factor-theorem-verify-fact
 import { factorFullyCubic } from './mhf4u/u3-factor-fully-cubic.ts';
 import { solvePolynomialEquationFactorable } from './mhf4u/u3-solve-polynomial-equation-factorable.ts';
 import { countRealRootsFromFactoredForm } from './mhf4u/u3-count-real-roots-from-factored-form.ts';
+import { solvePolynomialInequalityFactored } from './mhf4u/u3-solve-polynomial-inequality-factored.ts';
 
 /** Every generator in the codebase, in registration order. */
 export const GENERATORS: Generator[] = [
@@ -27,6 +28,7 @@ export const GENERATORS: Generator[] = [
   factorFullyCubic,
   solvePolynomialEquationFactorable,
   countRealRootsFromFactoredForm,
+  solvePolynomialInequalityFactored,
 ];
 
 /**
