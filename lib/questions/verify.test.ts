@@ -24,9 +24,9 @@ function makeFixture(overrides: {
   strategies?: { id: string; label: string }[];
 } = {}): Generator {
   const strategies = overrides.strategies ?? [
-    { id: 'sign_error', label: 'Sign error' },
-    { id: 'off_by_one', label: 'Off by one' },
-    { id: 'wrong_variable', label: 'Wrong variable' },
+    { id: 'sign_error_on_root', label: 'Sign error' },
+    { id: 'arithmetic_sign_slip', label: 'Off by one' },
+    { id: 'solved_for_wrong_variable', label: 'Wrong variable' },
   ];
   const generator: Generator = {
     id: overrides.id ?? 'fixture',
@@ -43,9 +43,9 @@ function makeFixture(overrides: {
       const k = rng.intExcluding(-400, 400, [0, 1, -1]);
       const choices: Choice[] = rng.shuffle([
         { latex: String(k), isCorrect: true, value: qInt(k) },
-        { latex: String(-k), isCorrect: false, strategyId: 'sign_error', value: qInt(-k) },
-        { latex: String(k + 1), isCorrect: false, strategyId: 'off_by_one', value: qInt(k + 1) },
-        { latex: String(k * 2), isCorrect: false, strategyId: 'wrong_variable', value: qInt(k * 2) },
+        { latex: String(-k), isCorrect: false, strategyId: 'sign_error_on_root', value: qInt(-k) },
+        { latex: String(k + 1), isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qInt(k + 1) },
+        { latex: String(k * 2), isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qInt(k * 2) },
       ]);
       const base: QuestionInstance = {
         generatorId: overrides.id ?? 'fixture',
@@ -294,27 +294,27 @@ test('verify: counts answer positions across all four slots', () => {
 test('verify: flags a declared strategy that never appears', () => {
   const generator = makeFixture({
     strategies: [
-      { id: 'sign_error', label: 'Sign error' },
-      { id: 'off_by_one', label: 'Off by one' },
-      { id: 'wrong_variable', label: 'Wrong variable' },
-      { id: 'never_produced', label: 'A branch that is dead' },
+      { id: 'sign_error_on_root', label: 'Sign error' },
+      { id: 'arithmetic_sign_slip', label: 'Off by one' },
+      { id: 'solved_for_wrong_variable', label: 'Wrong variable' },
+      { id: 'dropped_a_root', label: 'A branch that is dead' },
     ],
   });
   const report = verifyGenerator(generator, 50);
-  assert.deepEqual(report.unusedStrategies, ['never_produced']);
+  assert.deepEqual(report.unusedStrategies, ['dropped_a_root']);
   const finding = report.findings.find((f) => f.code === 'UNUSED_STRATEGY');
   assert.ok(finding);
   assert.equal(finding.severity, 'warning');
-  assert.match(finding.message, /never_produced/);
+  assert.match(finding.message, /dropped_a_root/);
   assert.equal(report.passed, true);
 });
 
 test('verify: counts how often each strategy is produced', () => {
   const report = verifyGenerator(makeFixture(), 50);
   assert.deepEqual(report.strategyCounts, {
-    sign_error: 50,
-    off_by_one: 50,
-    wrong_variable: 50,
+    sign_error_on_root: 50,
+    arithmetic_sign_slip: 50,
+    solved_for_wrong_variable: 50,
   });
   assert.deepEqual(report.unusedStrategies, []);
 });
@@ -324,13 +324,13 @@ test('verify: a strategy produced on only some seeds is not flagged as unused', 
     generate(seed, base) {
       if (seed % 10 !== 0) return base;
       const choices = base.choices.map((c) =>
-        c.strategyId === 'off_by_one' ? { ...c, strategyId: 'wrong_variable' } : c,
+        c.strategyId === 'arithmetic_sign_slip' ? { ...c, strategyId: 'solved_for_wrong_variable' } : c,
       );
       return { ...base, choices };
     },
   });
   const report = verifyGenerator(generator, 50);
-  assert.ok(report.strategyCounts.off_by_one > 0);
+  assert.ok(report.strategyCounts.arithmetic_sign_slip > 0);
   assert.ok(!codes(report).includes('UNUSED_STRATEGY'));
 });
 
@@ -339,10 +339,10 @@ test('verify: a strategy produced on only some seeds is not flagged as unused', 
 test('verify: only fatal findings fail the run', () => {
   const warningsOnly = makeFixture({
     strategies: [
-      { id: 'sign_error', label: 'Sign error' },
-      { id: 'off_by_one', label: 'Off by one' },
-      { id: 'wrong_variable', label: 'Wrong variable' },
-      { id: 'never_produced', label: 'Dead branch' },
+      { id: 'sign_error_on_root', label: 'Sign error' },
+      { id: 'arithmetic_sign_slip', label: 'Off by one' },
+      { id: 'solved_for_wrong_variable', label: 'Wrong variable' },
+      { id: 'dropped_a_root', label: 'Dead branch' },
     ],
     generate(seed, base) {
       return { ...base, stem: 'One stem forever.' };
@@ -357,10 +357,10 @@ test('verify: only fatal findings fail the run', () => {
 test('verify: findings are sorted fatal first', () => {
   const generator = makeFixture({
     strategies: [
-      { id: 'sign_error', label: 'Sign error' },
-      { id: 'off_by_one', label: 'Off by one' },
-      { id: 'wrong_variable', label: 'Wrong variable' },
-      { id: 'never_produced', label: 'Dead branch' },
+      { id: 'sign_error_on_root', label: 'Sign error' },
+      { id: 'arithmetic_sign_slip', label: 'Off by one' },
+      { id: 'solved_for_wrong_variable', label: 'Wrong variable' },
+      { id: 'dropped_a_root', label: 'Dead branch' },
     ],
     generate(seed, base) {
       return { ...base, stem: 'One stem forever.', solution: ['single step'] };

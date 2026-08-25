@@ -19,9 +19,9 @@ const FIXTURE_GENERATOR: Generator = {
   problemTypeId: 'fixture-type',
   difficulty: 2,
   strategies: [
-    { id: 'sign_error', label: 'Sign error' },
-    { id: 'off_by_one', label: 'Off by one' },
-    { id: 'wrong_variable', label: 'Solved for the wrong variable' },
+    { id: 'sign_error_on_root', label: 'Sign error' },
+    { id: 'arithmetic_sign_slip', label: 'Off by one' },
+    { id: 'solved_for_wrong_variable', label: 'Solved for the wrong variable' },
   ],
   generate() {
     throw new Error('fixture generator is never invoked by the validator');
@@ -43,10 +43,10 @@ function validInstance(overrides: Partial<QuestionInstance> = {}): QuestionInsta
     difficulty: 2,
     stem: 'Given f(x) = x^3 + 2x^2 - 5x + k, and that (x - 2) is a factor, find k.',
     choices: [
-      intChoice(2, { strategyId: 'sign_error' }),
+      intChoice(2, { strategyId: 'sign_error_on_root' }),
       intChoice(-6, { isCorrect: true }),
-      intChoice(6, { strategyId: 'off_by_one' }),
-      intChoice(-2, { strategyId: 'wrong_variable' }),
+      intChoice(6, { strategyId: 'arithmetic_sign_slip' }),
+      intChoice(-2, { strategyId: 'solved_for_wrong_variable' }),
     ],
     solution: [
       'A factor of (x - 2) means f(2) = 0, so substitute x = 2 and set the whole thing to zero.',
@@ -130,7 +130,7 @@ test('validate: reports every violation in one pass, not just the first', () => 
     choices: [
       intChoice(2, { strategyId: 'not_declared' }),
       intChoice(-6, { isCorrect: true }),
-      intChoice(6, { strategyId: 'off_by_one' }),
+      intChoice(6, { strategyId: 'arithmetic_sign_slip' }),
     ],
   });
   const codes = codesFor(instance);
@@ -157,7 +157,7 @@ test('validate rule 1: rejects three choices', () => {
 });
 
 test('validate rule 1: rejects five choices', () => {
-  const choices: Choice[] = [...validInstance().choices, intChoice(9, { strategyId: 'sign_error' })];
+  const choices: Choice[] = [...validInstance().choices, intChoice(9, { strategyId: 'sign_error_on_root' })];
   assertRejects(validInstance({ choices }), 'CHOICE_COUNT');
 });
 
@@ -165,7 +165,7 @@ test('validate rule 1: rejects zero correct answers', () => {
   const choices = validInstance().choices.map((c) => ({
     ...c,
     isCorrect: false,
-    strategyId: c.strategyId ?? 'sign_error',
+    strategyId: c.strategyId ?? 'sign_error_on_root',
   }));
   assertRejects(validInstance({ choices }), 'CORRECT_COUNT');
 });
@@ -201,20 +201,20 @@ test('validate rule 2: the correct choice needs no strategyId', () => {
 // --- Rule 3: duplicate choices, now checked on value --------------------------
 
 test('validate rule 3: rejects two choices rendering identically', () => {
-  assertRejects(withChoice(2, intChoice(2, { strategyId: 'off_by_one' })), 'DUPLICATE_LATEX');
+  assertRejects(withChoice(2, intChoice(2, { strategyId: 'arithmetic_sign_slip' })), 'DUPLICATE_LATEX');
 });
 
 test('validate rule 3: rejects choices differing only in whitespace', () => {
-  const spaced: Choice = { latex: ' 2 ', isCorrect: false, strategyId: 'off_by_one', value: qInt(2) };
+  const spaced: Choice = { latex: ' 2 ', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qInt(2) };
   assertRejects(withChoice(2, spaced), 'DUPLICATE_LATEX');
 });
 
 test('validate rule 3: rejects the same value written two ways', () => {
   const choices: Choice[] = [
-    { latex: '\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error', value: qFraction(1, 2) },
+    { latex: '\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error_on_root', value: qFraction(1, 2) },
     { latex: '\\frac{1}{3}', isCorrect: true, value: qFraction(1, 3) },
-    { latex: '\\frac{2}{4}', isCorrect: false, strategyId: 'off_by_one', value: qFraction(2, 4) },
-    { latex: '\\frac{1}{4}', isCorrect: false, strategyId: 'wrong_variable', value: qFraction(1, 4) },
+    { latex: '\\frac{2}{4}', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qFraction(2, 4) },
+    { latex: '\\frac{1}{4}', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qFraction(1, 4) },
   ];
   assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
 });
@@ -224,20 +224,20 @@ test('validate rule 3: catches a symbolic duplicate the old LaTeX parser could n
   // implementation parsed LaTeX into a Rational, could parse neither, and
   // shipped both as separate options.
   const choices: Choice[] = [
-    { latex: '2\\sqrt{3}', isCorrect: false, strategyId: 'sign_error', value: qSurd(i(2), 3) },
+    { latex: '2\\sqrt{3}', isCorrect: false, strategyId: 'sign_error_on_root', value: qSurd(i(2), 3) },
     { latex: '\\sqrt{5}', isCorrect: true, value: qSurd(i(1), 5) },
-    { latex: '\\sqrt{12}', isCorrect: false, strategyId: 'off_by_one', value: qSurd(i(1), 12) },
-    { latex: '\\sqrt{7}', isCorrect: false, strategyId: 'wrong_variable', value: qSurd(i(1), 7) },
+    { latex: '\\sqrt{12}', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qSurd(i(1), 12) },
+    { latex: '\\sqrt{7}', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qSurd(i(1), 7) },
   ];
   assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
 });
 
 test('validate rule 3: catches log and integer forms of the same number', () => {
   const choices: Choice[] = [
-    { latex: '\\log_{2}\\left(8\\right)', isCorrect: false, strategyId: 'sign_error', value: qLog(i(2), i(8)) },
+    { latex: '\\log_{2}\\left(8\\right)', isCorrect: false, strategyId: 'sign_error_on_root', value: qLog(i(2), i(8)) },
     { latex: '5', isCorrect: true, value: qInt(5) },
-    { latex: '3', isCorrect: false, strategyId: 'off_by_one', value: qInt(3) },
-    { latex: '4', isCorrect: false, strategyId: 'wrong_variable', value: qInt(4) },
+    { latex: '3', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qInt(3) },
+    { latex: '4', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qInt(4) },
   ];
   assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
 });
@@ -247,9 +247,9 @@ test('validate rule 3: catches two solution sets that differ only in member orde
   const setB = qSet([qPi(qFractionCoeff(1, 3)), qPi(i(1))]);
   const choices: Choice[] = [
     { latex: '\\{\\frac{\\pi}{3}, \\pi\\}', isCorrect: true, value: setA },
-    { latex: '\\{\\pi, \\frac{\\pi}{3}\\}', isCorrect: false, strategyId: 'sign_error', value: setB },
-    { latex: '\\{\\frac{\\pi}{6}\\}', isCorrect: false, strategyId: 'off_by_one', value: qSet([qPi(qFractionCoeff(1, 6))]) },
-    { latex: '\\{\\frac{\\pi}{4}\\}', isCorrect: false, strategyId: 'wrong_variable', value: qSet([qPi(qFractionCoeff(1, 4))]) },
+    { latex: '\\{\\pi, \\frac{\\pi}{3}\\}', isCorrect: false, strategyId: 'sign_error_on_root', value: setB },
+    { latex: '\\{\\frac{\\pi}{6}\\}', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qSet([qPi(qFractionCoeff(1, 6))]) },
+    { latex: '\\{\\frac{\\pi}{4}\\}', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qSet([qPi(qFractionCoeff(1, 4))]) },
   ];
   assertRejects(validInstance({ choices }), 'DUPLICATE_VALUE');
 });
@@ -264,15 +264,15 @@ function qFractionCoeff(num: number, den: number) {
 test('validate rule 3: distinct symbolic values are left alone', () => {
   const choices: Choice[] = [
     { latex: '\\frac{\\pi}{3}', isCorrect: true, value: qPi(qFractionCoeff(1, 3)) },
-    { latex: '\\frac{\\pi}{6}', isCorrect: false, strategyId: 'sign_error', value: qPi(qFractionCoeff(1, 6)) },
-    { latex: '\\frac{2\\pi}{3}', isCorrect: false, strategyId: 'off_by_one', value: qPi(qFractionCoeff(2, 3)) },
-    { latex: '\\frac{5\\pi}{6}', isCorrect: false, strategyId: 'wrong_variable', value: qPi(qFractionCoeff(5, 6)) },
+    { latex: '\\frac{\\pi}{6}', isCorrect: false, strategyId: 'sign_error_on_root', value: qPi(qFractionCoeff(1, 6)) },
+    { latex: '\\frac{2\\pi}{3}', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qPi(qFractionCoeff(2, 3)) },
+    { latex: '\\frac{5\\pi}{6}', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qPi(qFractionCoeff(5, 6)) },
   ];
   assert.deepEqual(validateInstance(validInstance({ choices }), FIXTURE_GENERATOR).findings, []);
 });
 
 test('validate rule 3: identical text is reported once, not also as a duplicate value', () => {
-  const codes = codesFor(withChoice(2, intChoice(2, { strategyId: 'off_by_one' })));
+  const codes = codesFor(withChoice(2, intChoice(2, { strategyId: 'arithmetic_sign_slip' })));
   assert.ok(codes.includes('DUPLICATE_LATEX'));
   assert.ok(!codes.includes('DUPLICATE_VALUE'), 'the same defect must not be reported twice');
 });
@@ -280,27 +280,27 @@ test('validate rule 3: identical text is reported once, not also as a duplicate 
 // --- Rule 4: trivial distractors ----------------------------------------------
 
 test('validate rule 4: rejects an implausible zero distractor', () => {
-  assertRejects(withChoice(0, intChoice(0, { strategyId: 'sign_error' })), 'TRIVIAL_DISTRACTOR');
+  assertRejects(withChoice(0, intChoice(0, { strategyId: 'sign_error_on_root' })), 'TRIVIAL_DISTRACTOR');
 });
 
 test('validate rule 4: accepts a zero distractor when zero is a declared outcome', () => {
-  const instance = withChoice(0, intChoice(0, { strategyId: 'sign_error' }));
+  const instance = withChoice(0, intChoice(0, { strategyId: 'sign_error_on_root' }));
   const result = validateInstance(instance, FIXTURE_GENERATOR, { zeroIsPlausible: true });
   assert.deepEqual(result.findings, []);
 });
 
 test('validate rule 4: a zero of any kind is caught, because zero canonicalizes to rational', () => {
-  const zeroPi: Choice = { latex: '0', isCorrect: false, strategyId: 'sign_error', value: qPi(i(0)) };
+  const zeroPi: Choice = { latex: '0', isCorrect: false, strategyId: 'sign_error_on_root', value: qPi(i(0)) };
   assertRejects(withChoice(0, zeroPi), 'TRIVIAL_DISTRACTOR');
 });
 
 test('validate rule 4: rejects a distractor off by a whole scale', () => {
-  assertRejects(withChoice(0, intChoice(-60000, { strategyId: 'sign_error' })), 'TRIVIAL_DISTRACTOR');
+  assertRejects(withChoice(0, intChoice(-60000, { strategyId: 'sign_error_on_root' })), 'TRIVIAL_DISTRACTOR');
 });
 
 test('validate rule 4: names which heuristic fired', () => {
   const { errors } = validateInstance(
-    withChoice(0, intChoice(0, { strategyId: 'sign_error' })),
+    withChoice(0, intChoice(0, { strategyId: 'sign_error_on_root' })),
     FIXTURE_GENERATOR,
   );
   const trivial = errors.find((e) => e.code === 'TRIVIAL_DISTRACTOR');
@@ -312,9 +312,9 @@ test('validate rule 4: names which heuristic fired', () => {
 test('validate rule 4: stays silent on symbolic values, where the heuristics have no competence', () => {
   const choices: Choice[] = [
     { latex: '\\frac{\\pi}{3}', isCorrect: true, value: qPi(qFractionCoeff(1, 3)) },
-    { latex: '\\{1, 2\\}', isCorrect: false, strategyId: 'sign_error', value: qSet([qInt(1), qInt(2)]) },
-    { latex: '\\sqrt{2}', isCorrect: false, strategyId: 'off_by_one', value: qSurd(i(1), 2) },
-    { latex: '\\text{no solution}', isCorrect: false, strategyId: 'wrong_variable', value: { kind: 'special', token: 'no-solution' } },
+    { latex: '\\{1, 2\\}', isCorrect: false, strategyId: 'sign_error_on_root', value: qSet([qInt(1), qInt(2)]) },
+    { latex: '\\sqrt{2}', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qSurd(i(1), 2) },
+    { latex: '\\text{no solution}', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: { kind: 'special', token: 'no-solution' } },
   ];
   const result = validateInstance(validInstance({ choices }), FIXTURE_GENERATOR);
   assert.ok(!result.errors.some((e) => e.code === 'TRIVIAL_DISTRACTOR'));
@@ -371,9 +371,9 @@ test('validate rule 5: scans solution steps too', () => {
 test('validate rule 6: passes on balanced LaTeX with a well-formed frac', () => {
   const choices: Choice[] = [
     { latex: '\\frac{1}{2}', isCorrect: true, value: qFraction(1, 2) },
-    { latex: '-\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error', value: qFraction(-1, 2) },
-    { latex: '\\frac{1}{3}', isCorrect: false, strategyId: 'off_by_one', value: qFraction(1, 3) },
-    { latex: '\\frac{2}{3}', isCorrect: false, strategyId: 'wrong_variable', value: qFraction(2, 3) },
+    { latex: '-\\frac{1}{2}', isCorrect: false, strategyId: 'sign_error_on_root', value: qFraction(-1, 2) },
+    { latex: '\\frac{1}{3}', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qFraction(1, 3) },
+    { latex: '\\frac{2}{3}', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qFraction(2, 3) },
   ];
   assert.deepEqual(validateInstance(validInstance({ choices }), FIXTURE_GENERATOR).findings, []);
 });
@@ -418,9 +418,9 @@ test('validate rule 6: a rendered solution set has balanced braces', () => {
   const set = qSet([qInt(1), qInt(2)]);
   const choices: Choice[] = [
     { latex: '\\{1, 2\\}', isCorrect: true, value: set },
-    { latex: '\\{1, 3\\}', isCorrect: false, strategyId: 'sign_error', value: qSet([qInt(1), qInt(3)]) },
-    { latex: '\\{2, 3\\}', isCorrect: false, strategyId: 'off_by_one', value: qSet([qInt(2), qInt(3)]) },
-    { latex: '\\{4, 5\\}', isCorrect: false, strategyId: 'wrong_variable', value: qSet([qInt(4), qInt(5)]) },
+    { latex: '\\{1, 3\\}', isCorrect: false, strategyId: 'sign_error_on_root', value: qSet([qInt(1), qInt(3)]) },
+    { latex: '\\{2, 3\\}', isCorrect: false, strategyId: 'arithmetic_sign_slip', value: qSet([qInt(2), qInt(3)]) },
+    { latex: '\\{4, 5\\}', isCorrect: false, strategyId: 'solved_for_wrong_variable', value: qSet([qInt(4), qInt(5)]) },
   ];
   assert.deepEqual(validateInstance(validInstance({ choices }), FIXTURE_GENERATOR).findings, []);
 });
@@ -467,7 +467,7 @@ test('validate rule 9: passes when every choice has a well-formed value', () => 
 });
 
 test('validate rule 9: rejects a choice with no value at all', () => {
-  const missing = { latex: '2', isCorrect: false, strategyId: 'sign_error' } as unknown as Choice;
+  const missing = { latex: '2', isCorrect: false, strategyId: 'sign_error_on_root' } as unknown as Choice;
   assertRejects(withChoice(0, missing), 'INVALID_VALUE');
 });
 
@@ -480,7 +480,7 @@ test('validate rule 9: rejects a value that fails to canonicalize', () => {
     { kind: 'power', base: i(0), exponent: i(-1) },
   ];
   for (const value of cases) {
-    const bad: Choice = { latex: '2', isCorrect: false, strategyId: 'sign_error', value };
+    const bad: Choice = { latex: '2', isCorrect: false, strategyId: 'sign_error_on_root', value };
     assertRejects(withChoice(0, bad), 'INVALID_VALUE');
   }
 });
@@ -501,7 +501,7 @@ test('validate rule 9: reports the path of the offending choice', () => {
   const bad: Choice = {
     latex: '2',
     isCorrect: false,
-    strategyId: 'sign_error',
+    strategyId: 'sign_error_on_root',
     value: { kind: 'log', base: i(2), argument: i(-1) },
   };
   const { errors } = validateInstance(withChoice(2, bad), FIXTURE_GENERATOR);
@@ -517,12 +517,12 @@ test('validate rule 10: silent when latex matches the canonical rendering', () =
 });
 
 test('validate rule 10: warns when the generator displays something else', () => {
-  const lying: Choice = { latex: '99', isCorrect: false, strategyId: 'sign_error', value: qInt(2) };
+  const lying: Choice = { latex: '99', isCorrect: false, strategyId: 'sign_error_on_root', value: qInt(2) };
   assertWarns(withChoice(0, lying), 'VALUE_LATEX_MISMATCH');
 });
 
 test('validate rule 10: a mismatch is a warning, not an error', () => {
-  const lying: Choice = { latex: '99', isCorrect: false, strategyId: 'sign_error', value: qInt(2) };
+  const lying: Choice = { latex: '99', isCorrect: false, strategyId: 'sign_error_on_root', value: qInt(2) };
   const result = validateInstance(withChoice(0, lying), FIXTURE_GENERATOR);
   assert.equal(result.valid, true, 'a display mismatch must not fail the sweep');
   assert.equal(result.errors.length, 0);
@@ -533,7 +533,7 @@ test('validate rule 10: tolerates an assignment prefix', () => {
   const prefixed: Choice = {
     latex: 'x = \\frac{\\pi}{3}',
     isCorrect: false,
-    strategyId: 'sign_error',
+    strategyId: 'sign_error_on_root',
     value: qPi(qFractionCoeff(1, 3)),
   };
   const result = validateInstance(withChoice(0, prefixed), FIXTURE_GENERATOR);
@@ -544,7 +544,7 @@ test('validate rule 10: tolerates a Greek-letter assignment prefix', () => {
   const prefixed: Choice = {
     latex: '\\theta = \\frac{\\pi}{6}',
     isCorrect: false,
-    strategyId: 'sign_error',
+    strategyId: 'sign_error_on_root',
     value: qPi(qFractionCoeff(1, 6)),
   };
   assert.deepEqual(validateInstance(withChoice(0, prefixed), FIXTURE_GENERATOR).warnings, []);
@@ -554,7 +554,7 @@ test('validate rule 10: tolerates whitespace differences', () => {
   const spaced: Choice = {
     latex: '\\frac{1} {2}',
     isCorrect: false,
-    strategyId: 'sign_error',
+    strategyId: 'sign_error_on_root',
     value: qFraction(1, 2),
   };
   assert.deepEqual(validateInstance(withChoice(0, spaced), FIXTURE_GENERATOR).warnings, []);
@@ -565,7 +565,7 @@ test('validate rule 10: catches the compute-one-thing-display-another bug', () =
   const wrong: Choice = {
     latex: '\\frac{\\pi}{6}',
     isCorrect: false,
-    strategyId: 'sign_error',
+    strategyId: 'sign_error_on_root',
     value: qPi(qFractionCoeff(1, 3)),
   };
   assertWarns(withChoice(0, wrong), 'VALUE_LATEX_MISMATCH');

@@ -16,6 +16,7 @@
 import { createRng, type Rng } from '../../rng.ts';
 import { fromInt } from '../../rational.ts';
 import { qOpaque } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import {
   polyDivideByLinear,
   polyFromRoots,
@@ -24,7 +25,7 @@ import {
   renderPoly,
   type Poly,
 } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-factor-fully-cubic';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
@@ -44,20 +45,16 @@ export interface FactorCubicParams {
 /** Roots 1, -2, 3: x^3 - 2x^2 - 5x + 6, given (x - 1). */
 export const FALLBACK_PARAMS: FactorCubicParams = { given: 1, remaining: [-2, 3] };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    id: 'stopped_at_partially_factored_form',
-    label: 'Divided correctly but left the quadratic unfactored',
-  },
-  {
-    id: 'sign_error_on_root',
-    label: 'Wrote the quadratic roots straight into the brackets without negating them',
-  },
-  {
-    id: 'reported_quotient_only',
-    label: 'Factored the quotient but dropped the given factor',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'stopped_at_partially_factored_form',
+  'sign_error_on_root',
+  'reported_quotient_only',
+);
 
 /** All three roots, given first. */
 function allRoots(params: FactorCubicParams): number[] {

@@ -30,7 +30,8 @@ import {
 } from '../../rational.ts';
 import { areEquivalent, isTriviallyDistinguishable } from '../../equivalence.ts';
 import { qRational } from '../../value.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import { strategiesFor } from '../../strategies.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 /**
  * Stable ids. Permanent once shipped — stored student attempts reference them.
@@ -95,20 +96,16 @@ export interface PolynomialParams {
  * The misconceptions this generator expresses. Each one is implemented below in
  * `buildDistractors`; `verify.ts` fails the generator if any is never produced.
  */
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    id: 'sign_error_on_root',
-    label: 'Substituted x = -r instead of x = r',
-  },
-  {
-    id: 'arithmetic_sign_slip',
-    label: 'Right method, one sign dropped while evaluating',
-  },
-  {
-    id: 'solved_for_wrong_variable',
-    label: 'Reported P(r) instead of k, forgetting to move it across the equals sign',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'sign_error_on_root',
+  'arithmetic_sign_slip',
+  'solved_for_wrong_variable',
+);
 
 /**
  * `P(x) = x^3 + ax^2 + bx` — the polynomial without its constant term.

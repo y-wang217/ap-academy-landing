@@ -14,9 +14,10 @@
 
 import { createRng, type Rng } from '../../rng.ts';
 import { qInt, toLatex as valueToLatex } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import { fromInt } from '../../rational.ts';
 import { renderLinearFactor, renderPower } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-count-real-roots-from-factored-form';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
@@ -54,20 +55,16 @@ export const FALLBACK_PARAMS: CountRootsParams = {
   irreducibleConstant: 4,
 };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    id: 'counted_multiplicity_as_separate_roots',
-    label: 'Counted a repeated factor as several distinct roots',
-  },
-  {
-    id: 'counted_irreducible_quadratic_as_real_roots',
-    label: 'Assumed the quadratic factor contributes two real roots',
-  },
-  {
-    id: 'counted_factors_not_roots',
-    label: 'Counted the number of factors rather than the number of roots',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'counted_multiplicity_as_separate_roots',
+  'counted_irreducible_quadratic_as_real_roots',
+  'counted_factors_not_roots',
+);
 
 /** The correct answer: distinct linear factors each give exactly one real root. */
 export function countDistinctRealRoots(params: CountRootsParams): number {

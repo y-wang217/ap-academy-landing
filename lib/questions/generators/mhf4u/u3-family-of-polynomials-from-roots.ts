@@ -23,8 +23,9 @@ import {
   toLatex as rationalToLatex,
 } from '../../rational.ts';
 import { qOpaque } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import { renderFactoredForm } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-family-of-polynomials-from-roots';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
@@ -47,20 +48,16 @@ export interface FamilyParams {
 /** Zeros -2, 1, 3 through (0, 12): a(2)(-1)(-3) = 6a = 12, so a = 2. */
 export const FALLBACK_PARAMS: FamilyParams = { roots: [-2, 1, 3], a: 2, pointX: 0 };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    id: 'omitted_leading_coefficient',
-    label: 'Wrote the factors but never used the point to find the scale factor',
-  },
-  {
-    id: 'sign_error_on_root',
-    label: 'Wrote (x + r) for a zero at x = r instead of (x - r)',
-  },
-  {
-    id: 'inverted_the_leading_coefficient',
-    label: 'Divided the wrong way round when solving for the scale factor',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'omitted_leading_coefficient',
+  'sign_error_on_root',
+  'inverted_the_leading_coefficient',
+);
 
 /** The product of `(pointX - root)` over the roots — what `a` is scaled against. */
 export function productAtPoint(params: FamilyParams): Rational {

@@ -24,6 +24,7 @@
  */
 
 import { explainTriviality, type TrivialityContext } from './equivalence.ts';
+import { isRegisteredStrategy } from './strategies.ts';
 import type { Rational } from './rational.ts';
 import {
   canonicalize,
@@ -78,7 +79,9 @@ export type ValidationCode =
   /** Rule 9: a choice has no `value`, or its `value` fails to canonicalize. */
   | 'INVALID_VALUE'
   /** Rule 10 (warning): a choice's `latex` does not match its `value`'s canonical rendering. */
-  | 'VALUE_LATEX_MISMATCH';
+  | 'VALUE_LATEX_MISMATCH'
+  /** Rule 11: a `strategyId` is not defined in the shared registry in `strategies.ts`. */
+  | 'UNREGISTERED_STRATEGY';
 
 /** One problem found in an instance. */
 export interface ValidationError {
@@ -376,6 +379,19 @@ export function validateInstance(
         error(
           'UNKNOWN_STRATEGY_ID',
           `Choice ${index} declares strategyId ${JSON.stringify(choice.strategyId)}, which generator ${JSON.stringify(generator.id)} does not declare. Known: ${[...declaredStrategyIds].join(', ') || '(none)'}.`,
+          `choices[${index}].strategyId`,
+        ),
+      );
+    }
+    // Rule 11: the id must also exist in the shared registry. A generator can
+    // declare whatever it likes in its own list; only ids in strategies.ts
+    // aggregate correctly across units, so an unregistered one is a hole in the
+    // reporting rather than a harmless local name.
+    if (!isRegisteredStrategy(choice.strategyId)) {
+      findings.push(
+        error(
+          'UNREGISTERED_STRATEGY',
+          `Choice ${index} uses strategyId ${JSON.stringify(choice.strategyId)}, which is not in the shared registry. Add it to strategies.ts so per-misconception reporting can aggregate it across generators.`,
           `choices[${index}].strategyId`,
         ),
       );

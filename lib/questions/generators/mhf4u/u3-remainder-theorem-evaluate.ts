@@ -13,6 +13,7 @@ import { createRng, type Rng } from '../../rng.ts';
 import { type Rational, equals, fromInt, isZero, toLatex } from '../../rational.ts';
 import { isTriviallyDistinguishable } from '../../equivalence.ts';
 import { qRational } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import {
   polyEval,
   polyFromDescending,
@@ -20,7 +21,7 @@ import {
   renderPoly,
   type Poly,
 } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-remainder-theorem-evaluate';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
@@ -60,22 +61,16 @@ export interface RemainderParams {
  */
 export const FALLBACK_PARAMS: RemainderParams = { r: 2, a: 3, b: -5, c: 4 };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    // Shared with u3-factor-theorem-find-k: the same misconception, so the same
-    // id, so per-misconception diagnostics aggregate across both generators.
-    id: 'sign_error_on_root',
-    label: 'Substituted x = -r instead of x = r',
-  },
-  {
-    id: 'arithmetic_sign_slip',
-    label: 'Right method, one sign dropped while evaluating',
-  },
-  {
-    id: 'remainder_read_off_constant_term',
-    label: 'Reported the constant term as the remainder without substituting',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'sign_error_on_root',
+  'arithmetic_sign_slip',
+  'remainder_read_off_constant_term',
+);
 
 /** `f(x) = x^3 + ax^2 + bx + c` as a `Poly`. */
 export function buildPolynomial(params: RemainderParams): Poly {

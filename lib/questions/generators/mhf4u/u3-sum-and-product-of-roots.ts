@@ -19,8 +19,9 @@ import { createRng, type Rng } from '../../rng.ts';
 import { type Rational, div, equals, fromInt, isZero, neg, toLatex } from '../../rational.ts';
 import { isTriviallyDistinguishable } from '../../equivalence.ts';
 import { qRational } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import { polyFromDescending, renderPoly } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-sum-and-product-of-roots';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
@@ -45,20 +46,16 @@ export interface RootsRelationParams {
 /** 2x^3 - 5x^2 + 4x - 6 = 0, asking for the sum: -(-5)/2 = 5/2. */
 export const FALLBACK_PARAMS: RootsRelationParams = { a: 2, b: -5, c: 4, d: -6, mode: 'sum' };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    id: 'dropped_the_negation_in_the_root_relation',
-    label: 'Remembered the relation without its minus sign',
-  },
-  {
-    id: 'ignored_the_leading_coefficient',
-    label: 'Used the coefficient directly, as though the leading coefficient were 1',
-  },
-  {
-    id: 'used_the_wrong_coefficient',
-    label: 'Reached for the x coefficient instead of the right one',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'dropped_the_negation_in_the_root_relation',
+  'ignored_the_leading_coefficient',
+  'used_the_wrong_coefficient',
+);
 
 /** The correct value for the mode being asked. */
 export function solveRelation(params: RootsRelationParams): Rational {

@@ -21,6 +21,7 @@
 import { createRng, type Rng } from '../../rng.ts';
 import { fromInt, isZero } from '../../rational.ts';
 import { qOpaque } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import {
   integerDivisors,
   polyEval,
@@ -29,7 +30,7 @@ import {
   renderPoly,
   type Poly,
 } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-factor-theorem-verify-factor';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d1`;
@@ -69,21 +70,16 @@ export const FALLBACK_PARAMS: VerifyFactorParams = {
   coefficientDistractor: -5,
 };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    // Shared id: the same misconception as in the other Unit 3 generators.
-    id: 'sign_error_on_root',
-    label: 'Flipped the sign of the binomial, testing x = -r instead of x = r',
-  },
-  {
-    id: 'picked_rational_root_candidate_without_testing',
-    label: 'Chose a divisor of the constant term without substituting to check it',
-  },
-  {
-    id: 'lifted_coefficient_from_the_question',
-    label: 'Used a number visible in the polynomial as though it were a root',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'sign_error_on_root',
+  'picked_rational_root_candidate_without_testing',
+  'lifted_coefficient_from_the_question',
+);
 
 /** The cubic, expanded from its roots so the roots are exact by construction. */
 export function buildPolynomial(params: VerifyFactorParams): Poly {

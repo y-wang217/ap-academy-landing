@@ -13,8 +13,9 @@
 import { createRng, type Rng } from '../../rng.ts';
 import { fromInt } from '../../rational.ts';
 import { qInt, qSet, toLatex as valueToLatex, valuesEqual, type QValue } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import { polyFromRoots, renderFactoredForm, renderPoly, type Poly } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-solve-polynomial-equation-factorable';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
@@ -31,20 +32,16 @@ export interface SolveEquationParams {
 /** Roots 1, -2, 3 give x^3 - 2x^2 - 5x + 6 = 0. */
 export const FALLBACK_PARAMS: SolveEquationParams = { roots: [1, -2, 3] };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    id: 'sign_error_on_root',
-    label: 'Read the bracket constants off as the roots without flipping their signs',
-  },
-  {
-    id: 'dropped_a_root',
-    label: 'Stopped after finding two roots and never solved the remaining factor',
-  },
-  {
-    id: 'reported_factor_constants_not_roots',
-    label: 'Reported the constants inside the factors rather than the values of x',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'sign_error_on_root',
+  'dropped_a_root',
+  'reported_factor_constants_not_roots',
+);
 
 export function buildPolynomial(params: SolveEquationParams): Poly {
   return polyFromRoots(params.roots.map((root) => fromInt(root)));

@@ -18,8 +18,9 @@
 import { createRng, type Rng } from '../../rng.ts';
 import { fromInt } from '../../rational.ts';
 import { qOpaque } from '../../value.ts';
+import { strategiesFor } from '../../strategies.ts';
 import { renderFactoredForm } from '../shared/polynomial.ts';
-import type { Choice, DistractorStrategy, Generator, QuestionInstance } from '../../types.ts';
+import type { Choice, Generator, QuestionInstance } from '../../types.ts';
 
 const PROBLEM_TYPE_ID = 'mhf4u-u3-solve-polynomial-inequality-factored';
 const GENERATOR_ID = `${PROBLEM_TYPE_ID}-d2`;
@@ -73,20 +74,16 @@ export interface InequalityParams {
 /** (x + 2)(x - 1)(x - 3) <= 0. */
 export const FALLBACK_PARAMS: InequalityParams = { roots: [-2, 1, 3], direction: 'le' };
 
-const STRATEGIES: DistractorStrategy[] = [
-  {
-    id: 'solved_for_the_opposite_sign',
-    label: 'Read the intervals where the polynomial has the other sign',
-  },
-  {
-    id: 'wrong_bracket_type_on_endpoints',
-    label: 'Used the wrong bracket type for a strict or inclusive inequality',
-  },
-  {
-    id: 'treated_cubic_like_a_quadratic',
-    label: 'Gave a single interval between the outer roots, as for a quadratic',
-  },
-];
+/**
+ * The misconceptions this generator expresses, from the shared registry in
+ * `strategies.ts`. Declaring ids inline would let the same mistake acquire a
+ * different name in every unit, which fragments per-misconception reporting.
+ */
+const STRATEGIES = strategiesFor(
+  'solved_for_the_opposite_sign',
+  'wrong_bracket_type_on_endpoints',
+  'treated_cubic_like_a_quadratic',
+);
 
 /** `-\infty` and `\infty` bounds render specially; finite ones are plain integers. */
 function renderInterval(
