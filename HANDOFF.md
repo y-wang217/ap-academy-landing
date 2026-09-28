@@ -632,3 +632,314 @@ Tomorrow morning, with an extracted bank in hand. About ten minutes.
 10. **Commit the edited `mhf4u.ts`** with a note saying which textbook sections
     the confirmations came from, so the next reconciliation knows what has already
     been checked.
+
+---
+
+## Session C: Lesson engine
+
+Built the headless lesson engine under `lib/lesson/`, one real lesson under
+`content/lessons/`, and the gates around both. A scripted student plays Watch,
+Together and Solo of MHF4U Unit 3 under `node --test` with no DOM, no React,
+no Supabase, no video. Stage 0 of `docs/spec/ap-academy-diy-build-spec.md`;
+prompt at `docs/spec/stage-0-lesson-engine.md`.
+
+**Status: green.** `npm run build`, `npm run test:questions` (322 tests),
+`npm run test:lesson` (52 tests), `npm run verify:questions`, and
+`npm run validate:lessons` all pass. No new dependencies. No route, no
+component, no table, no video.
+
+### Commands added
+
+```bash
+npm run test:lesson        # 52 tests, under a second
+npm run validate:lessons   # every lesson under content/lessons/, exit 1 on a fatal
+```
+
+`validate:lessons` also runs on `prebuild`, after `validate-sat-words.mjs`, so
+a generator change that drifts a recorded worked set fails the build.
+
+`npm run test:lesson`, verbatim (summary lines; the full TAP is 52 `ok`):
+
+```
+ok 1 - lib/lesson imports only from lib/questions, node builtins and itself
+ok 2 - the boundary check actually catches each forbidden import
+ok 3 - relative imports are resolved from the importing file, not string-matched
+ok 4 - only test files may import the shipped lessons
+ok 5 - rational: 1/2 equals 0.5 equals 2/4
+ok 6 - rational: 0.333 does not equal 1/3
+ok 7 - rational: integers, negatives, and sign errors
+ok 8 - rational: rejects what it cannot parse rather than throwing
+ok 9 - parseRationalEntry: decimal places are exact, not float
+ok 10 - choice: compares an index
+ok 11 - exact: compares after whitespace normalization only
+ok 12 - exact: a run of spaces collapses to one space, so "a  b" equals "a b"
+ok 13 - checkAnswer: the index of the correct choice, and nothing else
+ok 14 - lib/lesson and lib/questions contain no calls to the banned global RNG
+ok 15 - Watch emits no attempts and returns
+ok 16 - 'done' straight away plays nothing
+ok 17 - Together, played perfectly: one correct attempt per blank, every step revealed in order
+ok 18 - Together, wrong once then right: the hint is shown, two attempts on that step
+ok 19 - Together, wrong twice: two wrong attempts, then the script moves on
+ok 20 - Together checks blanks with the real checker: 0.5-style equivalents pass
+ok 21 - Solo at three fixed seeds: attempts carry those seeds and the right correct flags
+ok 22 - Solo does not touch the worked-set seed
+ok 23 - the same policy run twice produces identical attempt lists
+ok 24 - Solo throws on an unregistered generator rather than guessing
+ok 25 - no attempts: empty progress, not zeros
+ok 26 - Together attempts do not change progress
+ok 27 - Solo attempts count, and the last one sets correctAtLast
+ok 28 - Together attempts mixed in are ignored, not counted
+ok 29 - progress is per problem type
+ok 30 - the progress shape carries exactly two fields and no score
+ok 31 - the shipped Unit 3 lesson has zero fatal findings
+ok 32 - the shipped lesson has no warnings either: map and set agree
+ok 33 - the shipped lesson lists all 15 Unit 3 problem types, one built
+ok 34 - the shipped script has 4 to 6 steps, at least 3 with blanks
+ok 35 - fatal: unknown problem type on the test map
+ok 36 - fatal: unknown problem type in the worked set
+ok 37 - fatal: a built test-map entry with no registered generator
+ok 38 - fatal: a worked-set entry naming an unregistered generator
+ok 39 - fatal: stem drift, the content-hash rule, names the problem type
+ok 40 - fatal: a changed seed is also stem drift
+ok 41 - fatal: a script with zero blanks
+ok 42 - fatal: an exact blank whose answer is empty
+ok 43 - fatal: a choice blank whose answer index is out of range
+ok 44 - fatal: a choice blank with no options
+ok 45 - fatal: a rational blank with no answer
+ok 46 - fatal: duplicate step ids
+ok 47 - fatal: empty hint, prompt, say, title
+ok 48 - fatal: unknown course or unit
+ok 49 - validateLesson never throws, even when a generator would
+ok 50 - warning: a built test-map entry with no worked-set entry
+ok 51 - warning: a worked-set entry not on the test map
+ok 52 - a valid rational blank passes
+# tests 52
+# pass 52
+# fail 0
+```
+
+`npm run validate:lessons`, verbatim:
+
+```
+mhf4u-u3-polynomial-equations.ts  PASS  (mhf4u-u3-polynomial-equations: 1 worked, 15 on the test map, 0 fatal, 0 warn)
+
+PASS — 1 lesson validated, 0 warnings.
+```
+
+`npm run test:questions`: `# tests 322 / # pass 322 / # fail 0`. Unchanged
+from Session B except that the no-`Math.random` scan now also runs from
+`lib/lesson/`.
+
+`npm run verify:questions`, verbatim (unchanged from Session B):
+
+```
+mhf4u-u3-factor-theorem-find-k-d2  PASS    500/500  475 (95.0%)  A:125 B:140 C:123 D:112  0 fatal, 0 warn
+
+PASS — 1 generator verified, 0 warnings.
+```
+
+`npm run build`: see "Build output" at the end of this section.
+
+### Files shipped
+
+| File | What it is |
+|---|---|
+| `lib/lesson/types.ts` | **The contract.** `Lesson`, `TestMap`, `TestMapEntry`, `WorkedSetEntry`, `StepScript`, `Step`, `Blank`, `Mode`, `Attempt`, `LessonProgress`, `StudentPolicy`. TSDoc on every export. |
+| `lib/lesson/tuning.ts` | `TOGETHER_TRIES_BEFORE_REVEAL = 2`, `FREE_SOLO_SETS_PER_DAY = 1` (unused until Stage 2), `MAX_DECIMAL_PLACES = 3`. |
+| `lib/lesson/check.ts` | `checkBlank`, `checkAnswer`, `parseRationalEntry`. On top of `equivalence.ts` and `rational.ts`. |
+| `lib/lesson/play.ts` | `playLesson(lesson, policy)`. The one loop for all three modes. |
+| `lib/lesson/progress.ts` | `progressFrom(attempts)`. Pure. |
+| `lib/lesson/validate.ts` | `validateLesson(lesson): Finding[]`, `fatalFindings`. Seven fatal codes, two warning codes. |
+| `lib/lesson/cli/validate-lessons.ts` | The `validate:lessons` CLI. Discovers lesson files by directory scan. |
+| `lib/lesson/boundaries.test.ts` | Reads every file under `lib/lesson/`, fails on React, `next/*`, `@supabase/*`, `app/`, `components/`, or a relative import that leaves `lib/lesson` and `lib/questions`. Self-tests its own catches. |
+| `lib/lesson/no-math-random.test.ts` | Sibling of the `lib/questions/` scan; this one covers **both** directories. |
+| `lib/lesson/{check,play,progress,validate}.test.ts` | 48 further tests. |
+| `content/lessons/mhf4u-u3-polynomial-equations.ts` | The lesson. Test map of all 15 Unit 3 types, one `built`; one worked-set entry at seed 0 with a five-step script. |
+| `docs/spec/ap-academy-diy-build-spec.md` | The founding spec, verbatim. |
+| `docs/spec/stage-0-lesson-engine.md` | This stage's prompt, verbatim. |
+| `CLAUDE.md` | New `## /learn and lib/lesson` section: the five invariants, in the prompt's wording. |
+| `package.json` | `test:lesson`, `validate:lessons`; `prebuild` runs the latter. |
+
+### The step script format
+
+A `WorkedSetEntry` is one fixed question plus its solution as steps. Each
+`Step` has a permanent `id`, a `say` (what appears when the step is revealed,
+LaTeX without `$`, tutor voice), and optionally a `Blank`. A step with no blank
+is narration. A blank has a `prompt`, a `hint` (shown after the first wrong
+entry), and one of three `kind`s: `rational` (answer is a `Rational`),
+`choice` (answer is an index into `options`), `exact` (answer is a string
+compared after whitespace normalization).
+
+Together mode reveals steps in order. At a blank the student enters something;
+wrong once shows the hint and gives one more try; wrong twice reveals the
+answer and moves on. Every entry is an `Attempt` with the step's id.
+
+The shipped script, as a student reads it in Together mode. Generator
+`mhf4u-u3-factor-theorem-find-k-d2`, seed 0 (r = -3, a = 1, b = 2, k = 24):
+
+> **Given that (x + 3) divides f(x) = x^3 + x^2 + 2x + k exactly, determine k.**
+>
+> **Step 1.** Start with what the word "factor" buys you. If (x + 3) is a
+> factor of f(x), then f(x) comes out to exactly zero at the root of that
+> factor. That is the factor theorem, and it is the whole question. Everything
+> after this is arithmetic.
+> *Blank:* What value of x makes (x + 3) equal to zero? `[ ]`
+> *Hint (after one wrong entry):* Set the factor itself to zero: x + 3 = 0. Watch the sign.
+> *Answer (after two):* -3
+>
+> **Step 2.** So substitute x = -3 into f(x) = x^3 + x^2 + 2x + k and set the
+> result equal to zero: (-3)^3 + (1)(-3)^2 + (2)(-3) + k = 0.
+> *(narration, no blank)*
+>
+> **Step 3.** Work the three known terms one at a time. (-3)^3 = -27. Then
+> (1)(-3)^2 = 9. And (2)(-3) = -6.
+> *Blank:* Add them up: -27 + 9 + (-6) = ? `[ ]`
+> *Hint:* Two negatives and one positive. -27 + 9 is -18, then take away 6 more.
+> *Answer:* -24
+>
+> **Step 4.** So the equation is now -24 + k = 0. Move the -24 across the
+> equals sign.
+> *Blank:* k = ? `[ ]`
+> *Hint:* Moving -24 to the other side flips its sign. You are solving for k, not reporting the -24.
+> *Answer:* 24
+>
+> **Step 5.** Check it back. Having (x + 3) as a factor means f(-3) is exactly
+> zero, so put k = 24 into what you already computed.
+> *Blank:* With k = 24, f(-3) = -24 + 24 = ?  `( ) 0   ( ) 24   ( ) -24   ( ) 48`
+> *Hint:* You already found the first three terms add to -24. Add k to that.
+> *Answer:* 0
+
+Steps 1, 3 and 4 each target one of the generator's three named
+misconceptions (`sign_error_on_root`, `arithmetic_sign_slip`,
+`solved_for_wrong_variable`), so a student who would pick the wrong option in
+Solo meets the same mistake as a blank in Together first.
+
+### What `check.ts` accepts and rejects
+
+| kind | entry | verdict | why |
+|---|---|---|---|
+| rational | `24`, `+24`, `024` | integer, exact | |
+| rational | `-24`, `-24.0`, `-48/2` | equals -24 | fraction and decimal parse to the same `Rational` |
+| rational | `1/2`, `0.5`, `.5`, `2/4`, `0.500`, ` 1 / 2 ` | all equal 1/2 | `areEquivalent` on reduced form |
+| rational | `0.333` against 1/3 | **wrong** | 333/1000 is not 1/3; no tolerance |
+| rational | `0.3333`, `0.1234` | **wrong** | more than `MAX_DECIMAL_PLACES` (3) |
+| rational | `1/0` | **wrong** | zero denominator |
+| rational | `\frac{1}{2}`, `1 1/2`, `1e3`, `2x`, `abc`, `.`, empty | **wrong** | not an accepted form; never throws |
+| choice | `2` when answer is 2 | right | index comparison |
+| choice | `-24` when option 2 reads `-24` | **wrong** | the entry is the index, not the option text |
+| choice | `B`, empty, out of range | **wrong** | |
+| exact | `\frac{1}{2}`, `  \frac{1}{2}  ` | equals `\frac{1}{2}` | trim and collapse whitespace runs |
+| exact | `0.5`, `\frac{2}{4}` against `\frac{1}{2}` | **wrong** | no value-level equivalence on `exact` |
+| exact | `x=2` against `x = 2` | **wrong** | whitespace is collapsed, not deleted (same rule as `areLatexIdentical`) |
+| Solo (`checkAnswer`) | the index of the correct choice | right | |
+| Solo (`checkAnswer`) | option text, empty, out of range | **wrong** | |
+
+Not accepted anywhere: free-form algebra, mixed numbers, percentages, LaTeX in
+a rational blank. A step whose answer would need any of those is narration.
+
+### Deviations from the prompt, dated
+
+All 2026-09-28.
+
+1. **`Blank` is a discriminated union, not `kind` beside a loose `answer`.**
+   Approved at Stop 1. A `rational` blank cannot carry a string answer and
+   `checkBlank` cannot reach the wrong arm.
+2. **`choice` blanks carry `options: LatexString[]`.** Approved at Stop 1. An
+   index needs something to index into; the prompt's sketch did not name it.
+3. **`Attempt.at` is a 0-based position in the session, not a timestamp.**
+   Approved at Stop 1. `lib/lesson/` has no clock, and the prompt's own test
+   requires two runs of the same policy to produce identical attempt lists.
+   Stage 2 stamps wall time when it stores.
+4. **`StudentPolicy.reveal?(step)` added.** Approved at Stop 1. Optional; the
+   Stage 1 UI needs to be told about narration steps through the same loop.
+   Tests use it to assert reveal order.
+5. **`checkAnswer` takes the index of the chosen option, not a typed value.**
+   Every generator produces four-option multiple choice and `Choice.value` is
+   the generator's, so Solo answers by index, entered as a string exactly like
+   a `choice` blank. Typed numeric answers against `choices[i].value` are an
+   addition for when a generator is not multiple choice, not a different
+   function.
+6. **Test files under `lib/lesson/` may import `content/lessons/`.** The
+   invariant says `lib/lesson/` imports from `lib/questions/` only. The
+   prompt also requires `validate.test.ts` to prove the shipped lesson passes
+   and `play.test.ts` to play it, which is impossible without importing it.
+   `boundaries.test.ts` allows `../../content/lessons/` from `*.test.ts` only
+   and has a test asserting a source file cannot do the same.
+7. **`no-math-random` is a sibling test, not an extension.** The
+   `lib/lesson/` copy scans both directories, so one test covers both as the
+   invariant requires. The `lib/questions/` original is untouched.
+8. **`MAX_DECIMAL_PLACES` added to `tuning.ts`.** The prompt fixes "at most 3
+   places" in prose; a number a tuning pass could touch goes in `tuning.ts`.
+9. **`validate.ts` has more fatal codes than the prompt lists.** `UNKNOWN_UNIT`,
+   `UNKNOWN_COURSE` and `EMPTY_FIELD` in addition to the six named. A lesson
+   claiming a unit that does not exist is as broken as one claiming a problem
+   type that does not exist.
+10. **No second generator.** The set mechanics (ordered entries, per-entry seed
+    and script, Solo iterating entries at fresh seeds) are proved with one
+    entry plus fixtures. A second generator would have been an hour of
+    generator work to prove nothing the tests do not already prove.
+
+### What Stage 1 needs
+
+Fields in `content/lessons/mhf4u-u3-polynomial-equations.ts` Charlie fills by
+hand, from the prose test map (spec section 10):
+
+- `testMap.summary`: the placeholder paragraph, replaced with the half-page.
+- `testMap.entries[*].typicalMarks`: all 15 are `0`.
+- `testMap.entries[*].traps`: all 15 are `[]`. One to three each.
+- `videoRef`: `null` until the seed 0 question is recorded. Once it is,
+  `{ kind: 'youtube', id: '...' }`, and the seed is frozen for good.
+
+Things the engine could not decide:
+
+- **The Solo entry format in the browser.** `checkAnswer` takes an option
+  index because every generator is four-option multiple choice. If Stage 1
+  wants a typed box instead of four buttons, it needs a `checkAnswer` arm
+  that parses against `choices[i].value` (a `QValue`, not only a `Rational`).
+  Not built.
+- **Whether narration steps need their own "next" click.** `reveal(step)` is
+  called for every step; the UI decides whether narration auto-advances.
+- **Vercel's Node version.** `validate:lessons` runs on `prebuild` and needs
+  Node 22.6+ type stripping, which is what the container has (22.22.2). If the
+  Vercel project pins an older Node, the build fails at `prebuild` with a
+  syntax error on the first `.ts` import; the fix is the project's Node
+  setting, not the script.
+- **Together records attempts against the worked-set seed.** That is by
+  design (the seed identifies the question), but Stage 2's `lesson_attempts`
+  table should expect many rows sharing `(generatorId, seed)` with different
+  `stepId`s.
+- **The 14 `coming` types have no generators.** `coverage:questions` is the
+  work queue, exactly as before. Nothing in Stage 1 depends on them beyond
+  rendering the test map.
+
+### Build output
+
+`npm run build`, verbatim (trimmed to the parts this session touches):
+
+```
+> ap-academy-landing@0.1.0 prebuild
+> node scripts/validate-sat-words.mjs && npm run validate:lessons
+
+sat-words.json OK — 991 entries, 252 v, 266 n, 472 adj, 1 adv, 12 twin-guarded words.
+
+> ap-academy-landing@0.1.0 validate:lessons
+> node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/lesson/cli/validate-lessons.ts
+
+mhf4u-u3-polynomial-equations.ts  PASS  (mhf4u-u3-polynomial-equations: 1 worked, 15 on the test map, 0 fatal, 0 warn)
+
+PASS — 1 lesson validated, 0 warnings.
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 5.5s
+  Running TypeScript ...
+✓ Generating static pages using 3 workers (19/19) in 410.4ms
+```
+
+Exit 0. No new route appears, as intended.
+
+**Lint.** `npx eslint lib/lesson content/lessons` exits 0. `npm run lint` on
+the whole repo exits 1 with 17 pre-existing `react/no-unescaped-entities`
+errors in `app/how-it-works/page.tsx` and `app/privacy/page.tsx`, plus two
+warnings. None are in files this branch touches (`git diff origin/main --
+app/` is empty). They predate Session A and are left alone: fixing copy pages
+is outside a headless engine stage.
