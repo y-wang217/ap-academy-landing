@@ -80,6 +80,16 @@ Supabase magic-link auth, CASL consent capture, and attempt logging.
 - Phase 3 (dashboard, study sheet) is specced but not built — do not build it
   speculatively. Build it only once Phase 2 shows real signups.
 
+## /learn and lib/lesson
+Founding spec: `docs/spec/ap-academy-diy-build-spec.md`. Stage prompts live beside
+it in `docs/spec/`, committed verbatim before work begins.
+
+- `lib/lesson/` imports from `lib/questions/` only. Never from `app/`, never React, never `next/*`, never `@supabase/*`. Asserted by `lib/lesson/boundaries.test.ts`, which reads every file under `lib/lesson/` and fails on a forbidden import.
+- `Math.random` is banned in `lib/lesson/`. Extend `lib/questions/no-math-random.test.ts` to scan `lib/lesson/` too, or add a sibling test; either way one test covers both directories.
+- Lesson ids, worked-set entries and step ids are permanent once written.
+- A worked set stores the seed and the stem it produced. Validation regenerates from the seed and fails, naming the problem type, if the stem differs.
+- Every tunable number lives in `lib/lesson/tuning.ts`.
+
 ## Configuration
 All configurable values are in `app/config.ts`:
 - `STRIPE_DEPOSIT_LINK` — $70 Stripe Payment Link URL
