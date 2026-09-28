@@ -48,6 +48,7 @@ is entirely client-side — no backend, no accounts, no new dependencies.
 ### Phase 2 — accounts (built, not switched on)
 Supabase magic-link auth, CASL consent capture, and attempt logging.
 
+- Setup runbook: `docs/supabase-setup.md`. Connection check: `npm run check:supabase`.
 - Env vars in `.env.example`. **Unset by default and that is a supported state:**
   `/sat` falls back to Phase 1 behaviour everywhere — do not let any `/sat` code
   path throw or block when Supabase is absent.
