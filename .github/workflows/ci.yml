@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: packages/db
+        run: |
+          pnpm --filter @ap-academy/db typecheck
+          pnpm --filter @ap-academy/db test
+
+      # Landing lint is not gated: main carries 17 pre-existing copy errors.
+      - name: landing
+        run: |
+          pnpm --filter landing test
+          pnpm --filter landing build
+
+      - name: tracker
+        run: |
+          pnpm --filter tracker lint
+          pnpm --filter tracker typecheck
+          pnpm --filter tracker test
+          pnpm --filter tracker build
+
+      # The runner image ships PostgreSQL server binaries.
+      - name: RLS
+        run: pnpm test:rls

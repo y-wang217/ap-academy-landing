@@ -13,7 +13,7 @@ Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 | path | what | notes |
 |---|---|---|
 | `apps/landing` | marketing site, `/sat`, `/learn` engine, `/login`, `/auth/callback` | [`apps/landing/CLAUDE.md`](apps/landing/CLAUDE.md). Owns the domain. Tests run on `node --test`. |
-| `apps/tracker` | Student Tracker, served at `/tracker` | [`apps/tracker/CLAUDE.md`](apps/tracker/CLAUDE.md). `basePath: '/tracker'`. Vitest. |
+| `apps/tracker` | Student Tracker, served at `/tracker` | [`apps/tracker/CLAUDE.md`](apps/tracker/CLAUDE.md). `basePath: '/tracker'`, session check in `proxy.ts`. Vitest. |
 | `packages/db` | shared Supabase client helpers and types | Imported as TypeScript source; each app lists it in `transpilePackages`. |
 | `supabase/` | the single migrations folder for the one shared Supabase project | RLS tests in `supabase/tests/`. |
 | `docs/adr/` | workspace-level decisions | App-level decisions live inside each app. |
@@ -63,7 +63,12 @@ pnpm --filter landing test   # node --test, lib/questions and lib/lesson
 pnpm --filter tracker test   # vitest
 pnpm --filter @ap-academy/db test
 pnpm test:rls                # RLS tests against a throwaway local Postgres
+pnpm test:sso                # single-domain SSO acceptance checks in Chromium
 ```
+
+`test:rls` needs Postgres server binaries (no Docker). `test:sso` builds both
+apps against a mock Supabase and needs a global Playwright install; it deletes
+those builds when it finishes.
 
 Each app's Vercel project sets its Root Directory to `apps/<name>`. For both
 apps on one origin locally, set `TRACKER_URL=http://localhost:3001` in

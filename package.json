@@ -6,6 +6,7 @@
     "dev:landing": "pnpm --filter landing dev",
     "build:landing": "pnpm --filter landing build",
     "test:landing": "pnpm --filter landing test",
-    "test:rls": "bash supabase/tests/run-rls.sh"
+    "test:rls": "bash supabase/tests/run-rls.sh",
+    "test:sso": "bash e2e/sso/run.sh"
   }
 }

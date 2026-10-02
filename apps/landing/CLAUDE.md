@@ -32,6 +32,8 @@ folder at the repo root. Workspace layout: the root `CLAUDE.md`.
 - `/thank-you` — Post-booking confirmation
 - `/sat` — SAT vocabulary flashcards (free, ungated)
 - `/sat/quiz` — SAT multiple-choice quiz (free, ungated)
+- `/login` — the shared sign-in page for every app except SAT
+- `/tracker` — not a landing route: proxied to the tracker app (below)
 
 ## SAT section (`/sat`)
 A second, parallel self-serve product aimed at **students**, not parents. Phase 1
@@ -120,6 +122,27 @@ it in `docs/spec/`, committed verbatim before work begins.
 - Lesson ids, worked-set entries and step ids are permanent once written.
 - A worked set stores the seed and the stem it produced. Validation regenerates from the seed and fails, naming the problem type, if the stem differs.
 - Every tunable number lives in `lib/lesson/tuning.ts`.
+
+## Shared login and the app proxy (ADR 0002)
+Landing owns `www.apacademy.ca`. Other apps are served under it by path.
+
+- `next.config.ts` rewrites `/tracker` and `/tracker/:path*` to
+  `${TRACKER_URL}/tracker...`. `TRACKER_URL` is the tracker's production
+  vercel.app URL, read at build time: change it, redeploy landing. Unset means
+  no rewrite (local dev without the tracker).
+- `next.config.ts` also 308s `ap-academy.online` and `www.ap-academy.online` to
+  `https://www.apacademy.ca`. A second domain would hold its own session.
+- `/login` and `/auth/callback` are the only login surfaces for every app. SAT
+  keeps `/sat/login`, untouched. `/login?next=<path>` honours same-origin paths
+  only (`safeNextPath` in `@ap-academy/db/paths`) and falls back to `/`.
+- The callback sends a failed link back where it came from: `/sat/login` when
+  `next` is under `/sat` or absent (unchanged), `/login` otherwise.
+- `middleware.ts` refreshes the session on `/sat`, `/auth` and `/login`. If a
+  marketing page ever shows signed-in state, add it to the matcher. The
+  marketing pages show none today, by decision.
+- Cookies are host-only. Never pass a cookie `domain` option.
+- New code uses `@ap-academy/db` for Supabase clients. The SAT code keeps its
+  own helpers in `app/sat/supabase/` and is not migrated.
 
 ## Configuration
 All configurable values are in `app/config.ts`:
