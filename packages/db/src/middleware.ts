@@ -42,12 +42,21 @@ export async function updateSession(request: NextRequest): Promise<SessionResult
 }
 
 /**
- * A redirect that keeps any refreshed session cookies. `location` must be a
- * relative path: behind the landing proxy, `request.url` carries this app's own
- * vercel.app host, so an absolute URL built from it would leave the domain.
+ * A redirect that keeps any refreshed session cookies. `location` is a path.
+ *
+ * Behind the landing proxy, `request.url` carries this app's own vercel.app
+ * host, so the browser must receive a relative Location. Next's proxy rejects a
+ * relative Location outright, but it rewrites any same-host absolute Location
+ * to a relative one. So the path is resolved against the request's own origin
+ * here, and leaves Next as just the path.
  */
-export function redirectKeepingCookies(from: NextResponse, location: string): NextResponse {
-  const redirect = new NextResponse(null, { status: 307, headers: { Location: location } });
+export function redirectKeepingCookies(
+  request: NextRequest,
+  from: NextResponse,
+  location: string,
+): NextResponse {
+  const absolute = new URL(location, request.url).toString();
+  const redirect = new NextResponse(null, { status: 307, headers: { Location: absolute } });
   for (const cookie of from.cookies.getAll()) redirect.cookies.set(cookie);
   return redirect;
 }

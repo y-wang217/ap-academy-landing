@@ -7,6 +7,17 @@ function safeNext(value: string | null): string {
   return value;
 }
 
+/**
+ * A failed link goes back to the login page that sent it: /sat/login for SAT
+ * (unchanged), the shared /login for every other app (ADR 0002).
+ */
+function loginPageFor(next: string): string {
+  if (next === "/sat" || next.startsWith("/sat/") || next.startsWith("/sat?")) {
+    return "/sat/login?error=link";
+  }
+  return `/login?error=link&next=${encodeURIComponent(next)}`;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -14,12 +25,12 @@ export async function GET(request: NextRequest) {
 
   const supabase = await getServerClient();
   if (!supabase || !code) {
-    return NextResponse.redirect(`${origin}/sat/login?error=link`);
+    return NextResponse.redirect(`${origin}${loginPageFor(next)}`);
   }
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
-    return NextResponse.redirect(`${origin}/sat/login?error=link`);
+    return NextResponse.redirect(`${origin}${loginPageFor(next)}`);
   }
 
   // Sync consent on every sign-in so a returning user's latest choice wins —

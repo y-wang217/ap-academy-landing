@@ -16,6 +16,7 @@
     "coverage:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/coverage.ts"
   },
   "dependencies": {
+    "@ap-academy/db": "workspace:*",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "lucide-react": "^0.575.0",

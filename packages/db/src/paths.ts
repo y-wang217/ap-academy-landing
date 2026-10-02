@@ -20,7 +20,7 @@ export function safeNextPath(value: string | null | undefined, fallback: string)
 
 /**
  * The root-level login page, outside every app's basePath, carrying the path
- * to come back to. Relative on purpose (see `redirectKeepingCookies`).
+ * to come back to. A path, not a URL (see `redirectKeepingCookies`).
  * Slashes are left readable: `/login?next=/tracker`.
  */
 export function loginPath(next: string): string {
