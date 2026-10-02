@@ -5,7 +5,8 @@
 - **Email:** y.wang217@gmail.com
 - **Calendly:** https://calendly.com/y-wang217/30min
 - **Founder:** Charlie (Waterloo Software Engineering grad)
-- **URL:** https://ap-academy-landing.vercel.app
+- **URL:** https://www.apacademy.ca (apex `apacademy.ca` redirects here; the
+  Vercel project is still reachable at https://ap-academy-landing.vercel.app)
 
 ## Design System
 - Background: #faf9f7 (warm off-white)
@@ -45,10 +46,32 @@ is entirely client-side — no backend, no accounts, no new dependencies.
   the quiz was removed until there is real traffic to gate — don't reintroduce a
   limit (and never a server-enforced one) without being asked.
 
-### Phase 2 — accounts (built, not switched on)
+### Phase 2 — accounts (live since 2026-10-02, not yet promoted)
 Supabase magic-link auth, CASL consent capture, and attempt logging.
 
-- Env vars in `.env.example`. **Unset by default and that is a supported state:**
+- **Live setup.** Supabase project "AP Academy Backend" (ref
+  `lfvyrwzqibunljndsnxk`, org AP Academy, free plan). Both migrations are
+  applied (by hand in the SQL editor, so the migration history is empty).
+  Vercel has `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  (the publishable key) set for Production and Preview.
+- **Auth config (Supabase dashboard).** Site URL `https://www.apacademy.ca`.
+  Redirect allow-list: `https://www.apacademy.ca/**`,
+  `https://ap-academy-landing.vercel.app/**`,
+  `https://ap-academy-landing-*-charlies-projects-9b525b67.vercel.app/**`,
+  `http://localhost:3000/**`. The magic link returns to whichever origin the
+  student signed in from, so every served domain must be on that list.
+- **Email.** Custom SMTP through Resend, sending as
+  `AP Academy <no-reply@auth.apacademy.ca>` (a subdomain kept separate from any
+  future marketing mail). DNS is on Vercel; SPF and DKIM pass. Resend free plan
+  is 100 emails/day; the Supabase auth email rate limit is 30/hour.
+- **Verified end to end on 2026-10-02:** sign-up email delivered to inbox, link
+  returned to `/auth/callback`, profile row created by the trigger with
+  `marketing_consent` and `consent_timestamp` recorded.
+- The link uses PKCE, so it only works in the browser that requested it. A
+  student who opens it on another device lands on `/sat/login?error=link`.
+- Free-plan projects pause after about a week without traffic. If sign-in
+  suddenly fails, check the project is not paused before debugging code.
+- Env vars in `.env.example`. **Unset is still a supported state:**
   `/sat` falls back to Phase 1 behaviour everywhere — do not let any `/sat` code
   path throw or block when Supabase is absent.
 - Schema and RLS live in `supabase/migrations/0001_sat_accounts.sql`. Apply it
@@ -68,15 +91,19 @@ Supabase magic-link auth, CASL consent capture, and attempt logging.
 - **14 entries are still unverified:** `pretense` through `propriety`. The source
   PDF supplied for verification had that page removed. Everything else in the
   991 has been diffed against the PDF and matches.
-- **Before switching accounts on:** create the Supabase project, apply the
-  migration, set the env vars, and configure the auth email template. CASL
-  requires every commercial message to carry an unsubscribe link and a physical
-  mailing address — the sign-in email itself is transactional, but the marketing
-  list built from `marketing_consent` must honour both.
-- **Under-16 parental consent is unresolved.** These are minors in Canada; confirm
-  whether a parental-consent path is required before promoting sign-up.
-- **Where do captured emails go?** Manual export to the Google Sheets CRM, or
-  automated. Not decided.
+- **Deferred until sign-up is promoted to a mass audience** (accounts are live
+  but not advertised; do not chase these before then):
+  - **DMARC record missing.** Add TXT `_dmarc` = `v=DMARC1; p=none;` on
+    apacademy.ca in Vercel DNS before any real sending volume.
+  - **Under-16 parental consent is unresolved.** These are minors in Canada;
+    confirm whether a parental-consent path is required.
+  - **CASL on marketing mail.** Every commercial message needs an unsubscribe
+    link and a physical mailing address. Sign-in emails are transactional and
+    exempt; the marketing list built from `marketing_consent` is not.
+  - **Where do captured emails go?** Manual export to the Google Sheets CRM, or
+    automated. Not decided.
+  - **Auth email copy** is still Supabase's default wording. Works; optional.
+  - **Non-team delivery** has not been tested with a real outside address yet.
 - Phase 3 (dashboard, study sheet) is specced but not built — do not build it
   speculatively. Build it only once Phase 2 shows real signups.
 
