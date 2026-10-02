@@ -5,6 +5,7 @@
   "scripts": {
     "dev:landing": "pnpm --filter landing dev",
     "build:landing": "pnpm --filter landing build",
-    "test:landing": "pnpm --filter landing test"
+    "test:landing": "pnpm --filter landing test",
+    "test:rls": "bash supabase/tests/run-rls.sh"
   }
 }
