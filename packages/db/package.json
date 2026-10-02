@@ -1,0 +1,30 @@
+{
+  "name": "@ap-academy/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared Supabase client helpers and database types for every AP Academy app.",
+  "exports": {
+    "./config": "./src/config.ts",
+    "./browser": "./src/browser.ts",
+    "./server": "./src/server.ts",
+    "./middleware": "./src/middleware.ts",
+    "./paths": "./src/paths.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.3"
+  },
+  "peerDependencies": {
+    "next": "16.1.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "next": "16.1.6",
+    "typescript": "^5"
+  }
+}

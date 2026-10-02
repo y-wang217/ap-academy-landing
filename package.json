@@ -1,35 +1,12 @@
 {
-  "name": "ap-academy-landing",
-  "version": "0.1.0",
+  "name": "ap-academy",
   "private": true,
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "dev": "next dev",
-    "prebuild": "node scripts/validate-sat-words.mjs && npm run validate:lessons",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "test:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/questions/**/*.test.ts\"",
-    "test:lesson": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/lesson/**/*.test.ts\"",
-    "validate:lessons": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/lesson/cli/validate-lessons.ts",
-    "verify:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/verify.ts",
-    "coverage:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/questions/cli/coverage.ts"
-  },
-  "dependencies": {
-    "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.112.3",
-    "lucide-react": "^0.575.0",
-    "next": "16.1.6",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "dev:landing": "pnpm --filter landing dev",
+    "build:landing": "pnpm --filter landing build",
+    "test:landing": "pnpm --filter landing test",
+    "test:rls": "bash supabase/tests/run-rls.sh",
+    "test:sso": "bash e2e/sso/run.sh"
   }
 }

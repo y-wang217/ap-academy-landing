@@ -5,7 +5,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
 /**
- * Refreshes the Supabase session cookie on /sat and /auth requests. No-ops
+ * Refreshes the Supabase session cookie on /sat, /auth and /login. No-ops
  * entirely when Supabase isn't configured, so the site runs without it.
  */
 export async function middleware(request: NextRequest) {
@@ -37,5 +37,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/sat/:path*", "/auth/:path*"],
+  matcher: ["/sat/:path*", "/auth/:path*", "/login"],
 };
