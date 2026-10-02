@@ -1,17 +1,21 @@
 # AP Academy workspace
 
-A pnpm workspace. Why it is shaped this way, and what would make us revisit it:
-[`docs/adr/0001-monorepo-shared-identity.md`](docs/adr/0001-monorepo-shared-identity.md).
+A pnpm workspace. Every app is served from one domain, `https://www.apacademy.ca`,
+routed by path. Why, and what would make us revisit it:
+[`docs/adr/0001-monorepo-shared-identity.md`](docs/adr/0001-monorepo-shared-identity.md)
+and [`docs/adr/0002-single-domain-path-routing.md`](docs/adr/0002-single-domain-path-routing.md),
+which supersedes parts of 0001. The done state they describe:
+[`docs/spec/single-domain-done-state.md`](docs/spec/single-domain-done-state.md).
 Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 
 ## Layout
 
 | path | what | notes |
 |---|---|---|
-| `apps/landing` | marketing site, `/sat`, `/learn` engine | [`apps/landing/CLAUDE.md`](apps/landing/CLAUDE.md). Tests run on `node --test`. |
-| `apps/tracker` | Student Tracker | Only its prompts exist so far (`apps/tracker/docs/spec/`). Vitest and Zod, as its own deps. |
-| `packages/db` | shared Supabase client and generated types | Not created yet. |
-| `supabase/` | the single migrations folder for the one shared Supabase project | |
+| `apps/landing` | marketing site, `/sat`, `/learn` engine, `/login`, `/auth/callback` | [`apps/landing/CLAUDE.md`](apps/landing/CLAUDE.md). Owns the domain. Tests run on `node --test`. |
+| `apps/tracker` | Student Tracker, served at `/tracker` | [`apps/tracker/CLAUDE.md`](apps/tracker/CLAUDE.md). `basePath: '/tracker'`. Vitest. |
+| `packages/db` | shared Supabase client helpers and types | Imported as TypeScript source; each app lists it in `transpilePackages`. |
+| `supabase/` | the single migrations folder for the one shared Supabase project | RLS tests in `supabase/tests/`. |
 | `docs/adr/` | workspace-level decisions | App-level decisions live inside each app. |
 | `docs/spec/` | workspace-level prompts, committed verbatim before work begins | |
 
@@ -20,23 +24,30 @@ Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 | work | where |
 |---|---|
 | marketing pages, enrollment, privacy | `apps/landing` |
-| SAT flashcards, quiz, SAT accounts | `apps/landing/app/sat` (SAT is a route of the landing app, served at `www.apacademy.ca/sat`) |
+| SAT flashcards, quiz, SAT accounts | `apps/landing/app/sat` (SAT is a route of the landing app) |
 | `/learn` lesson engine, question generators | `apps/landing/lib/lesson`, `apps/landing/lib/questions` |
+| login, sign-in emails, the auth callback | `apps/landing/app/login`, `apps/landing/app/auth` |
 | Student Tracker | `apps/tracker` |
-| a new product | a new folder under `apps/`, plus its own Postgres schema |
+| a new product | a new folder under `apps/`, with its own `basePath`, two rewrite lines in landing, and its own Postgres schema if it stores data |
 | any table, policy or trigger | a new file in the root `supabase/migrations/` |
 
-Splitting SAT into its own `apps/sat` is allowed by ADR 0001 but not done. Do it
-when SAT needs its own deploy cadence or subdomain, not before. Moving any
-product into a separate repo reverses ADR 0001 (option C) and needs a
+Moving any product into a separate repo reverses ADR 0001 and needs a
 superseding ADR first.
 
 ## Rules
 
+- One domain, path routing. No subdomains and no cookie `domain` option.
+  Sessions are shared because every app is served from the same origin.
+- Login UI and `/auth/callback` exist only in landing. Other apps redirect to
+  `/login?next=<path>` and never render a login page.
+- Redirects inside a proxied app are relative. Behind the landing rewrite,
+  `request.url` carries the app's own vercel.app host.
+- Links that cross apps are plain `<a>` tags, never `next/link`.
 - One Supabase project, one auth pool, one `supabase/migrations/` folder at the
   root. No app keeps its own migrations.
-- Each product gets its own Postgres schema with its own RLS. Product profiles
-  are created on first use of that product, not by the `auth.users` trigger.
+- SAT's tables stay in `public`, untouched. New products get their own schema
+  with RLS on every table. There is no global role; permissions come from each
+  product's own tables.
 - Apps never import from each other. Shared code goes in `packages/`.
 - Each app owns its dependencies, test runner and Vercel project. Adding a
   dependency to one app never adds it to another.
@@ -46,9 +57,14 @@ superseding ADR first.
 
 ```bash
 pnpm install                 # from the repo root, always
-pnpm --filter landing dev
+pnpm --filter landing dev    # http://localhost:3000
+pnpm --filter tracker dev    # http://localhost:3001/tracker
 pnpm --filter landing test   # node --test, lib/questions and lib/lesson
-pnpm --filter landing build  # runs the prebuild validators first
+pnpm --filter tracker test   # vitest
+pnpm --filter @ap-academy/db test
+pnpm test:rls                # RLS tests against a throwaway local Postgres
 ```
 
-Each app's Vercel project sets its Root Directory to `apps/<name>`.
+Each app's Vercel project sets its Root Directory to `apps/<name>`. For both
+apps on one origin locally, set `TRACKER_URL=http://localhost:3001` in
+`apps/landing/.env.local` and browse via `http://localhost:3000`.

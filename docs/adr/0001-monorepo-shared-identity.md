@@ -1,6 +1,6 @@
 # ADR 0001: Monorepo with one shared identity layer
 
-- **Status:** Accepted
+- **Status:** Accepted. Partly superseded by ADR 0002 (subdomains, parent-domain cookie, trigger rewrite, `sat` schema).
 - **Date:** 2026-10-02
 - **Decided by:** Charlie
 - **Suggested path in repo:** `docs/adr/0001-monorepo-shared-identity.md`
