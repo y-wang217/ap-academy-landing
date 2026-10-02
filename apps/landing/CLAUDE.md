@@ -1,5 +1,9 @@
 # AP Academy Landing Page - Project Notes
 
+This app lives at `apps/landing` in the AP Academy pnpm workspace. Paths below
+are relative to this folder, except `supabase/`, which is the shared migrations
+folder at the repo root. Workspace layout: the root `CLAUDE.md`.
+
 ## Contact Information (DO NOT CHANGE unless explicitly requested)
 - **Phone:** 519-589-8217
 - **Email:** y.wang217@gmail.com
@@ -74,7 +78,7 @@ Supabase magic-link auth, CASL consent capture, and attempt logging.
 - Env vars in `.env.example`. **Unset is still a supported state:**
   `/sat` falls back to Phase 1 behaviour everywhere — do not let any `/sat` code
   path throw or block when Supabase is absent.
-- Schema and RLS live in `supabase/migrations/0001_sat_accounts.sql`. Apply it
+- Schema and RLS live in `supabase/migrations/0001_sat_accounts.sql` (repo root). Apply it
   before setting the env vars, or sign-in will succeed and then fail to write.
 - RLS was verified against a local Postgres with two accounts: neither can read,
   update, or insert the other's `profiles` or `attempts` rows. Re-run that check

@@ -1,0 +1,10 @@
+{
+  "name": "ap-academy",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev:landing": "pnpm --filter landing dev",
+    "build:landing": "pnpm --filter landing build",
+    "test:landing": "pnpm --filter landing test"
+  }
+}

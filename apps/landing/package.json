@@ -1,5 +1,5 @@
 {
-  "name": "ap-academy-landing",
+  "name": "landing",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "npm run test:questions && npm run test:lesson",
     "test:questions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/questions/**/*.test.ts\"",
     "test:lesson": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/lesson/**/*.test.ts\"",
     "validate:lessons": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/lesson/cli/validate-lessons.ts",
