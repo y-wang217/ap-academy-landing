@@ -15,6 +15,22 @@ Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 | `docs/adr/` | workspace-level decisions | App-level decisions live inside each app. |
 | `docs/spec/` | workspace-level prompts, committed verbatim before work begins | |
 
+## Where new work goes
+
+| work | where |
+|---|---|
+| marketing pages, enrollment, privacy | `apps/landing` |
+| SAT flashcards, quiz, SAT accounts | `apps/landing/app/sat` (SAT is a route of the landing app, served at `www.apacademy.ca/sat`) |
+| `/learn` lesson engine, question generators | `apps/landing/lib/lesson`, `apps/landing/lib/questions` |
+| Student Tracker | `apps/tracker` |
+| a new product | a new folder under `apps/`, plus its own Postgres schema |
+| any table, policy or trigger | a new file in the root `supabase/migrations/` |
+
+Splitting SAT into its own `apps/sat` is allowed by ADR 0001 but not done. Do it
+when SAT needs its own deploy cadence or subdomain, not before. Moving any
+product into a separate repo reverses ADR 0001 (option C) and needs a
+superseding ADR first.
+
 ## Rules
 
 - One Supabase project, one auth pool, one `supabase/migrations/` folder at the
