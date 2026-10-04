@@ -1,6 +1,6 @@
 // Stand-in for Supabase Auth and PostgREST: just enough for the single-domain
 // SSO acceptance checks. Accepts one fixed access token for one user, who has a
-// tracker membership with role "teacher".
+// tracker membership with role "teacher" (so /tracker shows the teacher home).
 import http from "node:http";
 
 const USER = {
@@ -43,7 +43,7 @@ const server = http.createServer((req, res) => {
     return json(204);
   }
   if (req.url.startsWith("/rest/v1/memberships")) {
-    return json(200, req.headers["accept-profile"] === "tracker" ? [{ role: "teacher" }] : []);
+    return json(200, req.headers["accept-profile"] === "tracker" ? [{ role: "teacher", org_id: "10000000-0000-0000-0000-000000000001" }] : []);
   }
   if (req.url.startsWith("/rest/v1/")) return json(200, []);
   if (req.url === "/__log") return json(200, log);

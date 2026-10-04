@@ -1,0 +1,88 @@
+import { z } from "zod";
+import { getDb, type Db } from "./client";
+import {
+  AssessmentRow, CategoryRow, CourseRow, GoalRow, StudentRow, TaskRow, VersionRow,
+  type Assessment, type Category, type Course, type Goal, type Student, type Task, type Version,
+} from "./schemas";
+
+export type Viewer =
+  | { kind: "not_configured" }
+  | { kind: "signed_out" }
+  | { kind: "staff"; userId: string; email: string; orgId: string; db: Db }
+  | { kind: "student"; userId: string; email: string; studentId: string; db: Db }
+  | { kind: "none"; userId: string; email: string };
+
+/**
+ * Who is looking. Claims a pending invite first (ADR 0016), so a student's
+ * first visit lands straight on their dashboard. Staff wins over student.
+ */
+export async function getViewer(): Promise<Viewer> {
+  const db = await getDb();
+  if (!db) return { kind: "not_configured" };
+  const { data: auth } = await db.supabase.auth.getUser();
+  const user = auth.user;
+  if (!user) return { kind: "signed_out" };
+  const email = user.email ?? "";
+
+  await db.tracker.rpc("claim_student_invites");
+
+  const { data: memberships } = await db.tracker.from("memberships").select("role, org_id").eq("user_id", user.id);
+  const staff = (memberships ?? []).find((m) => m.role === "owner" || m.role === "teacher");
+  if (staff) return { kind: "staff", userId: user.id, email, orgId: staff.org_id, db };
+
+  const { data: student } = await db.tracker.from("students").select("id").eq("user_id", user.id).maybeSingle();
+  const id = z.object({ id: z.guid() }).safeParse(student);
+  if (id.success) return { kind: "student", userId: user.id, email, studentId: id.data.id, db };
+  return { kind: "none", userId: user.id, email };
+}
+
+const STUDENT_COLUMNS = "id, org_id, teacher_id, user_id, email, first_name, last_initial, grade_level, status, published_at, updated_at";
+
+function parseRows<T extends z.ZodTypeAny>(schema: T, rows: unknown): z.output<T>[] {
+  return z.array(schema).parse(rows ?? []);
+}
+
+export async function listStudents(db: Db, orgId: string): Promise<Student[]> {
+  const { data, error } = await db.tracker
+    .from("students").select(STUDENT_COLUMNS).eq("org_id", orgId)
+    .order("status").order("first_name");
+  if (error) throw new Error(error.message);
+  return parseRows(StudentRow, data);
+}
+
+export type Bundle = {
+  student: Student;
+  goal: Goal | null;
+  courses: Course[];
+  versions: Version[];
+  categories: Category[];
+  assessments: Assessment[];
+  tasks: Task[];
+};
+
+/** Everything about one student the caller may see. null when RLS hides it. */
+export async function loadBundle(db: Db, studentId: string): Promise<Bundle | null> {
+  const t = db.tracker;
+  const [student, goal, courses, versions, categories, assessments, tasks] = await Promise.all([
+    t.from("students").select(STUDENT_COLUMNS).eq("id", studentId).maybeSingle(),
+    t.from("goals").select("id, school, program, application_year, target_six_avg, benchmark_note, updated_at").eq("student_id", studentId).maybeSingle(),
+    t.from("courses").select("id, code, name, term, status, in_six_plan, target_grade, active_syllabus_version_id, position, updated_at").eq("student_id", studentId).order("position").order("code"),
+    t.from("syllabus_versions").select("id, course_id, version, confirmed_at").eq("student_id", studentId),
+    t.from("categories").select("id, course_id, syllabus_version_id, name, weight, aggregation_method, needs_review, position").eq("student_id", studentId).order("position"),
+    t.from("assessments").select("id, course_id, category_id, title, due_date, student_done_at, score_earned, score_possible, excused, graded_at, updated_at").eq("student_id", studentId).order("due_date", { nullsFirst: false }).order("title"),
+    t.from("tasks").select("id, course_id, title, kind, pinned, rank, reason, done_at, created_at, updated_at").eq("student_id", studentId),
+  ]);
+  for (const r of [student, goal, courses, versions, categories, assessments, tasks]) {
+    if (r.error) throw new Error(r.error.message);
+  }
+  if (!student.data) return null;
+  return {
+    student: StudentRow.parse(student.data),
+    goal: goal.data ? GoalRow.parse(goal.data) : null,
+    courses: parseRows(CourseRow, courses.data),
+    versions: parseRows(VersionRow, versions.data),
+    categories: parseRows(CategoryRow, categories.data),
+    assessments: parseRows(AssessmentRow, assessments.data),
+    tasks: parseRows(TaskRow, tasks.data),
+  };
+}

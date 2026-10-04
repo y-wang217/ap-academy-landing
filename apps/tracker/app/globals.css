@@ -8,6 +8,12 @@
   --color-text-muted: #6E655B;
   --color-accent: #D2502A;
   --color-border: rgba(193, 77, 43, 0.16);
+  --color-ok: #2F6F4A;
+  --color-ok-bg: #E4F1E8;
+  --color-warn: #8A5300;
+  --color-warn-bg: #FBEFD5;
+  --color-error: #A3271B;
+  --color-error-bg: #FBE3DF;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 

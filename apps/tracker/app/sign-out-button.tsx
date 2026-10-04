@@ -23,19 +23,15 @@ export default function SignOutButton() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={signOut}
-        className="rounded-full bg-accent px-6 py-3 text-sm font-semibold text-surface hover:opacity-90"
-      >
+    <span className="inline-flex items-center gap-2">
+      <button type="button" onClick={signOut} className="text-sm font-medium text-accent underline underline-offset-2">
         Sign out
       </button>
       {failed && (
-        <p role="alert" className="text-sm text-accent">
+        <span role="alert" className="text-xs text-error">
           Sign out failed. Try again.
-        </p>
+        </span>
       )}
-    </div>
+    </span>
   );
 }
