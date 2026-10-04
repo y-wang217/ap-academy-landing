@@ -31,9 +31,10 @@ Each step is done only when lint, typecheck and tests pass.
 
 ## Before real students (outside the code)
 
-1. Apply `0003`, `0004`, `0005` to the live project (needs sign-off), add
-   `tracker` under API settings > Exposed schemas, run
-   `supabase/seed/tracker-bootstrap.sql`, regenerate types.
+1. ~~Apply `0003`, `0004`, `0005` to the live project and run
+   `supabase/seed/tracker-bootstrap.sql`.~~ Done 2026-10-04 with sign-off;
+   y.wang217@gmail.com owns the AP Academy org. Still to do: add `tracker`
+   under API settings > Exposed schemas, then regenerate types.
 2. Add the `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE` repository secrets, run the
    backup workflow once, and drill a restore into a scratch project.
 3. Move Supabase to Pro (no pausing, daily backups).

@@ -54,6 +54,11 @@ superseding ADR first.
 - Each app owns its dependencies, test runner and Vercel project. Adding a
   dependency to one app never adds it to another.
 - No migration is applied to the live database without Charlie's sign-off.
+- Live migrations are applied through the Supabase MCP `apply_migration`,
+  named after the file (`0004_tracker_core`). The live history records them
+  under timestamp versions, so `supabase db push` would see every file as
+  unapplied: never run it against the live project. Applied so far: 0001 and
+  0002 by hand, 0003 to 0005 on 2026-10-04.
 
 ## Commands
 
