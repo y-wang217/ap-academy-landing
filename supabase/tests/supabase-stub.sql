@@ -6,6 +6,10 @@
 create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin bypassrls;
+-- The role PostgREST logs in as before switching to the JWT's role. Only the
+-- end-to-end harness uses it; the password is a local test value.
+create role authenticator login noinherit password 'authenticator';
+grant anon, authenticated, service_role to authenticator;
 
 create schema auth;
 grant usage on schema auth to anon, authenticated, service_role;
@@ -23,6 +27,15 @@ as $$
     nullif(current_setting('request.jwt.claim.sub', true), ''),
     nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
   )::uuid
+$$;
+
+create function auth.email() returns text
+language sql stable
+as $$
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.email', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email'
+  )
 $$;
 
 grant usage on schema public to anon, authenticated, service_role;
