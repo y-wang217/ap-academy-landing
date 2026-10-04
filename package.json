@@ -7,6 +7,8 @@
     "build:landing": "pnpm --filter landing build",
     "test:landing": "pnpm --filter landing test",
     "test:rls": "bash supabase/tests/run-rls.sh",
-    "test:sso": "bash e2e/sso/run.sh"
+    "test:sso": "bash e2e/sso/run.sh",
+    "test:restore": "bash scripts/restore-drill.sh",
+    "test:tracker": "bash e2e/tracker/run.sh"
   }
 }

@@ -1,0 +1,56 @@
+name: Nightly database backup
+
+# Encrypted pg_dump of the shared Supabase database, kept as an artifact for
+# 30 days (tracker ADR 0020). Restore: docs/RESTORE.md.
+on:
+  schedule:
+    - cron: "17 7 * * *" # 03:17 Toronto (EDT), 02:17 (EST)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        id: secrets
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::notice::Backup skipped: set the SUPABASE_DB_URL and BACKUP_PASSPHRASE repository secrets (docs/RESTORE.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The live project runs Postgres 17; pg_dump must be at least that.
+      - name: Install the Postgres 17 client
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Back up
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: scripts/backup.sh backups
+
+      - uses: actions/upload-artifact@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backups/*.gpg
+          retention-days: 30
+          if-no-files-found: error

@@ -48,12 +48,13 @@ check("2b /login page renders", (await page.textContent("h1"))?.includes("Sign i
 // Simulate the session the auth callback would set on the shared origin.
 await context.addCookies([{ name: "sb-127-auth-token", value: cookieValue, url: BASE }]);
 
-// 3. After login, /tracker shows email and membership role.
+// 3. After login, /tracker shows who is signed in, and the membership decides
+// the view (a teacher membership opens the students list).
 notFound.length = 0;
 r = await page.goto(BASE + "/tracker");
-const body3 = await page.textContent("main");
-check("3 /tracker shows email", page.url() === BASE + "/tracker" && body3.includes("student@example.com"), page.url());
-check("3b /tracker shows membership role", body3.includes("teacher"));
+const body3 = await page.textContent("body");
+check("3 /tracker shows the signed-in email", page.url() === BASE + "/tracker" && body3.includes("student@example.com"), page.url());
+check("3b /tracker shows the view for the membership role", (await page.textContent("h1")) === "Students");
 
 // 6. Tracker assets come from /tracker/_next through landing, no 404s.
 const assets = await page.$$eval("script[src],link[rel=stylesheet]", (els) =>

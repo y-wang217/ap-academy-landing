@@ -3,12 +3,19 @@
 -- hosted defaults: the three API roles, auth.users, auth.uid() read from the
 -- request's JWT claims, and the default grants on the public schema.
 
-create role anon nologin;
-create role authenticated nologin;
-create role service_role nologin bypassrls;
--- The role PostgREST logs in as before switching to the JWT's role. Only the
--- end-to-end harness uses it; the password is a local test value.
-create role authenticator login noinherit password 'authenticator';
+-- Roles are cluster-wide, so a second database in the same cluster reuses them.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
+  -- The role PostgREST logs in as before switching to the JWT's role. Only the
+  -- end-to-end harness uses it; the password is a local test value.
+  if not exists (select 1 from pg_roles where rolname = 'authenticator') then
+    create role authenticator login noinherit password 'authenticator';
+  end if;
+end;
+$$;
 grant anon, authenticated, service_role to authenticator;
 
 create schema auth;

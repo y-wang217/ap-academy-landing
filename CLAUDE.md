@@ -15,7 +15,9 @@ Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 | `apps/landing` | marketing site, `/sat`, `/learn` engine, `/login`, `/auth/callback` | [`apps/landing/CLAUDE.md`](apps/landing/CLAUDE.md). Owns the domain. Tests run on `node --test`. |
 | `apps/tracker` | Student Tracker, served at `/tracker` | [`apps/tracker/CLAUDE.md`](apps/tracker/CLAUDE.md). `basePath: '/tracker'`, session check in `proxy.ts`. Vitest. |
 | `packages/db` | shared Supabase client helpers and types | Imported as TypeScript source; each app lists it in `transpilePackages`. |
-| `supabase/` | the single migrations folder for the one shared Supabase project | RLS tests in `supabase/tests/`. |
+| `supabase/` | the single migrations folder for the one shared Supabase project | RLS and audit checks in `supabase/tests/`; one-off live scripts in `supabase/seed/`. |
+| `scripts/` | workspace scripts | `backup.sh`, `restore.sh`, `restore-drill.sh`. Restore guide: [`docs/RESTORE.md`](docs/RESTORE.md). |
+| `e2e/` | browser tests across apps | `sso/` (mock auth) and `tracker/` (Postgres, PostgREST 14.5, mock auth). |
 | `docs/adr/` | workspace-level decisions | App-level decisions live inside each app. |
 | `docs/spec/` | workspace-level prompts, committed verbatim before work begins | |
 
@@ -64,11 +66,14 @@ pnpm --filter tracker test   # vitest
 pnpm --filter @ap-academy/db test
 pnpm test:rls                # RLS tests against a throwaway local Postgres
 pnpm test:sso                # single-domain SSO acceptance checks in Chromium
+pnpm test:tracker            # tracker flows through the landing proxy, real RLS
+pnpm test:restore            # backup, encrypted, then restore into an empty db
 ```
 
-`test:rls` needs Postgres server binaries (no Docker). `test:sso` builds both
-apps against a mock Supabase and needs a global Playwright install; it deletes
-those builds when it finishes.
+`test:rls` and `test:restore` need Postgres server binaries (no Docker).
+`test:sso` and `test:tracker` build both apps against a local stack, need a
+global Playwright install (and `POSTGREST_BIN` for `test:tracker`), and delete
+those builds when they finish.
 
 Each app's Vercel project sets its Root Directory to `apps/<name>`. For both
 apps on one origin locally, set `TRACKER_URL=http://localhost:3001` in

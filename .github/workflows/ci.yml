@@ -36,5 +36,36 @@ jobs:
           pnpm --filter tracker build
 
       # The runner image ships PostgreSQL server binaries.
-      - name: RLS
+      - name: RLS and audit
         run: pnpm test:rls
+
+      - name: Restore drill
+        run: pnpm test:restore
+
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # PostgREST 14.5 is the version the live Supabase project runs.
+      - name: Install PostgREST
+        run: |
+          curl -fsSL https://github.com/PostgREST/postgrest/releases/download/v14.5/postgrest-v14.5-linux-static-x86-64.tar.xz | sudo tar xJ -C /usr/local/bin postgrest
+          postgrest --version
+
+      - name: Install Playwright
+        run: |
+          npm install -g playwright@1.56.1
+          playwright install --with-deps chromium
+
+      - name: Single sign-on across apps
+        run: pnpm test:sso
+
+      - name: Tracker flows through the landing proxy
+        run: pnpm test:tracker
