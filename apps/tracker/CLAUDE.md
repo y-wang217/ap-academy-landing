@@ -21,7 +21,8 @@
 >   plain `<a>` tags. Redirects never use `request.url`'s host.
 > - **Shared code.** Supabase clients, session refresh and safe redirect paths
 >   come from `@ap-academy/db`. Domain logic stays in `lib/domain/`.
-> - **Zod.** Not installed yet. It arrives with the first server mutation.
+> - **Zod.** Parses every row read and every form submitted (ADR 0017).
+> - **Decisions and progress.** ADRs in `docs/decisions/`, progress in `docs/PLAN.md`.
 >
 > Workspace rules: the repo-root `CLAUDE.md`. Decisions: `docs/adr/` at the root.
 

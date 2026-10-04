@@ -1,76 +1,113 @@
-import { getServerClient } from "@ap-academy/db/server";
-import SignOutButton from "./sign-out-button";
+import Link from "next/link";
+import { Card, Empty, Notice, Page, buttonClass } from "@/components/ui";
+import { StudentDashboard } from "@/components/student-dashboard";
+import { TopBar } from "@/components/top-bar";
+import { getViewer, listStudents, loadBundle } from "@/lib/data/queries";
+import { studentName } from "@/lib/format";
+import { todayIso } from "@/lib/time";
+import { buildStudentView } from "@/lib/view/student-view";
 
 // Per-user page: never prerender.
 export const dynamic = "force-dynamic";
 
-/**
- * Placeholder (done-state spec): proves the shared session reaches the tracker.
- * Shows the signed-in email, plus a membership role if one exists. Feature
- * work follows the tracker MVP spec separately.
- */
-export default async function TrackerHome() {
-  const supabase = await getServerClient();
+const STATUS_LABEL = { setup: "In setup", active: "Active", archived: "Archived" } as const;
 
-  if (!supabase) {
+export default async function TrackerHome() {
+  const viewer = await getViewer();
+
+  if (viewer.kind === "not_configured") {
     return (
-      <Shell>
-        <p className="text-text-muted">Sign-in is not configured for this deployment.</p>
-      </Shell>
+      <Page title="Student Tracker">
+        <Notice>Sign-in is not configured for this deployment.</Notice>
+      </Page>
     );
   }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    // The middleware normally redirects first. Plain <a>: /login is landing's.
+  if (viewer.kind === "signed_out") {
+    // The proxy normally redirects first. Plain <a>: /login belongs to landing.
     return (
-      <Shell>
+      <Page title="Student Tracker">
         <a href="/login?next=/tracker" className="text-accent underline">
           Sign in
         </a>
-      </Shell>
+      </Page>
     );
   }
 
-  // An error here (for example, the tracker schema not exposed yet) reads as
-  // no membership. RLS limits the rows to this user's own.
-  const { data: memberships } = await supabase
-    .schema("tracker")
-    .from("memberships")
-    .select("role")
-    .eq("user_id", user.id);
-  const roles = [...new Set((memberships ?? []).map((m) => m.role))];
+  if (viewer.kind === "none") {
+    return (
+      <>
+        <TopBar email={viewer.email} />
+        <Page title="Nothing here yet">
+          <Card>
+            <p>Your tracker isn&apos;t ready yet.</p>
+            <p className="text-sm text-text-muted">
+              If your teacher has set one up for you, make sure you signed in with the email they used. You are signed in as{" "}
+              <strong>{viewer.email}</strong>.
+            </p>
+          </Card>
+        </Page>
+      </>
+    );
+  }
 
-  return (
-    <Shell>
-      <dl className="flex flex-col gap-4">
-        <div>
-          <dt className="text-xs uppercase tracking-widest text-text-muted">Signed in as</dt>
-          <dd className="text-lg font-medium break-all">{user.email}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-widest text-text-muted">Role</dt>
-          <dd className="text-lg font-medium">
-            {roles.length > 0 ? roles.join(", ") : "No tracker membership yet"}
-          </dd>
-        </div>
-      </dl>
-      <SignOutButton />
-      <a href="/" className="text-sm text-text-muted underline">
-        Back to the main site
-      </a>
-    </Shell>
-  );
-}
+  if (viewer.kind === "student") {
+    const bundle = await loadBundle(viewer.db, viewer.studentId);
+    if (!bundle) {
+      return (
+        <>
+          <TopBar email={viewer.email} />
+          <Page title="Nothing here yet">
+            <Empty>Your tracker isn&apos;t available right now.</Empty>
+          </Page>
+        </>
+      );
+    }
+    const view = buildStudentView(bundle, todayIso());
+    return (
+      <>
+        <TopBar email={viewer.email} />
+        <Page title={`Hi ${bundle.student.firstName}`}>
+          <StudentDashboard view={view} interactive courseHref={(id) => `/courses/${id}`} />
+        </Page>
+      </>
+    );
+  }
 
-function Shell({ children }: { children: React.ReactNode }) {
+  const students = await listStudents(viewer.db, viewer.orgId);
   return (
-    <main className="mx-auto flex w-full max-w-[420px] flex-col gap-8 px-4 py-12">
-      <h1 className="text-2xl font-semibold">Student Tracker</h1>
-      {children}
-    </main>
+    <>
+      <TopBar email={viewer.email} />
+      <Page
+        title="Students"
+        aside={
+          <Link href="/students/new" className={buttonClass}>
+            Add a student
+          </Link>
+        }
+      >
+        <Card>
+          {students.length === 0 ? (
+            <Empty>No students yet. Add one to start setup.</Empty>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {students.map((s) => (
+                <li key={s.id}>
+                  <Link href={s.status === "setup" ? `/students/${s.id}/setup/goal` : `/students/${s.id}`} className="flex items-center justify-between gap-3 py-3">
+                    <span>
+                      <span className="block font-medium">{studentName(s)}</span>
+                      <span className="block text-sm text-text-muted">Grade {s.gradeLevel}</span>
+                    </span>
+                    <span className="text-sm text-text-muted">
+                      {STATUS_LABEL[s.status]}
+                      {s.status !== "setup" && !s.userId ? " · Not signed in yet" : ""}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </Page>
+    </>
   );
 }
