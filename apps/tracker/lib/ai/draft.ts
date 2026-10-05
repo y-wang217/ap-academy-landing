@@ -5,7 +5,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { AI_EFFORT, AI_MODEL } from "./config";
-import { AiOutput, SYSTEM_PROMPT } from "./prompt";
+import { AiWireOutput, fromWire, SYSTEM_PROMPT, type AiOutput } from "./prompt";
 
 export type ModelAnswer =
   | { ok: true; output: AiOutput; model: string; inputTokens: number; outputTokens: number }
@@ -33,7 +33,7 @@ export async function askModel(text: string, attachments: readonly Attachment[] 
       // Refusal fallback chosen by the server (claude-api guidance).
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      output_config: { effort: AI_EFFORT, format: betaZodOutputFormat(AiOutput) },
+      output_config: { effort: AI_EFFORT, format: betaZodOutputFormat(AiWireOutput) },
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
     });
@@ -41,14 +41,23 @@ export async function askModel(text: string, attachments: readonly Attachment[] 
     if (response.stop_reason === "refusal") return { ok: false, error: "The AI declined this material. Enter the changes by hand.", model: response.model };
     if (response.stop_reason === "max_tokens") return { ok: false, error: "That is too much to draft in one go. Send less at a time.", model: response.model };
     if (!response.parsed_output) return { ok: false, error: "The AI's answer could not be read. Try again.", model: response.model };
-    return { ok: true, output: response.parsed_output, ...usage };
+    return { ok: true, output: fromWire(response.parsed_output), ...usage };
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
       return { ok: false, error: "AI drafting is not set up correctly (API key). Enter the changes by hand.", model: null };
     }
     if (error instanceof Anthropic.RateLimitError) return { ok: false, error: "The AI is busy. Try again in a minute.", model: null };
-    if (error instanceof Anthropic.BadRequestError) return { ok: false, error: "The AI could not read one of the files. Try a smaller photo or a different file.", model: null };
-    if (error instanceof Anthropic.APIError) return { ok: false, error: "The AI could not draft this right now. Try again.", model: null };
+    if (error instanceof Anthropic.BadRequestError) {
+      // A 400 is about the request as a whole. Blame the files only when there were files.
+      console.error("AI draft rejected (400):", error.message);
+      return attachments.length > 0
+        ? { ok: false, error: "The AI could not read one of the files. Try a smaller photo or a different file.", model: null }
+        : { ok: false, error: "The AI could not draft this. Enter the changes by hand.", model: null };
+    }
+    if (error instanceof Anthropic.APIError) {
+      console.error(`AI draft failed (${error.status}):`, error.message);
+      return { ok: false, error: "The AI could not draft this right now. Try again.", model: null };
+    }
     return { ok: false, error: "Could not reach the AI. Check your connection and try again.", model: null };
   }
 }
