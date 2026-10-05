@@ -14,36 +14,45 @@ const OPS = [
   "add_task", "update_task", "remove_task",
 ] as const;
 
-/** The model's answer. Kept flat and loose; every field is checked after. */
-export const AiOutput = z.object({
+/**
+ * The schema the model answers in. Kept flat and loose; every field is checked
+ * after. The API compiles at most 16 nullable (union-typed) fields per
+ * request, so text and choice fields say "none" with "" rather than null, and
+ * only numbers and booleans are nullable. `fromWire` turns "" back into null.
+ */
+const text = (description?: string) => (description ? z.string().describe(`${description}. "" when not given`) : z.string().describe('"" when not given'));
+const choice = <T extends string>(values: readonly T[], description?: string) =>
+  z.enum(["", ...values] as ["" | T, ...("" | T)[]]).describe(description ? `${description}. "" when not given` : '"" when not given');
+
+export const AiWireOutput = z.object({
   items: z.array(
     z.object({
       op: z.enum(OPS),
-      ref: z.string().nullable().describe("For update_* and remove_*: the ref of the existing row (C1, K1, A1, T1). Else null"),
-      new_ref: z.string().nullable().describe("For add_*: a short name you choose for the new row (N1, N2, ...) so later items can refer to it. Else null"),
-      course: z.string().nullable().describe("Course ref (C1 or a new_ref) for add_category, add_assessment, add_task, update_task. Else null"),
-      category: z.string().nullable().describe("Category ref (K1 or a new_ref) for add_assessment or update_assessment. Else null"),
-      school: z.string().nullable(),
-      program: z.string().nullable(),
+      ref: text("For update_* and remove_*: the ref of the existing row (C1, K1, A1, T1)"),
+      new_ref: text("For add_*: a short name you choose for the new row (N1, N2, ...) so later items can refer to it"),
+      course: text("Course ref (C1 or a new_ref) for add_category, add_assessment, add_task, update_task"),
+      category: text("Category ref (K1 or a new_ref) for add_assessment or update_assessment"),
+      school: text(),
+      program: text(),
       application_year: z.number().nullable(),
       target_six_avg: z.number().nullable().describe("Target six-course average, 0 to 100"),
-      benchmark_note: z.string().nullable(),
-      code: z.string().nullable().describe("Course code like MHF4U"),
-      name: z.string().nullable().describe("Course name, or category name"),
-      term: z.string().nullable(),
-      status: CourseStatus.nullable(),
+      benchmark_note: text(),
+      code: text("Course code like MHF4U"),
+      name: text("Course name, or category name"),
+      term: text(),
+      status: choice(CourseStatus.options),
       in_six_plan: z.boolean().nullable(),
       target_grade: z.number().nullable().describe("Course target, 0 to 100"),
       weight: z.number().nullable().describe("Category weight, 0 to 100"),
-      aggregation_method: AggregationMethod.nullable(),
+      aggregation_method: choice(AggregationMethod.options),
       needs_review: z.boolean().nullable(),
-      title: z.string().nullable().describe("Assessment or task title"),
-      due_date: z.string().nullable().describe("YYYY-MM-DD, or null if not given"),
+      title: text("Assessment or task title"),
+      due_date: text("YYYY-MM-DD"),
       score_earned: z.number().nullable().describe("Marks earned, or null when not marked yet"),
       score_possible: z.number().nullable().describe("Marks possible. 100 when only a percentage is given"),
       excused: z.boolean().nullable().describe("true when the work is excused or exempt"),
-      kind: TaskKind.nullable().describe("school for school work, supplemental for extra practice"),
-      reason: z.string().nullable().describe("Why this task matters, for a task"),
+      kind: choice(TaskKind.options, "school for school work, supplemental for extra practice"),
+      reason: text("Why this task matters, for a task"),
       pinned: z.boolean().nullable(),
       certain: z.boolean().describe("true when the material clearly supports this exact change; false when the teacher should check it"),
       source: z.string().describe("The words of the material or request this change comes from, copied exactly"),
@@ -51,7 +60,33 @@ export const AiOutput = z.object({
   ),
   unmatched: z.array(z.string()).describe("Things in the material or request about this student's work that could not be turned into a change with confidence"),
 });
-export type AiOutput = z.output<typeof AiOutput>;
+export type AiWireOutput = z.output<typeof AiWireOutput>;
+
+type Unset<T> = { [K in keyof T]: T[K] extends string ? Exclude<T[K], ""> | null : T[K] };
+const TEXT_FIELDS = [
+  "ref", "new_ref", "course", "category", "school", "program", "benchmark_note", "code", "name", "term",
+  "status", "aggregation_method", "title", "due_date", "kind", "reason",
+] as const;
+
+/** The model's answer with "not given" as null, which is what `toDraftItems` reads. */
+export type AiOutput = {
+  items: (Unset<Omit<AiWireOutput["items"][number], "op" | "source">> & Pick<AiWireOutput["items"][number], "op" | "source">)[];
+  unmatched: string[];
+};
+
+export function fromWire(wire: AiWireOutput): AiOutput {
+  return {
+    unmatched: wire.unmatched,
+    items: wire.items.map((item) => {
+      const out: Record<string, unknown> = { ...item };
+      for (const key of TEXT_FIELDS) {
+        const value = item[key].trim();
+        out[key] = value === "" ? null : value;
+      }
+      return out as AiOutput["items"][number];
+    }),
+  };
+}
 type RawItem = AiOutput["items"][number];
 
 export const SYSTEM_PROMPT = `You turn what a tutor sends about one student into proposed changes to a grade tracker. The tutor reviews every change before anything is saved, so propose only what the material supports.

@@ -1,6 +1,7 @@
+import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { describe, expect, it } from "vitest";
 import type { StudentContext } from "../data/change-set";
-import { buildUserMessage, stripPersonalData, toDraftItems, type AiOutput, type PromptStudent } from "./prompt";
+import { AiWireOutput, buildUserMessage, fromWire, stripPersonalData, toDraftItems, type AiOutput, type PromptStudent } from "./prompt";
 
 const COURSE = "30000000-0000-0000-0000-000000000001";
 const LOCKED = "30000000-0000-0000-0000-000000000002";
@@ -45,6 +46,8 @@ const ctx: StudentContext = {
   assessments: student.assessments,
   tasks: student.tasks.filter((t) => t.doneAt === null).map((t, rank) => ({ ...t, rank })),
 };
+
+type AiWireOutputItem = AiWireOutput["items"][number];
 
 const row = (o: Partial<AiOutput["items"][number]>): AiOutput["items"][number] => ({
   op: "update_assessment", ref: null, new_ref: null, course: null, category: null,
@@ -192,5 +195,42 @@ describe("toDraftItems", () => {
     expect(out.items[0]).toMatchObject({ op: "update_assessment", scoreEarned: 35 });
     expect(out.items[0]).not.toHaveProperty("scorePossible");
     expect(out.items[1]).toMatchObject({ op: "add_assessment", dueDate: null, scorePossible: 100, scoreEarned: 88 });
+  });
+});
+
+describe("the answer schema sent to the API", () => {
+  type Schema = { anyOf?: unknown[]; type?: unknown; properties?: Record<string, Schema>; required?: string[]; items?: Schema; $defs?: Record<string, Schema> };
+  // Walk every object property in the schema the SDK actually sends.
+  const params = (s: Schema, out: { schema: Schema; required: boolean }[] = []) => {
+    for (const [key, child] of Object.entries(s.properties ?? {})) {
+      out.push({ schema: child, required: (s.required ?? []).includes(key) });
+      params(child, out);
+    }
+    if (s.items) params(s.items, out);
+    for (const def of Object.values(s.$defs ?? {})) params(def, out);
+    return out;
+  };
+  const all = params(betaZodOutputFormat(AiWireOutput).schema as Schema);
+
+  // The API rejects every request (400) past these limits, files or not.
+  it("has at most 16 union-typed parameters", () => {
+    expect(all.filter((p) => p.schema.anyOf || Array.isArray(p.schema.type)).length).toBeLessThanOrEqual(16);
+  });
+  it("has at most 24 optional parameters", () => {
+    expect(all.filter((p) => !p.required).length).toBeLessThanOrEqual(24);
+  });
+});
+
+describe("fromWire", () => {
+  it("reads empty text and empty choices as not given, and keeps the rest", () => {
+    const wire = {
+      ...row({ op: "add_course", code: "SBI4U", status: "active", in_six_plan: true }),
+      ref: "", new_ref: " N1 ", course: "", category: "", school: "", program: "", benchmark_note: "",
+      code: "SBI4U", name: "", term: " ", status: "active", aggregation_method: "", title: "", due_date: "", kind: "", reason: "",
+    } as AiWireOutputItem;
+    const out = fromWire({ items: [wire], unmatched: ["x"] });
+    expect(out.unmatched).toEqual(["x"]);
+    expect(out.items[0]).toMatchObject({ op: "add_course", new_ref: "N1", code: "SBI4U", status: "active", in_six_plan: true });
+    for (const key of ["ref", "course", "name", "term", "aggregation_method", "kind", "due_date"] as const) expect(out.items[0][key]).toBeNull();
   });
 });

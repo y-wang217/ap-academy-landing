@@ -48,6 +48,14 @@ Each step is done only when lint, typecheck and tests pass.
   place of a name (ADR 0028). Verified: RLS (`supabase/tests/tracker_intake.sql`),
   81 unit tests, and 61 end-to-end checks (`e2e/tracker/flows.mjs`) against the mock model.
 
+  Fix 2026-10-05: every live draft failed with a 400, files or not, because
+  the answer schema had 26 nullable fields and the API compiles at most 16
+  union-typed ones. The mock model never compiles a schema, so nothing caught
+  it. Text and choice fields now say "not given" with `""` (`AiWireOutput`),
+  turned back into null by `fromWire`; a unit test holds the schema to the
+  API's limits. A 400 now blames files only when files were sent, and the API's
+  reason goes to the Vercel log.
+
 ## Before step 9 goes live
 
 1. ~~Apply `0007_tracker_intake` to the live project with sign-off.~~ Done
