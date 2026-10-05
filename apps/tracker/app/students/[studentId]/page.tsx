@@ -2,24 +2,31 @@ import Link from "next/link";
 import { setStudentStatus, updateStudent } from "@/app/actions/teacher";
 import { ActionButton, ActionForm } from "@/components/action-form";
 import { STUDENT_LABELS, StudentFields } from "@/components/teacher/fields";
+import { ComposerCard } from "@/components/teacher/composer-card";
+import { DraftHistory } from "@/components/teacher/draft-history";
 import { FlagList, InvitePanel, TaskManager } from "@/components/teacher/panels";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, GradeNote, Notice, Page, linkClass, secondaryButtonClass } from "@/components/ui";
-import { gap, percent, stamp, studentName } from "@/lib/format";
+import { listDrafts } from "@/lib/data/queries";
+import { gap, percent, stamp, studentName, studentNumber } from "@/lib/format";
 import { staffStudent } from "@/lib/pages";
 
 export const dynamic = "force-dynamic";
+// An AI draft (server action on this page) can take most of a minute.
+export const maxDuration = 120;
 
 /** Teacher overview of one student: courses, priorities, invite, status. */
 export default async function StudentPage({ params }: { params: Promise<{ studentId: string }> }) {
   const { studentId } = await params;
   const { viewer, view, orgName } = await staffStudent(studentId);
   const s = view.student;
+  const drafts = await listDrafts(viewer.db, studentId);
+  const courseCode = (courseId: string) => view.courses.find((c) => c.course.id === courseId)?.course.code ?? null;
 
   return (
     <>
       <TopBar email={viewer.email} />
-      <Page title={studentName(s)} back={{ href: "/", label: "Back to students" }} aside={<span className="text-sm text-text-muted">Grade {s.gradeLevel}</span>}>
+      <Page title={studentName(s)} back={{ href: "/", label: "Back to students" }} aside={<span className="text-sm text-text-muted">Grade {s.gradeLevel} · {studentNumber(s.studentNumber)}</span>}>
         {s.status === "setup" && (
           <Notice tone="warn">
             Not published yet. {s.firstName} can&apos;t see anything. <Link className={linkClass} href={`/students/${s.id}/setup/goal`}>Continue setup</Link>
@@ -28,6 +35,11 @@ export default async function StudentPage({ params }: { params: Promise<{ studen
         {s.status === "archived" && <Notice>Archived. {s.firstName} can still read their history but can&apos;t mark work done.</Notice>}
 
         <FlagList view={view} />
+
+        <ComposerCard
+          scope={{ studentId: s.id }}
+          placeholder="Say what changed, paste marks from the portal, or attach notes, a course outline or a transcript. The AI drafts the changes; you check them before anything is saved."
+        />
 
         <Card title="Progress">
           <p className="text-sm text-text-muted">
@@ -73,6 +85,8 @@ export default async function StudentPage({ params }: { params: Promise<{ studen
         </Card>
 
         <InvitePanel view={view} orgName={orgName} />
+
+        <DraftHistory drafts={drafts} viewerId={viewer.userId} courseCode={courseCode} />
 
         <Card title="Student details">
           <ActionForm action={updateStudent.bind(null, s.id)} labels={STUDENT_LABELS} secondary submitLabel="Save details">

@@ -13,12 +13,12 @@ const ts = z.string();
 export const StudentRow = z
   .object({
     id: uuid, org_id: uuid, teacher_id: uuid, user_id: uuid.nullable(), email: z.string(),
-    first_name: z.string(), last_initial: z.string(), grade_level: num,
+    first_name: z.string(), last_initial: z.string(), grade_level: num, student_number: num,
     status: z.enum(["setup", "active", "archived"]), published_at: ts.nullable(), updated_at: ts,
   })
   .transform((r) => ({
     id: r.id, orgId: r.org_id, teacherId: r.teacher_id, userId: r.user_id, email: r.email,
-    firstName: r.first_name, lastInitial: r.last_initial, gradeLevel: r.grade_level,
+    firstName: r.first_name, lastInitial: r.last_initial, gradeLevel: r.grade_level, studentNumber: r.student_number,
     status: r.status, publishedAt: r.published_at, updatedAt: r.updated_at,
   }));
 export type Student = z.output<typeof StudentRow>;

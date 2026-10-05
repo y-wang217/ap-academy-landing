@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { getDb, type Db } from "./client";
+
+const uuidLike = z.guid();
 import {
   AssessmentRow, CategoryRow, CourseRow, FlagRow, GoalRow, StudentRow, TaskRow, VersionRow,
   type Assessment, type Category, type Course, type Flag, type Goal, type Student, type Task, type Version,
@@ -36,7 +38,7 @@ export async function getViewer(): Promise<Viewer> {
   return { kind: "none", userId: user.id, email };
 }
 
-const STUDENT_COLUMNS = "id, org_id, teacher_id, user_id, email, first_name, last_initial, grade_level, status, published_at, updated_at";
+const STUDENT_COLUMNS = "id, org_id, teacher_id, user_id, email, first_name, last_initial, grade_level, student_number, status, published_at, updated_at";
 
 function parseRows<T extends z.ZodTypeAny>(schema: T, rows: unknown): z.output<T>[] {
   return z.array(schema).parse(rows ?? []);
@@ -99,4 +101,28 @@ export async function openFlagCounts(db: Db, orgId: string): Promise<Map<string,
     counts.set(row.student_id, (counts.get(row.student_id) ?? 0) + 1);
   }
   return counts;
+}
+
+export const DraftRow = z
+  .object({
+    id: uuidLike, course_id: uuidLike.nullable(), requested_by: uuidLike, status: z.enum(["requested", "drafted", "failed", "applied", "discarded"]),
+    input_chars: z.coerce.number(), input_files: z.coerce.number(), model: z.string().nullable(), error: z.string().nullable(),
+    draft: z.object({ items: z.array(z.unknown()), notes: z.array(z.string()) }).nullable().catch(null), created_at: z.string(),
+  })
+  .transform((r) => ({
+    id: r.id, courseId: r.course_id, requestedBy: r.requested_by, status: r.status, inputChars: r.input_chars, inputFiles: r.input_files,
+    model: r.model, error: r.error, itemCount: r.draft?.items.length ?? 0, noteCount: r.draft?.notes.length ?? 0, createdAt: r.created_at,
+  }));
+export type DraftRecord = z.output<typeof DraftRow>;
+
+/** A student's AI draft records, newest first (ADR 0026). Never the drafts themselves. */
+export async function listDrafts(db: Db, studentId: string, limit = 20): Promise<DraftRecord[]> {
+  const { data, error } = await db.tracker
+    .from("ai_drafts")
+    .select("id, course_id, requested_by, status, input_chars, input_files, model, error, draft, created_at")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return parseRows(DraftRow, data);
 }

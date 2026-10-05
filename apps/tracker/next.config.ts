@@ -12,7 +12,11 @@ const nextConfig: NextConfig = {
     // Server actions reject a request whose Origin differs from the host the
     // app sees. Behind the landing proxy the app may see its own vercel.app
     // host, so the public host is allowed explicitly. Nothing else is.
-    serverActions: { allowedOrigins: [SITE_HOST, SITE_HOST.replace(/^www\./, "")] },
+    serverActions: {
+      allowedOrigins: [SITE_HOST, SITE_HOST.replace(/^www\./, "")],
+      // An AI draft request carries up to TUNING.aiMaxFiles attachments (ADR 0028).
+      bodySizeLimit: "50mb",
+    },
   },
 };
 

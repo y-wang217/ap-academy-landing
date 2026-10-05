@@ -2,13 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { saveTarget } from "@/app/actions/teacher";
 import { ActionForm } from "@/components/action-form";
-import { AiPastePanel } from "@/components/teacher/ai-paste";
+import { ComposerCard } from "@/components/teacher/composer-card";
 import { AssessmentManager, SyllabusEditor } from "@/components/teacher/panels";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Field, GradeNote, Page, linkClass, numberInputClass } from "@/components/ui";
 import { gap, percent, points, stamp, studentName } from "@/lib/format";
-import { aiConfigured } from "@/lib/ai/config";
-import { TUNING } from "@/lib/domain/tuning";
 import { staffStudent } from "@/lib/pages";
 
 export const dynamic = "force-dynamic";
@@ -54,11 +52,10 @@ export default async function TeacherCoursePage({ params }: { params: Promise<{ 
           </ActionForm>
         </Card>
 
-        {aiConfigured() && course.categories.length > 0 && (
-          <Card title="Paste from the school portal">
-            <AiPastePanel courseId={course.course.id} maxChars={TUNING.aiMaxPasteChars} />
-          </Card>
-        )}
+        <ComposerCard
+          scope={{ studentId, courseId: course.course.id }}
+          placeholder={`Say what changed in ${course.course.code}, paste marks from the portal, or attach a screenshot. The AI drafts the changes; you check them before anything is saved.`}
+        />
 
         <Card title="Assessments">
           <AssessmentManager view={course} />

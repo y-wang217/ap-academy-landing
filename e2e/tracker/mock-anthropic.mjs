@@ -1,11 +1,20 @@
-// Stand-in for the Anthropic Messages API, for the AI paste flow. Reads the
-// course refs the tracker sent and answers with a fixed structured draft:
-// a score for "Lab report", a new "Quiz 2" in Assignments, and one line it
-// could not match. GET /__last returns the last request body, so the flow can
-// check what left the app.
+// Stand-in for the Anthropic Messages API, for the AI draft flow. Reads the
+// student refs the tracker sent and answers with a fixed structured draft:
+// a score for "Lab report", a new "Quiz 2" in Assignments, an uncertain new
+// priority, and one line it could not place. GET /__last returns the last
+// request body, so the flow can check what left the app.
 import http from "node:http";
 
 let last = null;
+
+const blank = {
+  ref: null, new_ref: null, course: null, category: null,
+  school: null, program: null, application_year: null, target_six_avg: null, benchmark_note: null,
+  code: null, name: null, term: null, status: null, in_six_plan: null, target_grade: null,
+  weight: null, aggregation_method: null, needs_review: null,
+  title: null, due_date: null, score_earned: null, score_possible: null, excused: null,
+  kind: null, reason: null, pinned: null, certain: true, source: "",
+};
 
 const server = http.createServer((req, res) => {
   const send = (code, body) => {
@@ -21,13 +30,17 @@ const server = http.createServer((req, res) => {
     last = JSON.parse(raw);
     const user = last.messages[0].content;
     const text = typeof user === "string" ? user : user.map((b) => b.text ?? "").join("");
-    const course = JSON.parse(text.slice(text.indexOf("{"), text.indexOf("\n\nThe pasted text:")));
-    const lab = course.assessments.find((a) => a.title === "Lab report");
-    const assignments = course.categories.find((c) => c.name === "Assignments");
+    const start = text.indexOf("{");
+    const end = text.indexOf("\n\n", start);
+    const student = JSON.parse(text.slice(start, end === -1 ? undefined : end));
+    const course = student.courses.find((c) => c.assessments.some((a) => a.title === "Lab report")) ?? student.courses[0];
+    const lab = course?.assessments.find((a) => a.title === "Lab report");
+    const assignments = course?.categories.find((c) => c.name === "Assignments");
     const answer = {
       items: [
-        { op: "set_score", assessment: lab?.ref ?? null, category: null, title: null, due_date: null, score_earned: 18, score_possible: 20, excused: null, source: "Lab report 18/20" },
-        { op: "add_assessment", assessment: null, category: assignments?.ref ?? null, title: "Quiz 2", due_date: null, score_earned: 9, score_possible: 10, excused: null, source: "Quiz 2 9/10" },
+        { ...blank, op: "update_assessment", ref: lab?.ref ?? null, score_earned: 18, score_possible: 20, source: "Lab report 18/20" },
+        { ...blank, op: "add_assessment", course: course?.ref ?? null, category: assignments?.ref ?? null, title: "Quiz 2", score_earned: 9, score_possible: 10, source: "Quiz 2 9/10" },
+        { ...blank, op: "add_task", course: course?.ref ?? null, title: "Review unit 3 before the test", certain: false, source: "maybe review unit 3" },
       ],
       unmatched: ["Field trip money due Friday"],
     };

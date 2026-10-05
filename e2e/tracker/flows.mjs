@@ -1,7 +1,7 @@
-// Tracker end-to-end flows (build steps 4 to 8) in Chromium, against the
+// Tracker end-to-end flows (build steps 4 to 9) in Chromium, against the
 // local stack (stack.sh): a teacher onboards a student, publishes, the student
 // signs in, marks work done, and sees a score the teacher enters. Then v1:
-// a priority suggestion, a grade flag, and an AI paste against a mock model.
+// a priority suggestion, a grade flag, and AI drafts against a mock model.
 // Run through ./run.sh, or directly with TRACKER_BASE set to a running tracker.
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
@@ -292,26 +292,41 @@ try {
   check("an uninvited user sees nothing", (await outsider.locator("h1").textContent()) === "Nothing here yet");
   const direct = await outsider.goto(`${BASE}${studentPath}`);
   check("an uninvited user cannot open a student page", direct?.status() === 404);
-  // Step 8: AI paste, preview, confirm, save (ADR 0026), against the mock model ---------
+  // Step 8 and 9: AI draft, preview, confirm, save (ADRs 0026, 0028, 0029), against the mock model ---------
   await teacher.goto(`${BASE}${coursePath}`);
-  const paste = section(teacher, "Paste from the school portal");
-  await paste.getByRole("textbox").fill("Sam L. (sam@example.com)\nLab report 18/20\nQuiz 2 9/10\nField trip money due Friday");
-  await paste.getByRole("button", { name: "Draft changes" }).click();
-  await paste.getByText("Nothing has been saved yet.", { exact: false }).waitFor({ timeout: 30000 });
+  const composer = section(teacher, "Update from notes or a request");
+  await composer.getByRole("textbox").fill("Sam L. (sam@example.com)\nLab report 18/20\nQuiz 2 9/10\nmaybe review unit 3\nField trip money due Friday");
+  await composer.getByRole("button", { name: "Draft changes" }).click();
+  await composer.getByText("Nothing has been saved yet.", { exact: false }).waitFor({ timeout: 30000 });
   const sent = await (await fetch(`${MOCK_AI}/__last`)).json();
   const sentText = JSON.stringify(sent);
   check("the AI request carries no student name or email", !/Sam|sam@example\.com/.test(sentText) && sentText.includes("the student"));
   check("the AI request uses refs, not row ids", !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(sentText));
-  check("the preview shows a score change against the current value", await paste.getByText("Unmarked, out of 20 → 18 / 20").isVisible());
-  check("the preview shows new work", await paste.getByText("Quiz 2", { exact: true }).isVisible() && (await paste.getByText(/^New · Assignments/).isVisible()));
-  check("lines the AI could not place are listed, not saved", await paste.getByText("Field trip money due Friday").isVisible());
+  check("the AI request names the course the teacher is looking at", /looking at course C\d/.test(sentText));
+  check("the preview shows a score change against the current value", await composer.getByText("Unmarked, out of 20 → 18 / 20").isVisible());
+  check("the preview shows new work", await composer.getByText("Quiz 2", { exact: true }).isVisible() && (await composer.getByText(/^New · MHF4U · Assignments/).isVisible()));
+  check("an uncertain change starts unticked and says so", await composer.getByText("Check this one").isVisible() && (await composer.getByRole("button", { name: "Save selected (2)" }).isVisible()));
+  check("lines the AI could not place are listed, not saved", await composer.getByText("Field trip money due Friday").isVisible());
   const before = await section(teacher, "Assessments").locator("li", { hasText: "Quiz 2" }).count();
   check("nothing is saved before confirm", before === 0);
-  await paste.getByRole("button", { name: "Save selected (2)" }).click();
-  await paste.getByText("Saved 2 changes").waitFor({ timeout: 15000 });
+  await composer.getByRole("button", { name: "Save selected (2)" }).click();
+  await composer.getByText("Saved 2 changes").waitFor({ timeout: 15000 });
   await teacher.reload();
   const assessments = section(teacher, "Assessments");
   check("confirmed changes are saved", (await assessments.locator("li", { hasText: "Quiz 2" }).count()) === 1 && (await assessments.locator("li", { hasText: "Lab report" }).getByText("90.0%").isVisible()));
+  await teacher.goto(`${BASE}${studentPath}`);
+  check("the unticked change was not saved", (await teacher.getByText("Review unit 3 before the test").count()) === 0);
+  const history = section(teacher, "AI drafts");
+  check("the draft is on record for the student", await history.getByText("Saved", { exact: true }).first().isVisible() && (await history.getByText(/3 changes drafted, 1 not placed/).isVisible()));
+  check("the student number is shown to the teacher", await teacher.getByText(/S-\d{4}/).isVisible());
+  // The composer on the student page drafts for the whole student: a request in words.
+  const whole = section(teacher, "Update from notes or a request");
+  await whole.getByRole("textbox").fill("Lab report 18/20");
+  await whole.getByRole("button", { name: "Draft changes" }).click();
+  await whole.getByText("Nothing has been saved yet.", { exact: false }).waitFor({ timeout: 30000 });
+  check("a change that changes nothing is left out of the draft", (await whole.getByText("Lab report", { exact: true }).count()) === 0);
+  await whole.getByRole("button", { name: "Discard" }).click();
+  await whole.getByRole("button", { name: "Draft changes" }).waitFor({ timeout: 15000 });
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {
