@@ -4,6 +4,10 @@ import { LISTED_STUDENTS, PRE_LOG_COUNT, ROSTER_UPDATED, UNLOGGED_NUMBERS, type 
 // verdicts: the latest mark, the trend, the teacher's own words, the count of
 // lessons. A student is a number and initials, nothing more. Hidden while
 // content/students.ts lists nobody.
+//
+// Today the data is hand-copied into content/students.ts. Once students are
+// enrolled in the tracker, swap the import for a server-side read of the
+// tracker schema that returns the same StudentEntry[]; nothing below changes.
 
 function Sparkline({ marks }: { marks: Mark[] }) {
   const values = marks.map((m) => m.value);

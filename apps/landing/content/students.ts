@@ -15,6 +15,13 @@
 //
 // The roster section hides itself while no entry is listed, the same way the
 // proof section hides while content/reviews.ts is empty.
+//
+// This file is a stopgap. Once students are enrolled in the Student Tracker
+// (apps/tracker, schema `tracker` in the shared Supabase project), the roster
+// can draw from the backend instead: `tracker.students` for the number and
+// initials, `tracker.assessments` for the marks, and the lesson notes for the
+// status line. Keep the StudentEntry shape as the contract so the component
+// does not change when the source does.
 
 export const ROSTER_UPDATED = "October 5, 2026";
 
