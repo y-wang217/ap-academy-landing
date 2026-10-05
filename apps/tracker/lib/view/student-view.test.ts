@@ -20,7 +20,7 @@ function task(id: string, o: Partial<Task> = {}): Task {
 
 function bundle(): BundleLike {
   return {
-    student: { id: "s", orgId: "o", teacherId: "t", userId: "u", email: "s@example.com", firstName: "Sam", lastInitial: "L", gradeLevel: 11, status: "active", publishedAt: stamp, updatedAt: stamp },
+    student: { id: "s", orgId: "o", teacherId: "t", userId: "u", email: "s@example.com", firstName: "Sam", lastInitial: "L", gradeLevel: 11, studentNumber: 1, status: "active", publishedAt: stamp, updatedAt: stamp },
     goal: { id: "g", school: "Waterloo", program: "SE", applicationYear: 2027, targetSixAvg: 95, benchmarkNote: null, updatedAt: stamp },
     courses: [course("mhf"), course("sch", { targetGrade: null })],
     versions: [

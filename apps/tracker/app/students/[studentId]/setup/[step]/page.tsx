@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { addCourse, deleteCourse, publishStudent, saveGoal, saveTarget, updateCourse } from "@/app/actions/teacher";
 import { ActionButton, ActionForm } from "@/components/action-form";
 import { StudentDashboard } from "@/components/student-dashboard";
+import { ComposerCard } from "@/components/teacher/composer-card";
 import { COURSE_LABELS, CourseFields, GOAL_LABELS, GoalFields } from "@/components/teacher/fields";
 import { InvitePanel, SyllabusEditor } from "@/components/teacher/panels";
 import { STEPS, WizardNav, type StepKey } from "@/components/teacher/wizard-nav";
@@ -10,10 +11,12 @@ import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Field, Notice, Page, buttonClass, linkClass, numberInputClass } from "@/components/ui";
 import { checkCourseTargets } from "@/lib/domain/progress";
 import { TUNING } from "@/lib/domain/tuning";
-import { percent, points, studentName } from "@/lib/format";
+import { percent, points, studentName, studentNumber } from "@/lib/format";
 import { staffStudent } from "@/lib/pages";
 
 export const dynamic = "force-dynamic";
+// An AI draft (server action on this page) can take most of a minute.
+export const maxDuration = 120;
 
 /**
  * Onboarding wizard (build step 4): goal, six courses, targets, syllabus
@@ -31,6 +34,13 @@ export default async function SetupPage({ params }: { params: Promise<{ studentI
       <TopBar email={viewer.email} />
       <Page title={`Set up ${name}`} back={{ href: view.student.publishedAt ? `/students/${studentId}` : "/", label: view.student.publishedAt ? "Back to student" : "Back to students" }}>
         <WizardNav studentId={studentId} current={current} />
+        {current !== "review" && (
+          <ComposerCard
+            scope={{ studentId }}
+            title="Fill in from the trial lesson"
+            placeholder={`Attach your notes (written for ${studentNumber(view.student.studentNumber)}), the Zoom transcript or a course outline, or type what you know. The draft fills in the goal, courses, targets and syllabus; you check it before anything is saved.`}
+          />
+        )}
         {current === "goal" && <GoalStep view={view} />}
         {current === "courses" && <CoursesStep view={view} />}
         {current === "targets" && <TargetsStep view={view} />}

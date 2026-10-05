@@ -14,6 +14,7 @@ Each step is done only when lint, typecheck and tests pass.
 | 6 | Student dashboard, drill-down, Done | done: `/`, `/courses/[courseId]` |
 | 7 | Reliability: audit, stamps, states, errors, backups, restore | done: `0005_tracker_audit.sql`, `scripts/backup.sh`, [`docs/RESTORE.md`](../../../docs/RESTORE.md) |
 | 8 | v1: suggestions, flags, AI paste (go-ahead 2026-10-05, [`spec/build-step-8.md`](spec/build-step-8.md)) | done: `0006_tracker_v1.sql` (live 2026-10-05), ADRs 0024 to 0027 |
+| 9 | AI intake: photos, PDFs, transcripts and requests; one change set for the whole student (go-ahead 2026-10-05, [`spec/build-step-9.md`](spec/build-step-9.md)) | done: `0007_tracker_intake.sql` (live 2026-10-05), ADRs 0028, 0029 |
 
 ## Notes
 - Step 3: the brief's reference example is 96.4695 at full precision, not
@@ -37,16 +38,40 @@ Each step is done only when lint, typecheck and tests pass.
   (`supabase/tests/tracker_v1.sql`), unit tests, and 21 more end-to-end checks
   (55 in all) including the AI flow against a mock model.
 
+- Step 9: the composer on the student page, every setup step and the
+  course page takes words (material or a request) and attachments (photos,
+  PDFs, `.vtt`/`.srt`/`.txt` transcripts), and drafts changes to anything the
+  wizard and the course page can write: goal, courses, targets, categories,
+  assessments, tasks (ADR 0029). Items the model is not certain of start
+  unticked. Every manual form now builds a one-item change set and takes the
+  same path. Students get a per-org number (`S-0012`) to write on notes in
+  place of a name (ADR 0028). Verified: RLS (`supabase/tests/tracker_intake.sql`),
+  81 unit tests, and 61 end-to-end checks (`e2e/tracker/flows.mjs`) against the mock model.
+
+## Before step 9 goes live
+
+1. ~~Apply `0007_tracker_intake` to the live project with sign-off.~~ Done
+   2026-10-05 with sign-off: the one existing student is S-0001, both
+   triggers are in place, `ai_drafts.course_id` is nullable. Still to do:
+   regenerate types.
+2. For AI drafting: add `ANTHROPIC_API_KEY` to the tracker's Vercel project
+   (server-only, no `NEXT_PUBLIC_`), with a monthly spend limit on the key.
+   Without it the composer stays hidden. Still not set as of 2026-10-05.
+3. Privacy policy: text, photos and transcripts a teacher sends (with the
+   student's name and emails removed from text; photos and PDFs as they are)
+   go to Anthropic's API.
+4. Operating procedure: write the student number, never the name, on
+   trial-lesson notes; save the Zoom transcript; say the goal, the six
+   courses, current marks and known weights out loud in one block near the
+   end of the lesson.
+
 ## Before step 8 goes live
 
 1. ~~Apply `0006_tracker_v1` to the live project before merging.~~ Done
    2026-10-05 with sign-off; RLS on all 12 tracker tables, students can write
    flags only through the two functions, anon cannot call them.
-2. For AI paste: add `ANTHROPIC_API_KEY` to the tracker's Vercel project
-   (server-only, no `NEXT_PUBLIC_`), with a monthly spend limit on the key.
-   Without it the paste panel stays hidden.
-3. Privacy policy: pasted grades (with names and emails removed) are sent to
-   Anthropic's API.
+2. ~~For AI paste: add `ANTHROPIC_API_KEY`.~~ Carried into the step 9 list.
+3. ~~Privacy policy: pasted grades.~~ Carried into the step 9 list.
 
 ## Before real students (outside the code)
 
@@ -64,4 +89,4 @@ Each step is done only when lint, typecheck and tests pass.
 
 - Syllabus edits after publish (ADR 0018).
 - An audit history screen. The log is complete; nothing shows it yet.
-- An AI usage screen. `tracker.ai_drafts` records every request; nothing shows it yet.
+- An org-wide AI usage screen. Each student's page lists their drafts; nothing adds them up per org yet.

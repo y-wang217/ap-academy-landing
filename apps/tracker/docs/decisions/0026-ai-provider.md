@@ -1,5 +1,5 @@
 # 0026: AI drafts use Claude through the Anthropic SDK, behind one module, off unless a key is set
-Status: accepted
+Status: accepted; the Privacy and Limits bullets are superseded by 0028, the feature scope by 0029
 Date: 2026-10-05
 
 ## Context

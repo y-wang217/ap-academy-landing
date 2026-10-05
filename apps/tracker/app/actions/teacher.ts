@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { validateSyllabus } from "@/lib/domain/grades";
 import { orderTasks } from "@/lib/domain/priorities";
-import { applyChangeSet, itemProblem, loadCourseContext, type ChangeItem } from "@/lib/data/change-set";
+import { CATEGORY_PROBLEM, applyChangeSet, contextFromBundle, type ChangeItem, type StudentContext } from "@/lib/data/change-set";
 import { dbMessage } from "@/lib/data/errors";
 import { getViewer, loadBundle } from "@/lib/data/queries";
 import {
@@ -17,9 +17,12 @@ import { buildStudentView } from "@/lib/view/student-view";
 import { z } from "zod";
 
 // Every action: Zod first, then the signed-in staff member's own client, so
-// RLS has the final say. Nothing here uses a service-role key.
+// RLS has the final say. Nothing here uses a service-role key. Edits to the
+// student's data go through the one change-set path (ADRs 0027, 0029).
 
-async function staff() {
+type Staff = Extract<Awaited<ReturnType<typeof getViewer>>, { kind: "staff" }>;
+
+async function staff(): Promise<Staff | null> {
   const viewer = await getViewer();
   return viewer.kind === "staff" ? viewer : null;
 }
@@ -38,10 +41,32 @@ function done(message = "Saved"): Result {
 }
 
 /** org_id, student_id (and course_id) of a row the caller can see. */
-async function parent(v: NonNullable<Awaited<ReturnType<typeof staff>>>, table: string, id: string) {
+async function parent(v: Staff, table: string, id: string) {
   const columns = table === "students" ? "org_id, student_id:id" : table === "courses" ? "org_id, student_id, course_id:id" : "org_id, student_id, course_id";
   const { data } = await v.db.tracker.from(table).select(columns).eq("id", id).maybeSingle();
   return (data as { org_id: string; student_id: string; course_id?: string } | null) ?? null;
+}
+
+/** The student's rows a change set is checked against, or null when hidden. */
+async function context(v: Staff, studentId: string): Promise<StudentContext | null> {
+  if (!z.guid().safeParse(studentId).success) return null;
+  const bundle = await loadBundle(v.db, studentId).catch(() => null);
+  return bundle ? contextFromBundle(bundle) : null;
+}
+
+/** A one-item change set, the same path an AI draft takes. */
+async function applyOne(v: Staff, studentId: string, item: ChangeItem, message: string): Promise<Result> {
+  const ctx = await context(v, studentId);
+  if (!ctx) return NO_ACCESS;
+  const { error } = await applyChangeSet(v.db, ctx, [item]);
+  return error ? failed(error) : done(message);
+}
+
+/** The same, for a row whose student we look up first. */
+async function applyToRow(v: Staff, table: string, id: string, item: ChangeItem, message: string): Promise<Result> {
+  const p = await parent(v, table, id);
+  if (!p) return NO_ACCESS;
+  return applyOne(v, p.student_id, item, message);
 }
 
 // Students ---------------------------------------------------------------------
@@ -83,16 +108,7 @@ export async function saveGoal(studentId: string, form: FormData): Promise<Resul
   if (!v) return NO_ACCESS;
   const input = parse(GoalInput, form);
   if (!input.ok) return input.result;
-  const p = await parent(v, "students", studentId);
-  if (!p) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("goals").upsert(
-    {
-      org_id: p.org_id, student_id: studentId, school: input.data.school, program: input.data.program,
-      application_year: input.data.applicationYear, target_six_avg: input.data.targetSixAvg, benchmark_note: input.data.benchmarkNote,
-    },
-    { onConflict: "student_id" },
-  );
-  return error ? failed(dbMessage(error)) : done();
+  return applyOne(v, studentId, { op: "set_goal", ...input.data }, "Saved");
 }
 
 /**
@@ -142,28 +158,7 @@ export async function addCourse(studentId: string, form: FormData): Promise<Resu
   if (!v) return NO_ACCESS;
   const input = parse(CourseInput, form);
   if (!input.ok) return input.result;
-  const p = await parent(v, "students", studentId);
-  if (!p) return NO_ACCESS;
-  const { count } = await v.db.tracker.from("courses").select("id", { count: "exact", head: true }).eq("student_id", studentId);
-  const course = await v.db.tracker
-    .from("courses")
-    .insert({
-      org_id: p.org_id, student_id: studentId, code: input.data.code, name: input.data.name, term: input.data.term,
-      status: input.data.status, in_six_plan: input.data.inSixPlan, position: count ?? 0,
-    })
-    .select("id")
-    .single();
-  if (course.error || !course.data) return failed(dbMessage(course.error));
-  const courseId = course.data.id as string;
-  // Every course gets syllabus version 1 straight away (ADR 0018).
-  const version = await v.db.tracker
-    .from("syllabus_versions")
-    .insert({ org_id: p.org_id, student_id: studentId, course_id: courseId, version: 1 })
-    .select("id")
-    .single();
-  if (version.error || !version.data) return failed(dbMessage(version.error));
-  const link = await v.db.tracker.from("courses").update({ active_syllabus_version_id: version.data.id }).eq("id", courseId);
-  return link.error ? failed(dbMessage(link.error)) : done("Course added");
+  return applyOne(v, studentId, { op: "add_course", ...input.data, targetGrade: null }, "Course added");
 }
 
 export async function updateCourse(courseId: string, form: FormData): Promise<Result> {
@@ -171,18 +166,13 @@ export async function updateCourse(courseId: string, form: FormData): Promise<Re
   if (!v) return NO_ACCESS;
   const input = parse(CourseInput, form);
   if (!input.ok) return input.result;
-  const { error } = await v.db.tracker
-    .from("courses")
-    .update({ code: input.data.code, name: input.data.name, term: input.data.term, status: input.data.status, in_six_plan: input.data.inSixPlan })
-    .eq("id", courseId);
-  return error ? failed(dbMessage(error)) : done();
+  return applyToRow(v, "courses", courseId, { op: "update_course", courseId, ...input.data }, "Saved");
 }
 
 export async function deleteCourse(courseId: string): Promise<Result> {
   const v = await staff();
   if (!v) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("courses").delete().eq("id", courseId);
-  return error ? failed(dbMessage(error)) : done("Course removed");
+  return applyToRow(v, "courses", courseId, { op: "remove_course", courseId }, "Course removed");
 }
 
 export async function saveTarget(courseId: string, form: FormData): Promise<Result> {
@@ -190,8 +180,7 @@ export async function saveTarget(courseId: string, form: FormData): Promise<Resu
   if (!v) return NO_ACCESS;
   const input = parse(TargetInput, form);
   if (!input.ok) return input.result;
-  const { error } = await v.db.tracker.from("courses").update({ target_grade: input.data.targetGrade }).eq("id", courseId);
-  return error ? failed(dbMessage(error)) : done();
+  return applyToRow(v, "courses", courseId, { op: "update_course", courseId, targetGrade: input.data.targetGrade }, "Saved");
 }
 
 // Syllabus categories --------------------------------------------------------------
@@ -201,16 +190,7 @@ export async function addCategory(courseId: string, form: FormData): Promise<Res
   if (!v) return NO_ACCESS;
   const input = parse(CategoryInput, form);
   if (!input.ok) return input.result;
-  const { data: course } = await v.db.tracker
-    .from("courses").select("org_id, student_id, active_syllabus_version_id").eq("id", courseId).maybeSingle();
-  if (!course?.active_syllabus_version_id) return NO_ACCESS;
-  const { count } = await v.db.tracker.from("categories").select("id", { count: "exact", head: true }).eq("syllabus_version_id", course.active_syllabus_version_id as string);
-  const { error } = await v.db.tracker.from("categories").insert({
-    org_id: course.org_id, student_id: course.student_id, course_id: courseId,
-    syllabus_version_id: course.active_syllabus_version_id, name: input.data.name, weight: input.data.weight,
-    aggregation_method: input.data.aggregationMethod, needs_review: input.data.needsReview, position: count ?? 0,
-  });
-  return error ? failed(dbMessage(error)) : done("Category added");
+  return applyToRow(v, "courses", courseId, { op: "add_category", courseId, ...input.data }, "Category added");
 }
 
 export async function updateCategory(categoryId: string, form: FormData): Promise<Result> {
@@ -218,19 +198,13 @@ export async function updateCategory(categoryId: string, form: FormData): Promis
   if (!v) return NO_ACCESS;
   const input = parse(CategoryInput, form);
   if (!input.ok) return input.result;
-  const { error } = await v.db.tracker
-    .from("categories")
-    .update({ name: input.data.name, weight: input.data.weight, aggregation_method: input.data.aggregationMethod, needs_review: input.data.needsReview })
-    .eq("id", categoryId);
-  return error ? failed(dbMessage(error)) : done();
+  return applyToRow(v, "categories", categoryId, { op: "update_category", categoryId, ...input.data }, "Saved");
 }
 
 export async function deleteCategory(categoryId: string): Promise<Result> {
   const v = await staff();
   if (!v) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("categories").delete().eq("id", categoryId);
-  if (error?.code === "23503") return failed("This category has assessments. Move or remove them first.");
-  return error ? failed(dbMessage(error)) : done("Category removed");
+  return applyToRow(v, "categories", categoryId, { op: "remove_category", categoryId }, "Category removed");
 }
 
 // Assessments --------------------------------------------------------------------
@@ -240,13 +214,9 @@ export async function addAssessment(courseId: string, form: FormData): Promise<R
   if (!v) return NO_ACCESS;
   const input = parse(AssessmentInput, form);
   if (!input.ok) return input.result;
-  const ctx = await loadCourseContext(v.db, courseId);
-  if (!ctx) return NO_ACCESS;
-  // The same path as an AI draft (ADR 0027).
-  const item: ChangeItem = { op: "add_assessment", ...input.data };
-  if (itemProblem(item, ctx)) return failed("Pick a category from this course.", { categoryId: "Pick a category" });
-  const { error } = await applyChangeSet(v.db, ctx, [item]);
-  return error ? failed(error) : done(input.data.scoreEarned === null ? "Added" : "Grade added");
+  const item: ChangeItem = { op: "add_assessment", courseId, ...input.data, excused: false };
+  const result = await applyToRow(v, "courses", courseId, item, input.data.scoreEarned === null ? "Added" : "Grade added");
+  return !result.ok && result.error === CATEGORY_PROBLEM ? failed(result.error, { categoryId: "Pick a category" }) : result;
 }
 
 /** Enter a score on the same record the student saw as upcoming. */
@@ -255,19 +225,13 @@ export async function saveScore(assessmentId: string, form: FormData): Promise<R
   if (!v) return NO_ACCESS;
   const input = parse(ScoreInput, form);
   if (!input.ok) return input.result;
-  const p = await parent(v, "assessments", assessmentId);
-  if (!p?.course_id) return NO_ACCESS;
-  const ctx = await loadCourseContext(v.db, p.course_id);
-  if (!ctx) return NO_ACCESS;
-  const { error } = await applyChangeSet(v.db, ctx, [{ op: "set_score", assessmentId, ...input.data }]);
-  return error ? failed(error) : done();
+  return applyToRow(v, "assessments", assessmentId, { op: "update_assessment", assessmentId, ...input.data }, "Saved");
 }
 
 export async function deleteAssessment(assessmentId: string): Promise<Result> {
   const v = await staff();
   if (!v) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("assessments").delete().eq("id", assessmentId);
-  return error ? failed(dbMessage(error)) : done("Removed");
+  return applyToRow(v, "assessments", assessmentId, { op: "remove_assessment", assessmentId }, "Removed");
 }
 
 // Tasks: priorities and supplemental work ----------------------------------------------
@@ -277,15 +241,7 @@ export async function addTask(studentId: string, form: FormData): Promise<Result
   if (!v) return NO_ACCESS;
   const input = parse(TaskInput, form);
   if (!input.ok) return input.result;
-  const p = await parent(v, "students", studentId);
-  if (!p) return NO_ACCESS;
-  const { data: last } = await v.db.tracker
-    .from("tasks").select("rank").eq("student_id", studentId).order("rank", { ascending: false }).limit(1).maybeSingle();
-  const { error } = await v.db.tracker.from("tasks").insert({
-    org_id: p.org_id, student_id: studentId, course_id: input.data.courseId, title: input.data.title,
-    kind: input.data.kind, reason: input.data.reason, pinned: input.data.pinned, rank: Number(last?.rank ?? -1) + 1,
-  });
-  return error ? failed(dbMessage(error)) : done("Added");
+  return applyOne(v, studentId, { op: "add_task", ...input.data }, "Added");
 }
 
 /**
@@ -317,8 +273,7 @@ export async function addSuggestedTask(studentId: string, key: string): Promise<
 export async function setTaskPinned(taskId: string, pinned: boolean): Promise<Result> {
   const v = await staff();
   if (!v) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("tasks").update({ pinned }).eq("id", taskId);
-  return error ? failed(dbMessage(error)) : done(pinned ? "Pinned" : "Unpinned");
+  return applyToRow(v, "tasks", taskId, { op: "update_task", taskId, pinned }, pinned ? "Pinned" : "Unpinned");
 }
 
 /** Swap a task with its neighbour in the student's ordered open list. */
@@ -348,8 +303,7 @@ export async function moveTask(taskId: string, direction: "up" | "down"): Promis
 export async function deleteTask(taskId: string): Promise<Result> {
   const v = await staff();
   if (!v) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("tasks").delete().eq("id", taskId);
-  return error ? failed(dbMessage(error)) : done("Removed");
+  return applyToRow(v, "tasks", taskId, { op: "remove_task", taskId }, "Removed");
 }
 
 // Grade flags ----------------------------------------------------------------------

@@ -31,3 +31,8 @@ export function stamp(iso: string | null): string {
 export function studentName(s: { firstName: string; lastInitial: string }): string {
   return `${s.firstName} ${s.lastInitial}.`;
 }
+
+/** The number a teacher writes on notes instead of a name (ADR 0028). */
+export function studentNumber(n: number): string {
+  return `S-${String(n).padStart(4, "0")}`;
+}

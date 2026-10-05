@@ -18,6 +18,12 @@ export const TUNING = {
   suggestionsLimit: 5,
   /** AI drafts per org per day (ADR 0026). */
   aiDailyDraftsPerOrg: 50,
-  /** Longest paste sent for an AI draft, in characters. */
-  aiMaxPasteChars: 20000,
+  /** Longest text sent for an AI draft, in characters: a 90-minute transcript fits (ADR 0028). */
+  aiMaxTextChars: 150000,
+  /** Attachments (photos, PDFs, transcript files) per AI draft. */
+  aiMaxFiles: 6,
+  /** Largest attachment, in bytes, after the browser has downscaled a photo. */
+  aiMaxFileBytes: 8 * 1024 * 1024,
+  /** Longest edge of a photo sent to the model, in pixels. The API downscales past this anyway. */
+  aiImageMaxEdge: 1568,
 } as const;
