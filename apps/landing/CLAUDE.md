@@ -25,7 +25,13 @@ folder at the repo root. Workspace layout: the root `CLAUDE.md`.
 - Font: Inter
 
 ## Routes
-- `/` — Landing page: hero, subjects, schedule, guarantee, pricing, CTA
+- `/` — Landing page (October 2026 redesign, `docs/spec/landing-redesign-2026-10.md`):
+  announcement bar, two-column hero with a lesson-log graphic, one Google review
+  band, the student roster, who teaches, how we teach, the two offers, FAQ, CTA.
+  Copy lives in `content/` (`reviews.ts`, `students.ts`, `methods.ts`,
+  `offer.ts`). The roster and the review band hide themselves while their
+  content file is empty. The Path to Waterloo graphic is no longer on the
+  homepage; `/path/<slug>` still serves each stage.
 - `/info` — VSL page with video embed placeholder
 - `/enroll` — Purchase page with Stripe Payment Link buttons
 - `/privacy` — Privacy policy
