@@ -2,6 +2,7 @@ import { STATE_LABEL } from "@/lib/domain/assessment-state";
 import { gap, percent, points, shortDate, stamp } from "@/lib/format";
 import type { CourseView } from "@/lib/view/student-view";
 import { DoneButton } from "./done-button";
+import { FlagControl } from "./flag-control";
 import { Card, Empty, GradeNote, StateBadge } from "./ui";
 
 /**
@@ -60,6 +61,9 @@ export function CourseDetail({ view, interactive }: { view: CourseView; interact
                     {a.categoryName} · {shortDate(a.dueDate)}
                     {a.state === "awaiting_result" ? " · Awaiting result" : ""}
                   </span>
+                  {interactive && a.state === "awaiting_result" && (
+                    <FlagControl key={`${a.id}-${a.openFlag?.reason ?? ""}`} assessmentId={a.id} state={a.state} reason={a.openFlag?.reason ?? null} label={a.title} />
+                  )}
                 </span>
                 {interactive && a.state !== "awaiting_result" ? (
                   <DoneButton kind="assessment" id={a.id} done={a.studentDoneAt !== null} label={a.title} />
@@ -96,10 +100,13 @@ export function CourseDetail({ view, interactive }: { view: CourseView; interact
         ) : (
           <ul className="flex flex-col divide-y divide-border">
             {view.graded.map((a) => (
-              <li key={a.id} className="flex items-center justify-between gap-3 py-2">
+              <li key={a.id} className="flex items-start justify-between gap-3 py-2">
                 <span className="min-w-0">
                   <span className="block font-medium">{a.title}</span>
                   <span className="block text-xs text-text-muted">{a.categoryName}</span>
+                  {interactive && (
+                    <FlagControl key={`${a.id}-${a.openFlag?.reason ?? ""}`} assessmentId={a.id} state={a.state} reason={a.openFlag?.reason ?? null} label={a.title} />
+                  )}
                 </span>
                 <span className="shrink-0 text-right">
                   <span className="block font-semibold">

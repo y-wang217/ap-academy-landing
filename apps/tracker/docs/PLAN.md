@@ -13,7 +13,7 @@ Each step is done only when lint, typecheck and tests pass.
 | 5 | Teacher course view | done: `/students/[id]/courses/[courseId]`, priorities on `/students/[id]` |
 | 6 | Student dashboard, drill-down, Done | done: `/`, `/courses/[courseId]` |
 | 7 | Reliability: audit, stamps, states, errors, backups, restore | done: `0005_tracker_audit.sql`, `scripts/backup.sh`, [`docs/RESTORE.md`](../../../docs/RESTORE.md) |
-| 8 | Stop. v1 needs explicit go-ahead | stopped here |
+| 8 | v1: suggestions, flags, AI paste (go-ahead 2026-10-05, [`spec/build-step-8.md`](spec/build-step-8.md)) | done: `0006_tracker_v1.sql` (live 2026-10-05), ADRs 0024 to 0027 |
 
 ## Notes
 - Step 3: the brief's reference example is 96.4695 at full precision, not
@@ -28,6 +28,25 @@ Each step is done only when lint, typecheck and tests pass.
   role, including the table owner. Last-updated stamps on every screen. The
   restore drill (`pnpm test:restore`) passes locally and runs in CI; a drill
   against a scratch Supabase project waits on the backup secrets.
+
+- Step 8: suggestions are teacher-only and become tasks with a stored reason
+  (ADR 0024). Flags are fixed-choice, written through two functions, resolved
+  by staff (ADR 0025). AI paste is off without `ANTHROPIC_API_KEY`; the model
+  sees refs, not ids, and no name or email; nothing is written until the
+  teacher saves the ticked changes (ADRs 0026, 0027). Verified: RLS
+  (`supabase/tests/tracker_v1.sql`), unit tests, and 21 more end-to-end checks
+  (55 in all) including the AI flow against a mock model.
+
+## Before step 8 goes live
+
+1. ~~Apply `0006_tracker_v1` to the live project before merging.~~ Done
+   2026-10-05 with sign-off; RLS on all 12 tracker tables, students can write
+   flags only through the two functions, anon cannot call them.
+2. For AI paste: add `ANTHROPIC_API_KEY` to the tracker's Vercel project
+   (server-only, no `NEXT_PUBLIC_`), with a monthly spend limit on the key.
+   Without it the paste panel stays hidden.
+3. Privacy policy: pasted grades (with names and emails removed) are sent to
+   Anthropic's API.
 
 ## Before real students (outside the code)
 
@@ -45,4 +64,4 @@ Each step is done only when lint, typecheck and tests pass.
 
 - Syllabus edits after publish (ADR 0018).
 - An audit history screen. The log is complete; nothing shows it yet.
-- v1: AI drafts, student flags on a grade, rule-based priorities (step 8).
+- An AI usage screen. `tracker.ai_drafts` records every request; nothing shows it yet.

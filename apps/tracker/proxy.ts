@@ -18,5 +18,27 @@ export const config = {
   // Relative to basePath. "/" is listed on its own because the second pattern
   // compiles to /tracker/<something> and misses the bare /tracker. Static
   // assets don't need a session.
-  matcher: ["/", "/((?!_next/static|_next/image|favicon.ico).*)"],
+  //
+  // Prefetches skip the proxy. Next 16 prefetches every link in view, and on
+  // Vercel a dynamic page's segment prefetch 404s anyway, so each one cost a
+  // Supabase /user call for nothing (about 90 in a minute of using the setup
+  // wizard). The real navigation still runs the proxy, and every page checks
+  // the viewer itself, so a skipped prefetch neither refreshes nor grants a
+  // session. Literal, not a shared constant: the config must be static.
+  matcher: [
+    {
+      source: "/",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
+    {
+      source: "/((?!_next/static|_next/image|favicon.ico).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
+  ],
 };

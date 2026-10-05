@@ -1,7 +1,8 @@
-// Acceptance checks 1 to 6 of docs/spec/single-domain-done-state.md, in a real
-// browser, against both apps running behind landing's rewrite. The session the
-// auth callback would set is injected as a cookie: the magic-link email itself
-// is not tested here. Run through ./run.sh.
+// Acceptance checks 1 to 6 of docs/spec/single-domain-done-state.md, plus 7
+// (the tracker proxy skips prefetches), in a real browser, against both apps
+// running behind landing's rewrite. The session the auth callback would set is
+// injected as a cookie: the magic-link email itself is not tested here. Run
+// through ./run.sh.
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 
@@ -89,6 +90,14 @@ await page.click("header button:has-text('Sign out')");
 await page.waitForSelector("header a:has-text('Sign in')");
 await page.goto(BASE + "/tracker");
 check("5e /sat sign-out also signs out of /tracker", new URL(page.url()).pathname === "/login", page.url());
+
+// 7. Prefetches skip the tracker proxy (no Supabase call per link in view).
+// Signed out here, so the proxy would answer with a redirect to /login.
+const prefetch = { RSC: "1", "Next-Router-Prefetch": "1" };
+r = await fetch(BASE + "/tracker/students/new", { redirect: "manual" });
+check("7 a signed-out navigation is redirected by the proxy", r.status === 307, String(r.status));
+r = await fetch(BASE + "/tracker/students/new", { redirect: "manual", headers: prefetch });
+check("7b a prefetch is not seen by the proxy", r.status < 300 || r.status >= 400, String(r.status));
 
 await browser.close();
 const failed = results.filter((x) => !x.ok).length;

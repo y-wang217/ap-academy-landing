@@ -2,7 +2,7 @@ import Link from "next/link";
 import { setStudentStatus, updateStudent } from "@/app/actions/teacher";
 import { ActionButton, ActionForm } from "@/components/action-form";
 import { STUDENT_LABELS, StudentFields } from "@/components/teacher/fields";
-import { InvitePanel, TaskManager } from "@/components/teacher/panels";
+import { FlagList, InvitePanel, TaskManager } from "@/components/teacher/panels";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, GradeNote, Notice, Page, linkClass, secondaryButtonClass } from "@/components/ui";
 import { gap, percent, stamp, studentName } from "@/lib/format";
@@ -26,6 +26,8 @@ export default async function StudentPage({ params }: { params: Promise<{ studen
           </Notice>
         )}
         {s.status === "archived" && <Notice>Archived. {s.firstName} can still read their history but can&apos;t mark work done.</Notice>}
+
+        <FlagList view={view} />
 
         <Card title="Progress">
           <p className="text-sm text-text-muted">

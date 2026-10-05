@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { validateSyllabus } from "@/lib/domain/grades";
 import { orderTasks } from "@/lib/domain/priorities";
+import { applyChangeSet, itemProblem, loadCourseContext, type ChangeItem } from "@/lib/data/change-set";
 import { dbMessage } from "@/lib/data/errors";
 import { getViewer, loadBundle } from "@/lib/data/queries";
 import {
@@ -11,7 +12,9 @@ import {
   fieldErrors, formObject,
 } from "@/lib/data/schemas";
 import { failed, type Result } from "@/lib/result";
-import type { z } from "zod";
+import { todayIso } from "@/lib/time";
+import { buildStudentView } from "@/lib/view/student-view";
+import { z } from "zod";
 
 // Every action: Zod first, then the signed-in staff member's own client, so
 // RLS has the final say. Nothing here uses a service-role key.
@@ -237,15 +240,13 @@ export async function addAssessment(courseId: string, form: FormData): Promise<R
   if (!v) return NO_ACCESS;
   const input = parse(AssessmentInput, form);
   if (!input.ok) return input.result;
-  const p = await parent(v, "courses", courseId);
-  if (!p) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("assessments").insert({
-    org_id: p.org_id, student_id: p.student_id, course_id: courseId, category_id: input.data.categoryId,
-    title: input.data.title, due_date: input.data.dueDate, score_possible: input.data.scorePossible,
-    score_earned: input.data.scoreEarned,
-  });
-  if (error?.code === "23503") return failed("Pick a category from this course.", { categoryId: "Pick a category" });
-  return error ? failed(dbMessage(error)) : done(input.data.scoreEarned === null ? "Added" : "Grade added");
+  const ctx = await loadCourseContext(v.db, courseId);
+  if (!ctx) return NO_ACCESS;
+  // The same path as an AI draft (ADR 0027).
+  const item: ChangeItem = { op: "add_assessment", ...input.data };
+  if (itemProblem(item, ctx)) return failed("Pick a category from this course.", { categoryId: "Pick a category" });
+  const { error } = await applyChangeSet(v.db, ctx, [item]);
+  return error ? failed(error) : done(input.data.scoreEarned === null ? "Added" : "Grade added");
 }
 
 /** Enter a score on the same record the student saw as upcoming. */
@@ -254,13 +255,12 @@ export async function saveScore(assessmentId: string, form: FormData): Promise<R
   if (!v) return NO_ACCESS;
   const input = parse(ScoreInput, form);
   if (!input.ok) return input.result;
-  const { data, error } = await v.db.tracker
-    .from("assessments")
-    .update({ score_earned: input.data.scoreEarned, score_possible: input.data.scorePossible, excused: input.data.excused })
-    .eq("id", assessmentId)
-    .select("id");
-  if (!error && (data ?? []).length === 0) return NO_ACCESS;
-  return error ? failed(dbMessage(error)) : done();
+  const p = await parent(v, "assessments", assessmentId);
+  if (!p?.course_id) return NO_ACCESS;
+  const ctx = await loadCourseContext(v.db, p.course_id);
+  if (!ctx) return NO_ACCESS;
+  const { error } = await applyChangeSet(v.db, ctx, [{ op: "set_score", assessmentId, ...input.data }]);
+  return error ? failed(error) : done();
 }
 
 export async function deleteAssessment(assessmentId: string): Promise<Result> {
@@ -286,6 +286,32 @@ export async function addTask(studentId: string, form: FormData): Promise<Result
     kind: input.data.kind, reason: input.data.reason, pinned: input.data.pinned, rank: Number(last?.rank ?? -1) + 1,
   });
   return error ? failed(dbMessage(error)) : done("Added");
+}
+
+/**
+ * Add a rule-based suggestion as an ordinary school task (ADR 0024). The
+ * suggestion is recomputed here from current data, so the stored title and
+ * reason are what the rules say now, not what the page showed earlier.
+ */
+export async function addSuggestedTask(studentId: string, key: string): Promise<Result> {
+  const v = await staff();
+  if (!v) return NO_ACCESS;
+  const id = z.guid().safeParse(studentId);
+  if (!id.success || !/^(prepare|review):[0-9a-f-]{36}$/i.test(key)) return failed("Something went wrong. Try again.");
+  const bundle = await loadBundle(v.db, studentId);
+  if (!bundle) return NO_ACCESS;
+  const suggestion = buildStudentView(bundle, todayIso()).suggestions.find((s) => s.key === key);
+  if (!suggestion) {
+    revalidatePath("/", "layout");
+    return failed("That suggestion no longer applies.");
+  }
+  const rank = bundle.tasks.reduce((max, t) => Math.max(max, t.rank), -1) + 1;
+  const { error } = await v.db.tracker.from("tasks").insert({
+    org_id: bundle.student.orgId, student_id: studentId, course_id: suggestion.courseId, title: suggestion.title,
+    kind: "school", reason: suggestion.reason, pinned: false, rank, suggestion_key: suggestion.key,
+  });
+  if (error) return failed(dbMessage(error));
+  return done("Added to priorities");
 }
 
 export async function setTaskPinned(taskId: string, pinned: boolean): Promise<Result> {
@@ -324,4 +350,25 @@ export async function deleteTask(taskId: string): Promise<Result> {
   if (!v) return NO_ACCESS;
   const { error } = await v.db.tracker.from("tasks").delete().eq("id", taskId);
   return error ? failed(dbMessage(error)) : done("Removed");
+}
+
+// Grade flags ----------------------------------------------------------------------
+
+/** Mark a student's flag resolved (ADR 0025). Fix the score first; this never changes it. */
+export async function resolveFlag(flagId: string): Promise<Result> {
+  const v = await staff();
+  if (!v) return NO_ACCESS;
+  if (!z.guid().safeParse(flagId).success) return failed("Something went wrong. Try again.");
+  const { data, error } = await v.db.tracker
+    .from("grade_flags")
+    .update({ resolved_at: new Date().toISOString() })
+    .eq("id", flagId)
+    .is("resolved_at", null)
+    .select("id");
+  if (error) return failed(dbMessage(error));
+  if ((data ?? []).length === 0) {
+    revalidatePath("/", "layout");
+    return failed("This flag was already resolved or withdrawn.");
+  }
+  return done("Resolved");
 }

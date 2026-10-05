@@ -15,7 +15,7 @@ function assessment(id: string, courseId: string, categoryId: string, earned: nu
   return { id, courseId, categoryId, title: id, dueDate: due, studentDoneAt: null, scoreEarned: earned, scorePossible: possible, excused: false, gradedAt: earned === null ? null : stamp, updatedAt: stamp, ...o };
 }
 function task(id: string, o: Partial<Task> = {}): Task {
-  return { id, courseId: null, title: id, kind: "school", pinned: false, rank: 0, reason: null, doneAt: null, createdAt: stamp, updatedAt: stamp, ...o };
+  return { id, courseId: null, title: id, kind: "school", pinned: false, rank: 0, reason: null, suggestionKey: null, doneAt: null, createdAt: stamp, updatedAt: stamp, ...o };
 }
 
 function bundle(): BundleLike {
@@ -39,6 +39,7 @@ function bundle(): BundleLike {
       assessment("late", "sch", "all", null, 20, "2026-10-01", { studentDoneAt: stamp }),
     ],
     tasks: [task("pinned", { pinned: true, rank: 3 }), task("extra", { kind: "supplemental" }), task("done", { doneAt: stamp })],
+    flags: [],
   };
 }
 
@@ -70,5 +71,34 @@ describe("buildStudentView", () => {
   it("has no gap when a course has no target", () => {
     expect(view.courses[1].gapToTarget).toBeNull();
     expect(view.courses[0].gapToTarget).toBeCloseTo(view.courses[0].result.grade! - 95, 10);
+  });
+
+  it("suggests nothing while every course is on target", () => {
+    expect(view.suggestions).toEqual([]);
+  });
+
+  it("words a suggestion's reason and hides it once it is an open task", () => {
+    const b = bundle();
+    b.courses[0] = course("mhf", { targetGrade: 99 });
+    const v = buildStudentView(b, TODAY);
+    expect(v.suggestions.map((s) => [s.key, s.title, s.reason])).toEqual([
+      ["prepare:u1", "Prepare for u1", "MHF is 2.5% below target and u1 is due in 6 days."],
+    ]);
+    b.tasks.push(task("added", { suggestionKey: "prepare:u1" }));
+    expect(buildStudentView(b, TODAY).suggestions).toEqual([]);
+    b.tasks[b.tasks.length - 1] = task("added", { suggestionKey: "prepare:u1", doneAt: stamp });
+    expect(buildStudentView(b, TODAY).suggestions).toHaveLength(1);
+  });
+
+  it("attaches open flags to their assessment and lists them for the teacher", () => {
+    const b = bundle();
+    b.flags = [
+      { id: "f2", assessmentId: "late", reason: "returned", createdAt: "2026-10-03T00:00:00Z", resolvedAt: null },
+      { id: "f1", assessmentId: "t1", reason: "score_differs", createdAt: "2026-10-02T00:00:00Z", resolvedAt: null },
+    ];
+    const v = buildStudentView(b, TODAY);
+    expect(v.flagged.map((a) => a.id)).toEqual(["t1", "late"]);
+    expect(v.courses[0].graded.find((a) => a.id === "t1")?.openFlag?.reason).toBe("score_differs");
+    expect(v.courses[0].graded.find((a) => a.id === "t2")?.openFlag).toBeNull();
   });
 });
