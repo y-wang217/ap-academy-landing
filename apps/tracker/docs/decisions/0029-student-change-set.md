@@ -33,8 +33,9 @@ everything the wizard and the course page can write.
   data the model drafts.
 - **What the model sees and says.** The prompt lists the student as refs
   (`G` for the goal, `C1..` courses, `K1..` categories, `A1..` assessments,
-  `T1..` tasks), never ids, and never name, email, school or program beyond
-  what the goal already holds. The model answers with the same op names,
+  `T1..` tasks), never ids, and never the student's name or email. The goal's
+  school and program are sent because the model edits them; ADR 0026 kept
+  them out and is superseded on that point. The model answers with the same op names,
   refs for existing rows and a `new_ref` of its own choosing for rows it
   adds; `toDraftItems` turns those into `$k` references and drops anything
   that does not map. Each item carries `certain`: the preview ticks certain
