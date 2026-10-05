@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { validateSyllabus } from "@/lib/domain/grades";
 import { orderTasks } from "@/lib/domain/priorities";
+import { applyChangeSet, itemProblem, loadCourseContext, type ChangeItem } from "@/lib/data/change-set";
 import { dbMessage } from "@/lib/data/errors";
 import { getViewer, loadBundle } from "@/lib/data/queries";
 import {
@@ -239,15 +240,13 @@ export async function addAssessment(courseId: string, form: FormData): Promise<R
   if (!v) return NO_ACCESS;
   const input = parse(AssessmentInput, form);
   if (!input.ok) return input.result;
-  const p = await parent(v, "courses", courseId);
-  if (!p) return NO_ACCESS;
-  const { error } = await v.db.tracker.from("assessments").insert({
-    org_id: p.org_id, student_id: p.student_id, course_id: courseId, category_id: input.data.categoryId,
-    title: input.data.title, due_date: input.data.dueDate, score_possible: input.data.scorePossible,
-    score_earned: input.data.scoreEarned,
-  });
-  if (error?.code === "23503") return failed("Pick a category from this course.", { categoryId: "Pick a category" });
-  return error ? failed(dbMessage(error)) : done(input.data.scoreEarned === null ? "Added" : "Grade added");
+  const ctx = await loadCourseContext(v.db, courseId);
+  if (!ctx) return NO_ACCESS;
+  // The same path as an AI draft (ADR 0027).
+  const item: ChangeItem = { op: "add_assessment", ...input.data };
+  if (itemProblem(item, ctx)) return failed("Pick a category from this course.", { categoryId: "Pick a category" });
+  const { error } = await applyChangeSet(v.db, ctx, [item]);
+  return error ? failed(error) : done(input.data.scoreEarned === null ? "Added" : "Grade added");
 }
 
 /** Enter a score on the same record the student saw as upcoming. */
@@ -256,13 +255,12 @@ export async function saveScore(assessmentId: string, form: FormData): Promise<R
   if (!v) return NO_ACCESS;
   const input = parse(ScoreInput, form);
   if (!input.ok) return input.result;
-  const { data, error } = await v.db.tracker
-    .from("assessments")
-    .update({ score_earned: input.data.scoreEarned, score_possible: input.data.scorePossible, excused: input.data.excused })
-    .eq("id", assessmentId)
-    .select("id");
-  if (!error && (data ?? []).length === 0) return NO_ACCESS;
-  return error ? failed(dbMessage(error)) : done();
+  const p = await parent(v, "assessments", assessmentId);
+  if (!p?.course_id) return NO_ACCESS;
+  const ctx = await loadCourseContext(v.db, p.course_id);
+  if (!ctx) return NO_ACCESS;
+  const { error } = await applyChangeSet(v.db, ctx, [{ op: "set_score", assessmentId, ...input.data }]);
+  return error ? failed(error) : done();
 }
 
 export async function deleteAssessment(assessmentId: string): Promise<Result> {

@@ -2,13 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { saveTarget } from "@/app/actions/teacher";
 import { ActionForm } from "@/components/action-form";
+import { AiPastePanel } from "@/components/teacher/ai-paste";
 import { AssessmentManager, SyllabusEditor } from "@/components/teacher/panels";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Field, GradeNote, Page, linkClass, numberInputClass } from "@/components/ui";
 import { gap, percent, points, stamp, studentName } from "@/lib/format";
+import { aiConfigured } from "@/lib/ai/config";
+import { TUNING } from "@/lib/domain/tuning";
 import { staffStudent } from "@/lib/pages";
 
 export const dynamic = "force-dynamic";
+// An AI draft (server action on this page) can take most of a minute.
+export const maxDuration = 120;
 
 /** Teacher course view (build step 5): assessments, scores, syllabus, target. */
 export default async function TeacherCoursePage({ params }: { params: Promise<{ studentId: string; courseId: string }> }) {
@@ -48,6 +53,12 @@ export default async function TeacherCoursePage({ params }: { params: Promise<{ 
             </Field>
           </ActionForm>
         </Card>
+
+        {aiConfigured() && course.categories.length > 0 && (
+          <Card title="Paste from the school portal">
+            <AiPastePanel courseId={course.course.id} maxChars={TUNING.aiMaxPasteChars} />
+          </Card>
+        )}
 
         <Card title="Assessments">
           <AssessmentManager view={course} />

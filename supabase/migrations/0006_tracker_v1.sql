@@ -151,7 +151,7 @@ create table tracker.ai_drafts (
   course_id uuid not null,
   requested_by uuid not null default auth.uid() references auth.users on delete restrict,
   input_chars integer not null check (input_chars between 1 and 100000),
-  status text not null default 'requested' check (status in ('requested', 'drafted', 'failed', 'applied')),
+  status text not null default 'requested' check (status in ('requested', 'drafted', 'failed', 'applied', 'discarded')),
   model text check (length(model) <= 100),
   input_tokens integer check (input_tokens >= 0),
   output_tokens integer check (output_tokens >= 0),
