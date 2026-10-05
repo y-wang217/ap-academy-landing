@@ -11,7 +11,7 @@ ADR 0011 deferred AI to v1: a server route outputs a Zod-validated draft change 
 - **Off by default:** without `ANTHROPIC_API_KEY` in the tracker's environment the paste panel does not render and the action refuses. No other part of the app depends on it.
 - **Privacy:** the prompt carries course code and name, category names and weights, assessment titles, dates and scores, and the pasted text with the student's first name replaced. Never email, last initial, school or program.
 - **Limits:** `TUNING.aiDailyDraftsPerOrg` drafts per org per day (counted in `tracker.ai_drafts`), and `TUNING.aiMaxPasteChars` characters per paste.
-- **Record:** each request is a row in `tracker.ai_drafts` (who, when, which course, size, outcome, the validated draft). The pasted text is not stored. Confirm loads the draft from that row, never from the browser.
+- **Record:** each request is a row in `tracker.ai_drafts` (who, when, which course, size, outcome, the validated draft). The full pasted text is not stored; the draft keeps only the line each change came from, after the name and emails were removed. Confirm loads the draft from that row, never from the browser.
 
 ## Alternatives considered
 - Raw `fetch` to the API: the SDK carries the typed structured-output parsing and retry behaviour; the dependency is one package in this app only.

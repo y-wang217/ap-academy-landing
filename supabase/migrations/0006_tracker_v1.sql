@@ -5,8 +5,9 @@
 --     resolved by staff (tracker ADR 0025). Students write it only through
 --     two security-definer functions (tracker ADR 0015).
 --   * ai_drafts: one row per AI draft request, for the per-org daily limit and
---     for confirm to load the validated draft (tracker ADR 0026). The pasted
---     text is never stored.
+--     for confirm to load the validated draft (tracker ADR 0026). The full
+--     pasted text is never stored, only each change's source line, after
+--     names and emails were removed.
 -- Tested by supabase/tests/tracker_v1.sql.
 
 -- Suggestions -------------------------------------------------------------------
