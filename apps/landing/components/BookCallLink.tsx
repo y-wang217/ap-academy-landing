@@ -7,7 +7,7 @@ import { track } from "@/lib/analytics";
 // placement (brief §8). The hero additionally fires hero_cta_click.
 
 type Props = {
-  placement: "hero" | "header" | "stage" | "offer" | "closing";
+  placement: "announcement" | "hero" | "header" | "stage" | "offer" | "closing";
   className?: string;
   children: React.ReactNode;
 };
