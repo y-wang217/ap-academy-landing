@@ -1,7 +1,8 @@
-// Tracker end-to-end flows (build steps 4 to 7) in Chromium, against the
+// Tracker end-to-end flows (build steps 4 to 8) in Chromium, against the
 // local stack (stack.sh): a teacher onboards a student, publishes, the student
-// signs in, marks work done, and sees a score the teacher enters. Run through
-// ./run.sh, or directly with TRACKER_BASE set to a running tracker.
+// signs in, marks work done, and sees a score the teacher enters. Then v1:
+// a priority suggestion, a grade flag, and an AI paste against a mock model.
+// Run through ./run.sh, or directly with TRACKER_BASE set to a running tracker.
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 
@@ -12,6 +13,7 @@ const { chromium } = require("playwright");
 const BASE = (process.env.TRACKER_BASE ?? "http://localhost:3001/tracker").replace(/\/$/, "");
 const ORIGIN = new URL(BASE).origin;
 const MOCK = process.env.MOCK_URL ?? "http://127.0.0.1:54321";
+const MOCK_AI = process.env.MOCK_AI_URL ?? "http://127.0.0.1:54332";
 
 const results = [];
 function check(name, ok, detail = "") {
@@ -232,6 +234,47 @@ try {
   await student.reload();
   check("clearing the score (unmarked) restores the grade", await section(student, "Progress").getByText("96.5%").isVisible());
 
+  // Step 8: a priority suggestion (ADR 0024) ------------------------------------------
+  // MHF4U is 96.5%; a 99% target puts it 2.5 points behind with nothing due soon
+  // (Unit 3 test is marked done, the lab is 9 days out), so the rule says review.
+  await teacher.goto(`${BASE}${coursePath}`);
+  const target = section(teacher, "Current grade");
+  await target.getByLabel("Course target (%)").fill("99");
+  await submitAndWait(target, "Save target", "Saved");
+  await teacher.goto(`${BASE}${studentPath}`);
+  const priorities = section(teacher, "Priorities and extra practice");
+  const reason = "MHF4U is 2.5% below target. Tests is the lowest category at 95.7%.";
+  check("the teacher sees a suggestion with its reason", await priorities.getByText(reason).isVisible());
+  await priorities.locator("li", { hasText: "Review Tests in MHF4U" }).getByRole("button", { name: "Add to priorities" }).click();
+  await priorities.getByText("Suggested", { exact: true }).waitFor({ state: "detached", timeout: 15000 });
+  check("adding a suggestion makes it a task and hides it", await priorities.getByText("Review Tests in MHF4U").count() === 1);
+  await student.goto(`${BASE}`);
+  check("the student sees the added priority with its reason", await section(student, "Next priorities").getByText(new RegExp(`MHF4U · ${reason.replace(/[.%]/g, "\\$&")}`)).isVisible());
+
+  // Step 8: a grade flag (ADR 0025) ----------------------------------------------------
+  await section(student, "Active subjects").getByRole("link", { name: /MHF4U/ }).click();
+  await student.waitForURL(/\/courses\//);
+  const past = section(student, "Past scores");
+  await past.getByRole("button", { name: "Flag Test 1" }).click();
+  await past.getByRole("button", { name: "My mark is different" }).click();
+  await past.getByText("Flagged: My mark is different. Your tutor will check.").waitFor({ timeout: 15000 });
+  await student.reload();
+  check("a student flags a grade and the flag is saved", await section(student, "Past scores").getByText("Flagged: My mark is different.", { exact: false }).isVisible());
+  check("flagging needs no typing", (await student.locator("input, textarea, select").count()) === 0);
+  await teacher.goto(`${BASE}`);
+  check("the teacher's student list counts the flag", await teacher.getByText("1 flag", { exact: true }).isVisible());
+  await teacher.goto(`${BASE}${coursePath}`);
+  check("the course view shows the flag on the assessment", await section(teacher, "Assessments").locator("li", { hasText: "Test 1" }).getByText(/Student flagged this: .My mark is different./).isVisible());
+  await teacher.goto(`${BASE}${studentPath}`);
+  const flags = section(teacher, "Flags from Sam");
+  check("the student page lists the flag", await flags.getByText("MHF4U · Test 1").isVisible());
+  await flags.getByRole("button", { name: "Mark resolved" }).click();
+  await flags.waitFor({ state: "detached", timeout: 15000 });
+  check("resolving clears the flag for the teacher", true);
+  await student.reload();
+  check("resolving clears the flag for the student", await section(student, "Past scores").getByRole("button", { name: "Flag Test 1" }).isVisible());
+  check("a flag never changes the grade", await section(student, "Current grade").getByText("96.5%").isVisible());
+
   // A failed save rolls back and says so: archive the student, then tap Done.
   await teacher.goto(`${BASE}${studentPath}`);
   teacher.once("dialog", (d) => d.accept());
@@ -249,6 +292,26 @@ try {
   check("an uninvited user sees nothing", (await outsider.locator("h1").textContent()) === "Nothing here yet");
   const direct = await outsider.goto(`${BASE}${studentPath}`);
   check("an uninvited user cannot open a student page", direct?.status() === 404);
+  // Step 8: AI paste, preview, confirm, save (ADR 0026), against the mock model ---------
+  await teacher.goto(`${BASE}${coursePath}`);
+  const paste = section(teacher, "Paste from the school portal");
+  await paste.getByRole("textbox").fill("Sam L. (sam@example.com)\nLab report 18/20\nQuiz 2 9/10\nField trip money due Friday");
+  await paste.getByRole("button", { name: "Draft changes" }).click();
+  await paste.getByText("Nothing has been saved yet.", { exact: false }).waitFor({ timeout: 30000 });
+  const sent = await (await fetch(`${MOCK_AI}/__last`)).json();
+  const sentText = JSON.stringify(sent);
+  check("the AI request carries no student name or email", !/Sam|sam@example\.com/.test(sentText) && sentText.includes("the student"));
+  check("the AI request uses refs, not row ids", !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(sentText));
+  check("the preview shows a score change against the current value", await paste.getByText("Unmarked, out of 20 → 18 / 20").isVisible());
+  check("the preview shows new work", await paste.getByText("Quiz 2", { exact: true }).isVisible() && (await paste.getByText(/^New · Assignments/).isVisible()));
+  check("lines the AI could not place are listed, not saved", await paste.getByText("Field trip money due Friday").isVisible());
+  const before = await section(teacher, "Assessments").locator("li", { hasText: "Quiz 2" }).count();
+  check("nothing is saved before confirm", before === 0);
+  await paste.getByRole("button", { name: "Save selected (2)" }).click();
+  await paste.getByText("Saved 2 changes").waitFor({ timeout: 15000 });
+  await teacher.reload();
+  const assessments = section(teacher, "Assessments");
+  check("confirmed changes are saved", (await assessments.locator("li", { hasText: "Quiz 2" }).count()) === 1 && (await assessments.locator("li", { hasText: "Lab report" }).getByText("90.0%").isVisible()));
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {

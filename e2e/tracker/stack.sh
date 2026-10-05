@@ -3,6 +3,7 @@
 #   Postgres  127.0.0.1:54340  (stub + every migration + seed.sql)
 #   PostgREST 127.0.0.1:54331  (db-schemas public,tracker; test JWT secret)
 #   mock      127.0.0.1:54321  (Auth endpoints, /rest/v1 proxy, /__session)
+#   mock      127.0.0.1:54332  (Anthropic Messages API, fixed AI draft)
 # Prints the env the apps need. Stop with: e2e/tracker/stack.sh stop
 # Needs Postgres server binaries and a PostgREST binary (POSTGREST_BIN).
 set -euo pipefail
@@ -50,6 +51,7 @@ server-port = 54331
 CONF
 "$postgrest" "$state/postgrest.conf" >"$state/postgrest.log" 2>&1 & echo $! >> "$state/pids"
 PG_URL="$PG_URL" node "$here/mock-supabase.mjs" >"$state/mock.log" 2>&1 & echo $! >> "$state/pids"
+node "$here/mock-anthropic.mjs" >"$state/mock-anthropic.log" 2>&1 & echo $! >> "$state/pids"
 
 for _ in $(seq 1 40); do curl -sf -o /dev/null http://127.0.0.1:54331/ && curl -s -o /dev/null http://127.0.0.1:54321/ && break; sleep 0.25; done
 
@@ -60,5 +62,7 @@ console.log(h+"."+p+"."+createHmac("sha256",process.env.JWT_SECRET).update(h+"."
 cat > "$state/env" <<ENV
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon
+ANTHROPIC_BASE_URL=http://127.0.0.1:54332
+ANTHROPIC_API_KEY=test-key-for-the-local-mock
 ENV
 cat "$state/env"
