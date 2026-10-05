@@ -1,4 +1,4 @@
-import { featuredSeries, LISTED_STUDENTS } from "@/content/students";
+import { featuredSeries, LISTED_STUDENTS, studentLabel } from "@/content/students";
 
 // The hero illustration is a lesson log card. With a roster it draws one real
 // student's scores in one course; with none it shows the shape of an entry and
@@ -82,7 +82,7 @@ export default function HeroGraphic() {
               {series ? series.course : "One entry per lesson"}
             </p>
             <p className="mt-1 text-[13px] text-text-muted">
-              {series ? `${series.student.name} · ${series.student.teacher ?? "AP Academy"}` : "Filled by the teacher the same day"}
+              {series ? studentLabel(series.student) : "Filled by the teacher the same day"}
             </p>
           </div>
           {series && last && (

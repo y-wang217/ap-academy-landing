@@ -30,7 +30,8 @@ folder at the repo root. Workspace layout: the root `CLAUDE.md`.
   band, the student roster, who teaches, how we teach, the two offers, FAQ, CTA.
   Copy lives in `content/` (`reviews.ts`, `students.ts`, `methods.ts`,
   `offer.ts`). The roster and the review band hide themselves while their
-  content file is empty. The Path to Waterloo graphic is no longer on the
+  content file is empty. A student on the roster is a number (enrolment order)
+  and initials, never a name, school or teacher; keep it that way. The Path to Waterloo graphic is no longer on the
   homepage; `/path/<slug>` still serves each stage.
 - `/info` — VSL page with video embed placeholder
 - `/enroll` — Purchase page with Stripe Payment Link buttons

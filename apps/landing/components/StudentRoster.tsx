@@ -1,8 +1,9 @@
-import { LISTED_STUDENTS, PRE_LOG_COUNT, ROSTER_UPDATED, type Mark, type StudentEntry } from "@/content/students";
+import { LISTED_STUDENTS, PRE_LOG_COUNT, ROSTER_UPDATED, UNLOGGED_NUMBERS, type Mark, type StudentEntry } from "@/content/students";
 
 // One card per student, read straight off the lesson log. Attributes, never
 // verdicts: the latest mark, the trend, the teacher's own words, the count of
-// lessons. Hidden while content/students.ts lists nobody.
+// lessons. A student is a number and initials, nothing more. Hidden while
+// content/students.ts lists nobody.
 
 function Sparkline({ marks }: { marks: Mark[] }) {
   const values = marks.map((m) => m.value);
@@ -25,7 +26,7 @@ function GradeChip({ grade }: { grade: StudentEntry["grade"] }) {
   const label = grade === "alumni" ? "Alumni" : `Grade ${grade}`;
   return (
     <span
-      className={`rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] ${
+      className={`whitespace-nowrap rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] ${
         grade === "alumni" ? "bg-dark text-text-on-dark" : "bg-accent-bg text-accent-muted"
       }`}
     >
@@ -71,7 +72,8 @@ function StudentCard({ student }: { student: StudentEntry }) {
     <li className="flex h-full flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-serif text-[24px] leading-tight text-dark">{student.name}</h3>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent-muted">Student {student.number}</p>
+          <h3 className="mt-1 font-serif text-[26px] leading-tight text-dark">{student.initials}</h3>
           {student.courses.length > 0 && (
             <p className="mt-1 text-[13px] leading-snug text-text-muted">{student.courses.join(" · ")}</p>
           )}
@@ -84,9 +86,9 @@ function StudentCard({ student }: { student: StudentEntry }) {
       {student.status && (
         <blockquote className="flex-1 border-l-2 border-border-accent pl-3.5 text-[14px] leading-[1.6] text-text-secondary">
           {student.status}
-          {(student.statusDate || student.teacher) && (
+          {student.statusDate && (
             <footer className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-text-faint">
-              {[student.teacher, student.statusDate].filter(Boolean).join(" · ")}
+              Logged {student.statusDate}
             </footer>
           )}
         </blockquote>
@@ -116,7 +118,8 @@ export default function StudentRoster() {
       <p className="mx-auto mt-3.5 max-w-[58ch] text-center text-[16px] leading-relaxed text-text-muted">
         Every lesson since April 2026 is logged within 24 hours: what was covered, the latest test
         score, and where the next lesson starts. This is that log, one card per student, in the
-        teachers&apos; own words. First names only.
+        teachers&apos; own words. Students are numbered in order of enrolment and shown by
+        initials only.
       </p>
 
       <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -127,7 +130,8 @@ export default function StudentRoster() {
 
       <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-text-faint">
         Updated {ROSTER_UPDATED}
-        {PRE_LOG_COUNT > 0 && ` · ${PRE_LOG_COUNT} earlier students predate the log`}
+        {PRE_LOG_COUNT > 0 && ` · students 1 to ${PRE_LOG_COUNT} predate the log`}
+        {UNLOGGED_NUMBERS.length > 0 && ` · ${UNLOGGED_NUMBERS.join(" and ")} enrolled, nothing logged yet`}
       </p>
     </section>
   );
