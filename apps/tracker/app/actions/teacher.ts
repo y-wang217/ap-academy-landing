@@ -11,7 +11,9 @@ import {
   fieldErrors, formObject,
 } from "@/lib/data/schemas";
 import { failed, type Result } from "@/lib/result";
-import type { z } from "zod";
+import { todayIso } from "@/lib/time";
+import { buildStudentView } from "@/lib/view/student-view";
+import { z } from "zod";
 
 // Every action: Zod first, then the signed-in staff member's own client, so
 // RLS has the final say. Nothing here uses a service-role key.
@@ -286,6 +288,32 @@ export async function addTask(studentId: string, form: FormData): Promise<Result
     kind: input.data.kind, reason: input.data.reason, pinned: input.data.pinned, rank: Number(last?.rank ?? -1) + 1,
   });
   return error ? failed(dbMessage(error)) : done("Added");
+}
+
+/**
+ * Add a rule-based suggestion as an ordinary school task (ADR 0024). The
+ * suggestion is recomputed here from current data, so the stored title and
+ * reason are what the rules say now, not what the page showed earlier.
+ */
+export async function addSuggestedTask(studentId: string, key: string): Promise<Result> {
+  const v = await staff();
+  if (!v) return NO_ACCESS;
+  const id = z.guid().safeParse(studentId);
+  if (!id.success || !/^(prepare|review):[0-9a-f-]{36}$/i.test(key)) return failed("Something went wrong. Try again.");
+  const bundle = await loadBundle(v.db, studentId);
+  if (!bundle) return NO_ACCESS;
+  const suggestion = buildStudentView(bundle, todayIso()).suggestions.find((s) => s.key === key);
+  if (!suggestion) {
+    revalidatePath("/", "layout");
+    return failed("That suggestion no longer applies.");
+  }
+  const rank = bundle.tasks.reduce((max, t) => Math.max(max, t.rank), -1) + 1;
+  const { error } = await v.db.tracker.from("tasks").insert({
+    org_id: bundle.student.orgId, student_id: studentId, course_id: suggestion.courseId, title: suggestion.title,
+    kind: "school", reason: suggestion.reason, pinned: false, rank, suggestion_key: suggestion.key,
+  });
+  if (error) return failed(dbMessage(error));
+  return done("Added to priorities");
 }
 
 export async function setTaskPinned(taskId: string, pinned: boolean): Promise<Result> {

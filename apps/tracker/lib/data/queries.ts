@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { getDb, type Db } from "./client";
 import {
-  AssessmentRow, CategoryRow, CourseRow, GoalRow, StudentRow, TaskRow, VersionRow,
-  type Assessment, type Category, type Course, type Goal, type Student, type Task, type Version,
+  AssessmentRow, CategoryRow, CourseRow, FlagRow, GoalRow, StudentRow, TaskRow, VersionRow,
+  type Assessment, type Category, type Course, type Flag, type Goal, type Student, type Task, type Version,
 } from "./schemas";
 
 export type Viewer =
@@ -58,21 +58,23 @@ export type Bundle = {
   categories: Category[];
   assessments: Assessment[];
   tasks: Task[];
+  flags: Flag[];
 };
 
 /** Everything about one student the caller may see. null when RLS hides it. */
 export async function loadBundle(db: Db, studentId: string): Promise<Bundle | null> {
   const t = db.tracker;
-  const [student, goal, courses, versions, categories, assessments, tasks] = await Promise.all([
+  const [student, goal, courses, versions, categories, assessments, tasks, flags] = await Promise.all([
     t.from("students").select(STUDENT_COLUMNS).eq("id", studentId).maybeSingle(),
     t.from("goals").select("id, school, program, application_year, target_six_avg, benchmark_note, updated_at").eq("student_id", studentId).maybeSingle(),
     t.from("courses").select("id, code, name, term, status, in_six_plan, target_grade, active_syllabus_version_id, position, updated_at").eq("student_id", studentId).order("position").order("code"),
     t.from("syllabus_versions").select("id, course_id, version, confirmed_at").eq("student_id", studentId),
     t.from("categories").select("id, course_id, syllabus_version_id, name, weight, aggregation_method, needs_review, position").eq("student_id", studentId).order("position"),
     t.from("assessments").select("id, course_id, category_id, title, due_date, student_done_at, score_earned, score_possible, excused, graded_at, updated_at").eq("student_id", studentId).order("due_date", { nullsFirst: false }).order("title"),
-    t.from("tasks").select("id, course_id, title, kind, pinned, rank, reason, done_at, created_at, updated_at").eq("student_id", studentId),
+    t.from("tasks").select("id, course_id, title, kind, pinned, rank, reason, suggestion_key, done_at, created_at, updated_at").eq("student_id", studentId),
+    t.from("grade_flags").select("id, assessment_id, reason, created_at, resolved_at").eq("student_id", studentId).is("resolved_at", null),
   ]);
-  for (const r of [student, goal, courses, versions, categories, assessments, tasks]) {
+  for (const r of [student, goal, courses, versions, categories, assessments, tasks, flags]) {
     if (r.error) throw new Error(r.error.message);
   }
   if (!student.data) return null;
@@ -84,5 +86,17 @@ export async function loadBundle(db: Db, studentId: string): Promise<Bundle | nu
     categories: parseRows(CategoryRow, categories.data),
     assessments: parseRows(AssessmentRow, assessments.data),
     tasks: parseRows(TaskRow, tasks.data),
+    flags: parseRows(FlagRow, flags.data),
   };
+}
+
+/** Open grade flags per student in an org, for the teacher's student list. */
+export async function openFlagCounts(db: Db, orgId: string): Promise<Map<string, number>> {
+  const { data, error } = await db.tracker.from("grade_flags").select("student_id").eq("org_id", orgId).is("resolved_at", null);
+  if (error) throw new Error(error.message);
+  const counts = new Map<string, number>();
+  for (const row of z.array(z.object({ student_id: z.guid() })).parse(data ?? [])) {
+    counts.set(row.student_id, (counts.get(row.student_id) ?? 0) + 1);
+  }
+  return counts;
 }

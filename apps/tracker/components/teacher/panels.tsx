@@ -1,5 +1,5 @@
 import {
-  addAssessment, addCategory, addTask, deleteAssessment, deleteCategory, deleteTask, moveTask, saveScore, setTaskPinned,
+  addAssessment, addCategory, addSuggestedTask, addTask, deleteAssessment, deleteCategory, deleteTask, moveTask, saveScore, setTaskPinned,
   updateCategory,
 } from "@/app/actions/teacher";
 import { STATE_LABEL } from "@/lib/domain/assessment-state";
@@ -150,6 +150,25 @@ export function TaskManager({ view }: { view: StudentView }) {
   ];
   return (
     <div className="flex flex-col gap-4">
+      {view.suggestions.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-xl border border-dashed border-border p-3">
+          <h3 className="text-sm font-semibold">Suggested</h3>
+          <p className="text-xs text-text-muted">From the grades and due dates. Only you see these until you add one.</p>
+          <ul className="flex flex-col divide-y divide-border">
+            {view.suggestions.map((s) => (
+              <li key={s.key} className="flex flex-col gap-2 py-2">
+                <span>
+                  <span className="block font-medium">{s.title}</span>
+                  <span className="block text-sm text-text-muted">{s.reason}</span>
+                </span>
+                <span>
+                  <ActionButton action={addSuggestedTask.bind(null, view.student.id, s.key)} label="Add to priorities" className={small} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {groups.map((g) => (
         <div key={g.title} className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold">{g.title}</h3>

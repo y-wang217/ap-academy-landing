@@ -78,13 +78,24 @@ export type Assessment = z.output<typeof AssessmentRow>;
 export const TaskRow = z
   .object({
     id: uuid, course_id: uuid.nullable(), title: z.string(), kind: z.enum(["school", "supplemental"]),
-    pinned: z.boolean(), rank: num, reason: z.string().nullable(), done_at: ts.nullable(), created_at: ts, updated_at: ts,
+    pinned: z.boolean(), rank: num, reason: z.string().nullable(), suggestion_key: z.string().nullable(),
+    done_at: ts.nullable(), created_at: ts, updated_at: ts,
   })
   .transform((r) => ({
     id: r.id, courseId: r.course_id, title: r.title, kind: r.kind, pinned: r.pinned, rank: r.rank,
-    reason: r.reason, doneAt: r.done_at, createdAt: r.created_at, updatedAt: r.updated_at,
+    reason: r.reason, suggestionKey: r.suggestion_key, doneAt: r.done_at, createdAt: r.created_at, updatedAt: r.updated_at,
   }));
 export type Task = z.output<typeof TaskRow>;
+
+export const FLAG_REASONS = ["score_differs", "returned", "other"] as const;
+export type FlagReason = (typeof FLAG_REASONS)[number];
+
+export const FlagRow = z
+  .object({
+    id: uuid, assessment_id: uuid, reason: z.enum(FLAG_REASONS), created_at: ts, resolved_at: ts.nullable(),
+  })
+  .transform((r) => ({ id: r.id, assessmentId: r.assessment_id, reason: r.reason, createdAt: r.created_at, resolvedAt: r.resolved_at }));
+export type Flag = z.output<typeof FlagRow>;
 
 // Form inputs ------------------------------------------------------------------
 // FormData values are strings; empty strings mean "not given".
