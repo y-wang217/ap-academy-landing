@@ -28,3 +28,7 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0021](0021-one-goal-per-student.md) | One goal per student | accepted |
 | [0022](0022-targets-tolerance.md) | Course targets may differ from the six-course target by up to 0.5 points before warning | accepted |
 | [0023](0023-local-integration-stack.md) | End-to-end tests run on Postgres, PostgREST and a mock auth server | accepted |
+| [0024](0024-priority-suggestions.md) | Priority suggestions are rule-based and reach students only through the teacher | accepted |
+| [0025](0025-student-grade-flags.md) | Students flag a grade with a fixed reason; the teacher resolves it | accepted |
+| [0026](0026-ai-provider.md) | AI drafts use Claude through the Anthropic SDK, behind one module, off unless a key is set | accepted |
+| [0027](0027-change-sets.md) | Assessment edits share one change-set shape, AI and manual alike | accepted |
