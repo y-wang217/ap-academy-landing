@@ -32,3 +32,5 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0025](0025-student-grade-flags.md) | Students flag a grade with a fixed reason; the teacher resolves it | accepted |
 | [0026](0026-ai-provider.md) | AI drafts use Claude through the Anthropic SDK, behind one module, off unless a key is set | accepted |
 | [0027](0027-change-sets.md) | Assessment edits share one change-set shape, AI and manual alike | accepted |
+| [0028](0028-intake-sources.md) | AI intake reads photos, PDFs, transcripts and instructions; notes carry a student number, not a name | accepted |
+| [0029](0029-student-change-set.md) | One change set covers the whole student; every teacher edit is an item in it | accepted |

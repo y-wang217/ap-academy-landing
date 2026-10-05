@@ -1,5 +1,5 @@
 # 0027: Assessment edits share one change-set shape, AI and manual alike
-Status: accepted
+Status: accepted; scope widened by 0029
 Date: 2026-10-05
 
 ## Context
