@@ -1,9 +1,11 @@
+import Link from "next/link";
 import {
-  addAssessment, addCategory, addSuggestedTask, addTask, deleteAssessment, deleteCategory, deleteTask, moveTask, saveScore, setTaskPinned,
-  updateCategory,
+  addAssessment, addCategory, addSuggestedTask, addTask, deleteAssessment, deleteCategory, deleteTask, moveTask, resolveFlag, saveScore,
+  setTaskPinned, updateCategory,
 } from "@/app/actions/teacher";
 import { STATE_LABEL } from "@/lib/domain/assessment-state";
-import { percent, points, shortDate } from "@/lib/format";
+import { percent, points, shortDate, stamp } from "@/lib/format";
+import { FLAG_LABEL } from "@/lib/view/flags";
 import type { CourseView, StudentView } from "@/lib/view/student-view";
 import { TRACKER_URL } from "@/lib/config";
 import { ActionButton, ActionForm } from "../action-form";
@@ -103,6 +105,14 @@ export function AssessmentManager({ view }: { view: CourseView }) {
                 </span>
                 <StateBadge state={a.state} label={a.state === "graded" ? percent(((a.scoreEarned as number) / a.scorePossible) * 100) : STATE_LABEL[a.state]} />
               </div>
+              {a.openFlag && (
+                <Notice tone="warn">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span>Student flagged this: &ldquo;{FLAG_LABEL[a.openFlag.reason]}&rdquo;. Fix the score if needed, then mark it resolved.</span>
+                    <ActionButton action={resolveFlag.bind(null, a.openFlag.id)} label="Mark resolved" className={small} />
+                  </span>
+                </Notice>
+              )}
               <ActionForm action={saveScore.bind(null, a.id)} labels={{ scoreEarned: "Score", scorePossible: "Out of" }} secondary submitLabel="Save score" className="flex flex-col gap-2">
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Score" name={`earned-${a.id}`}>
@@ -208,6 +218,33 @@ export function TaskManager({ view }: { view: StudentView }) {
         </div>
       </details>
     </div>
+  );
+}
+
+/** Open grade flags from the student, oldest first (ADR 0025). */
+export function FlagList({ view }: { view: StudentView }) {
+  const flagged = view.flagged.flatMap((a) => (a.openFlag ? [{ a, flag: a.openFlag }] : []));
+  if (flagged.length === 0) return null;
+  return (
+    <Card title={`Flags from ${view.student.firstName}`}>
+      <ul className="flex flex-col divide-y divide-border">
+        {flagged.map(({ a, flag }) => (
+          <li key={flag.id} className="flex flex-col gap-2 py-2">
+            <span>
+              <Link className="block font-medium underline underline-offset-2" href={`/students/${view.student.id}/courses/${a.courseId}`}>
+                {a.courseCode} · {a.title}
+              </Link>
+              <span className="block text-sm text-text-muted">
+                &ldquo;{FLAG_LABEL[flag.reason]}&rdquo; · {stamp(flag.createdAt)}
+              </span>
+            </span>
+            <span>
+              <ActionButton action={resolveFlag.bind(null, flag.id)} label="Mark resolved" className={small} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

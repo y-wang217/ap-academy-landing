@@ -353,3 +353,24 @@ export async function deleteTask(taskId: string): Promise<Result> {
   const { error } = await v.db.tracker.from("tasks").delete().eq("id", taskId);
   return error ? failed(dbMessage(error)) : done("Removed");
 }
+
+// Grade flags ----------------------------------------------------------------------
+
+/** Mark a student's flag resolved (ADR 0025). Fix the score first; this never changes it. */
+export async function resolveFlag(flagId: string): Promise<Result> {
+  const v = await staff();
+  if (!v) return NO_ACCESS;
+  if (!z.guid().safeParse(flagId).success) return failed("Something went wrong. Try again.");
+  const { data, error } = await v.db.tracker
+    .from("grade_flags")
+    .update({ resolved_at: new Date().toISOString() })
+    .eq("id", flagId)
+    .is("resolved_at", null)
+    .select("id");
+  if (error) return failed(dbMessage(error));
+  if ((data ?? []).length === 0) {
+    revalidatePath("/", "layout");
+    return failed("This flag was already resolved or withdrawn.");
+  }
+  return done("Resolved");
+}

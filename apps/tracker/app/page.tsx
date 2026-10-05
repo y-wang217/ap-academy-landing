@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, Empty, Notice, Page, buttonClass } from "@/components/ui";
 import { StudentDashboard } from "@/components/student-dashboard";
 import { TopBar } from "@/components/top-bar";
-import { getViewer, listStudents, loadBundle } from "@/lib/data/queries";
+import { getViewer, listStudents, loadBundle, openFlagCounts } from "@/lib/data/queries";
 import { studentName } from "@/lib/format";
 import { todayIso } from "@/lib/time";
 import { buildStudentView } from "@/lib/view/student-view";
@@ -73,7 +73,7 @@ export default async function TrackerHome() {
     );
   }
 
-  const students = await listStudents(viewer.db, viewer.orgId);
+  const [students, flags] = await Promise.all([listStudents(viewer.db, viewer.orgId), openFlagCounts(viewer.db, viewer.orgId)]);
   return (
     <>
       <TopBar email={viewer.email} />
@@ -100,6 +100,7 @@ export default async function TrackerHome() {
                     <span className="text-sm text-text-muted">
                       {STATUS_LABEL[s.status]}
                       {s.status !== "setup" && !s.userId ? " · Not signed in yet" : ""}
+                      {flags.get(s.id) ? <span className="block text-right font-medium text-warn">{flags.get(s.id) === 1 ? "1 flag" : `${flags.get(s.id)} flags`}</span> : null}
                     </span>
                   </Link>
                 </li>
