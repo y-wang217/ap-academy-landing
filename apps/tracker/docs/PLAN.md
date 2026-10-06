@@ -15,6 +15,7 @@ Each step is done only when lint, typecheck and tests pass.
 | 7 | Reliability: audit, stamps, states, errors, backups, restore | done: `0005_tracker_audit.sql`, `scripts/backup.sh`, [`docs/RESTORE.md`](../../../docs/RESTORE.md) |
 | 8 | v1: suggestions, flags, AI paste (go-ahead 2026-10-05, [`spec/build-step-8.md`](spec/build-step-8.md)) | done: `0006_tracker_v1.sql` (live 2026-10-05), ADRs 0024 to 0027 |
 | 9 | AI intake: photos, PDFs, transcripts and requests; one change set for the whole student (go-ahead 2026-10-05, [`spec/build-step-9.md`](spec/build-step-9.md)) | done: `0007_tracker_intake.sql` (live 2026-10-05), ADRs 0028, 0029 |
+| 10 | Student dashboard redesign: tests vs assignments with one date each, grade history charts, trend pills, a factual story line (go-ahead 2026-10-06, [`spec/build-step-10.md`](spec/build-step-10.md), mock [`spec/build-step-10-mock.webp`](spec/build-step-10-mock.webp)) | in progress |
 
 ## Notes
 - Step 3: the brief's reference example is 96.4695 at full precision, not
