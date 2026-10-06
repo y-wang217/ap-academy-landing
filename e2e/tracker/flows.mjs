@@ -1,7 +1,8 @@
-// Tracker end-to-end flows (build steps 4 to 9) in Chromium, against the
+// Tracker end-to-end flows (build steps 4 to 10) in Chromium, against the
 // local stack (stack.sh): a teacher onboards a student, publishes, the student
 // signs in, marks work done, and sees a score the teacher enters. Then v1:
 // a priority suggestion, a grade flag, and AI drafts against a mock model.
+// Then step 10: tests with a held date, the trend charts and the story line.
 // Run through ./run.sh, or directly with TRACKER_BASE set to a running tracker.
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
@@ -149,7 +150,13 @@ try {
     const add = await openDetails(card, "Add an assessment");
     await add.getByLabel("Title").fill(title);
     await add.getByLabel("Category").selectOption({ label: category });
-    await add.getByLabel("Due date").fill(due);
+    // Tests carry the day they are written; everything else a due date (ADR 0030).
+    if (category === "Tests") {
+      await add.locator("label", { hasText: /^Test$/ }).click();
+      await add.getByLabel("Test date").fill(due);
+    } else {
+      await add.getByLabel("Due date").fill(due);
+    }
     await add.getByLabel("Score").fill(earned);
     await add.getByLabel("Out of").fill(possible);
     await add.getByRole("button", { name: "Add", exact: true }).click();
@@ -157,6 +164,7 @@ try {
   }
   const grade = (await section(teacher, "Current grade").locator("p").first().textContent())?.trim();
   check("the brief's reference example shows 96.5%", grade === "96.5%", grade);
+  check("a test shows the day it is held, an assignment its due date", await section(teacher, "Assessments").locator("li", { hasText: "Test 1" }).getByText(/Tests · Test · /).isVisible() && (await section(teacher, "Assessments").locator("li", { hasText: "Assignment 1" }).getByText(/Assignments · Due /).isVisible()));
 
   // Step 4 end: review and publish.
   await teacher.goto(`${BASE}${studentPath}/setup/review`);
@@ -193,7 +201,7 @@ try {
   await student.goto(`${BASE}`);
   check("the invited student lands on their dashboard", (await student.locator("h1").textContent()) === "Hi Sam");
   const headings = await student.locator("h2").allTextContents();
-  const order = ["Target", "Progress", "Active subjects", "Next priorities", "Upcoming"];
+  const order = ["Target", "Progress", "Subjects", "Next priorities", "Upcoming"];
   check("dashboard order: target, progress, subjects, priorities, upcoming", order.every((h, i) => headings.indexOf(h) === i), headings.join(" > "));
   check("progress names a partial average honestly", await student.getByText("Average of 1 graded course").isVisible());
   check("progress shows 96.5%", await section(student, "Progress").getByText("96.5%").isVisible());
@@ -201,6 +209,23 @@ try {
   check("supplemental work is kept separate", await section(student, "Extra practice").getByText("Practice set 4").isVisible());
   check("no admission likelihood language", !(await student.locator("body").textContent()).match(/chance|likely|likelihood|probability|admit/i));
   check("the student has nothing to type", (await student.locator("input, textarea, select").count()) === 0);
+
+  // Step 10: the story line, the course rows with their charts and pills (ADRs 0031, 0032).
+  const progress = section(student, "Progress");
+  check("the story line states the facts on screen", await progress.getByText("1 of 6 courses graded. The average so far is 1.5 above target. MCV4U, SPH4U, SCH4U, ENG4U and ICS4U have no marks yet.").isVisible());
+  check("the aside names the big test coming soon", await progress.getByText(/^Unit 3 test on .+ is about 17% of MHF4U\.$/).isVisible());
+  const subjects = section(student, "Subjects");
+  const mhf = subjects.locator("li", { hasText: "Advanced Functions" }).first();
+  check("a rising course on target reads Improving", await mhf.getByText("Improving", { exact: true }).isVisible());
+  check("courses without marks read No grades yet", (await subjects.getByText("No grades yet", { exact: true }).count()) >= 5);
+  check("the chart has a dot per date with a mark", (await mhf.locator("svg [role=button]").count()) === 6);
+  check("the row says how much of the course is marked", await mhf.getByText("80% marked").first().isVisible());
+  await mhf.locator("svg [role=button]").last().click();
+  check("tapping a point lists the marks behind it", await mhf.getByText(/grade after these marks 96\.5%/).isVisible() && (await mhf.getByText("Participation · 3 / 3 · 100.0%").isVisible()));
+  await student.getByText("Tap a point to see the marks behind it.").waitFor({ timeout: 15000 });
+  await student.getByRole("button", { name: "Got it" }).click();
+  await student.reload();
+  check("the chart hint stays dismissed on this device", (await student.getByText("Tap a point to see the marks behind it.").count()) === 0);
 
   const upcoming = section(student, "Upcoming");
   await upcoming.getByRole("button", { name: "Mark done: Unit 3 test" }).click();
@@ -215,7 +240,7 @@ try {
   check("priorities can be marked done", true);
 
   // Drill-down.
-  await section(student, "Active subjects").getByRole("link", { name: /MHF4U/ }).click();
+  await section(student, "Subjects").getByRole("link", { name: /MHF4U/ }).click();
   await student.waitForURL(/\/courses\//);
   check("drill-down shows categories", await section(student, "Categories").getByText("Final").isVisible() && (await section(student, "Categories").getByText("None yet").isVisible()));
   check("drill-down shows past scores", await section(student, "Past scores").getByText("41 / 42").isVisible());
@@ -252,7 +277,7 @@ try {
   check("the student sees the added priority with its reason", await section(student, "Next priorities").getByText(new RegExp(`MHF4U · ${reason.replace(/[.%]/g, "\\$&")}`)).isVisible());
 
   // Step 8: a grade flag (ADR 0025) ----------------------------------------------------
-  await section(student, "Active subjects").getByRole("link", { name: /MHF4U/ }).click();
+  await section(student, "Subjects").getByRole("link", { name: /MHF4U/ }).click();
   await student.waitForURL(/\/courses\//);
   const past = section(student, "Past scores");
   await past.getByRole("button", { name: "Flag Test 1" }).click();

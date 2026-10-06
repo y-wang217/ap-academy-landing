@@ -13,7 +13,7 @@ const blank = {
   school: "", program: "", application_year: null, target_six_avg: null, benchmark_note: "",
   code: "", name: "", term: "", status: "", in_six_plan: null, target_grade: null,
   weight: null, aggregation_method: "", needs_review: null,
-  title: "", due_date: "", score_earned: null, score_possible: null, excused: null,
+  title: "", assessment_kind: "", due_date: "", held_on: "", score_earned: null, score_possible: null, excused: null,
   kind: "", reason: "", pinned: null, certain: true, check: "", source: "",
 };
 
