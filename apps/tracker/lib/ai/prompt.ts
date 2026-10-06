@@ -4,7 +4,7 @@
  * K1, A1, T1, G), never row ids, and never the student's name or email.
  */
 import { z } from "zod";
-import { AggregationMethod, ChangeItem, CourseStatus, TaskKind, itemProblem, type StudentContext } from "../data/change-set";
+import { AggregationMethod, AssessmentKind, ChangeItem, CourseStatus, TaskKind, itemProblem, type StudentContext } from "../data/change-set";
 
 const OPS = [
   "set_goal",
@@ -47,7 +47,9 @@ export const AiWireOutput = z.object({
       aggregation_method: choice(AggregationMethod.options),
       needs_review: z.boolean().nullable(),
       title: text("Assessment or task title"),
-      due_date: text("YYYY-MM-DD"),
+      assessment_kind: choice(AssessmentKind.options, "test for a test, quiz, exam or midterm; assignment for anything handed in"),
+      due_date: text("YYYY-MM-DD, the day an assignment is due"),
+      held_on: text("YYYY-MM-DD, the day a test is written"),
       score_earned: z.number().nullable().describe("Marks earned, or null when not marked yet"),
       score_possible: z.number().nullable().describe("Marks possible. 100 when only a percentage is given"),
       excused: z.boolean().nullable().describe("true when the work is excused or exempt"),
@@ -66,7 +68,7 @@ export type AiWireOutput = z.output<typeof AiWireOutput>;
 type Unset<T> = { [K in keyof T]: T[K] extends string ? Exclude<T[K], ""> | null : T[K] };
 const TEXT_FIELDS = [
   "ref", "new_ref", "course", "category", "school", "program", "benchmark_note", "code", "name", "term",
-  "status", "aggregation_method", "title", "due_date", "kind", "reason", "check",
+  "status", "aggregation_method", "title", "assessment_kind", "due_date", "held_on", "kind", "reason", "check",
 ] as const;
 
 /** The model's answer with "not given" as null, which is what `toDraftItems` reads. */
@@ -101,6 +103,7 @@ Ops: set_goal; add_course, update_course, remove_course; add_category, update_ca
 - add_* may give new_ref (N1, N2, ...) so a later item can name the new row in course or category. An add comes before the items that name its new_ref.
 - add_course needs a course code. When the tutor names a subject without one, give the usual Ontario code for the student's grade_level (grade 12 Biology is SBI4U, grade 12 English is ENG4U, grade 11 Chemistry is SCH3U), put the subject in name, and set certain false. One add_course per course.
 - Categories are a course's syllabus: name and weight, weights adding up to 100. A course whose syllabus is confirmed cannot have its categories changed; put such material in unmatched.
+- An assessment is a test (assessment_kind test: a test, quiz, exam or midterm) with the day it is written in held_on, or an assignment (assessment_kind assignment: anything handed in, such as an assignment, lab, project or homework) with its due date in due_date. Never give both dates.
 - Marks: give score_earned and score_possible as numbers. A percentage alone means score_possible 100. Blank, dash or "not marked" means score_earned null. "Excused", "EX" or "exempt" means excused true. To set a mark on an existing assessment use update_assessment with score_possible given.
 - Match existing rows by meaning, not exact words ("Unit 3 Test" and "U3 test" are the same). Leave out a change that would not change anything.
 - Ignore course averages, term marks, comments and anything about other students.
@@ -132,7 +135,7 @@ export type PromptStudent = {
   courses: { id: string; code: string; name: string; term: string; status: "planned" | "active" | "completed"; inSixPlan: boolean; targetGrade: number | null; activeVersionId: string | null }[];
   versions: { id: string; confirmedAt: string | null }[];
   categories: { id: string; courseId: string; versionId: string; name: string; weight: number; aggregationMethod: "mean_of_percentages" | "pooled_points"; needsReview: boolean }[];
-  assessments: { id: string; courseId: string; categoryId: string; title: string; dueDate: string | null; scoreEarned: number | null; scorePossible: number; excused: boolean }[];
+  assessments: { id: string; courseId: string; categoryId: string; title: string; kind: "assignment" | "test"; dueDate: string | null; heldOn: string | null; scoreEarned: number | null; scorePossible: number; excused: boolean }[];
   tasks: { id: string; courseId: string | null; title: string; kind: "school" | "supplemental"; reason: string | null; pinned: boolean; doneAt: string | null }[];
 };
 
@@ -163,7 +166,10 @@ export function buildUserMessage(student: PromptStudent, sent: string, focusCour
       .map((x) => {
         const r = `A${++a}`;
         refs.assessments.set(r, x.id);
-        return { ref: r, title: x.title, category: refOf.category.get(x.categoryId) ?? null, due_date: x.dueDate, score_earned: x.scoreEarned, score_possible: x.scorePossible, excused: x.excused };
+        return {
+          ref: r, title: x.title, category: refOf.category.get(x.categoryId) ?? null, assessment_kind: x.kind, due_date: x.dueDate, held_on: x.heldOn,
+          score_earned: x.scoreEarned, score_possible: x.scorePossible, excused: x.excused,
+        };
       });
     return {
       ref, code: c.code, name: c.name, term: c.term, status: c.status, in_six_plan: c.inSixPlan, target_grade: c.targetGrade,
@@ -194,6 +200,17 @@ export type DraftItem = ChangeItem & { source: string; certain: boolean; check?:
 
 const isoDate = (s: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
 const given = <T>(v: T | null | undefined): v is T => v !== null && v !== undefined;
+
+/**
+ * Kind and date of an assessment from the model's fields (ADR 0030). The
+ * kind wins when given; otherwise a held date means a test. A date given in
+ * the wrong field is still used, so a mislabelled test keeps its day.
+ */
+function whenOf(raw: RawItem, fallback: "assignment" | "test" = "assignment"): { kind: "assignment" | "test"; dueDate: string | null; heldOn: string | null } {
+  const kind = raw.assessment_kind ?? (given(raw.held_on) ? "test" : given(raw.due_date) ? "assignment" : fallback);
+  const date = isoDate(kind === "test" ? raw.held_on ?? raw.due_date : raw.due_date ?? raw.held_on);
+  return kind === "test" ? { kind, dueDate: null, heldOn: date } : { kind, dueDate: date, heldOn: null };
+}
 
 /** Keep only the fields of a patch that differ from the row as it is. */
 function prune<T extends Record<string, unknown>>(patch: T, current: Record<string, unknown>): Partial<T> {
@@ -356,7 +373,7 @@ function toCandidate(raw: RawItem, resolve: Resolve, current: Current, goal: Pro
       if (!courseId) return "no course for this work";
       if (!categoryId) return "no category matched";
       return {
-        op: "add_assessment", courseId, categoryId, title: (raw.title ?? "").trim(), dueDate: isoDate(raw.due_date),
+        op: "add_assessment", courseId, categoryId, title: (raw.title ?? "").trim(), ...whenOf(raw),
         scorePossible: raw.score_possible ?? 100, scoreEarned: raw.score_earned, excused: raw.excused ?? false,
       };
     }
@@ -371,9 +388,11 @@ function toCandidate(raw: RawItem, resolve: Resolve, current: Current, goal: Pro
         : given(raw.score_earned) ? { scoreEarned: raw.score_earned, excused: raw.excused ?? false }
         : given(raw.excused) ? { excused: raw.excused }
         : {};
+      // A new date moves the row to the kind that date belongs to, so it never carries both.
+      const when = given(raw.held_on) || given(raw.due_date) || given(raw.assessment_kind) ? whenOf(raw, row.kind) : {};
       const patch = prune(
-        { title: raw.title ?? undefined, categoryId: categoryId ?? undefined, dueDate: given(raw.due_date) ? isoDate(raw.due_date) : undefined, ...score },
-        { title: row.title, categoryId: row.categoryId, dueDate: row.dueDate, scoreEarned: row.scoreEarned, scorePossible: row.scorePossible, excused: row.excused },
+        { title: raw.title ?? undefined, categoryId: categoryId ?? undefined, ...when, ...score },
+        { title: row.title, categoryId: row.categoryId, kind: row.kind, dueDate: row.dueDate, heldOn: row.heldOn, scoreEarned: row.scoreEarned, scorePossible: row.scorePossible, excused: row.excused },
       );
       return Object.keys(patch).length === 0 ? null : { op: "update_assessment", assessmentId, ...patch };
     }

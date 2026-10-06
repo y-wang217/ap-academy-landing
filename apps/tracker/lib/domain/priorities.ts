@@ -1,4 +1,5 @@
 /** Ordering for tasks and upcoming work. Teacher pins always come first. Pure. */
+import { assessmentDate, type DatedInput } from "./assessment-date";
 import { TUNING } from "./tuning";
 
 export type TaskInput = {
@@ -23,13 +24,14 @@ export function nextPriorities<T extends TaskInput>(tasks: readonly T[], limit: 
   return orderTasks(tasks.filter((t) => t.kind === "school")).slice(0, limit);
 }
 
-export type UpcomingInput = { dueDate: string | null; scoreEarned: number | null; excused: boolean };
+export type UpcomingInput = DatedInput & { scoreEarned: number | null; excused: boolean };
 
-/** Ungraded, unexcused work due today or later, soonest first. */
+/** Ungraded, unexcused work due or held today or later, soonest first. */
 export function upcomingWork<T extends UpcomingInput>(items: readonly T[], today: string, limit: number = TUNING.upcomingLimit): T[] {
   return items
-    .filter((a) => !a.excused && a.scoreEarned === null && a.dueDate !== null && a.dueDate >= today)
-    .slice()
-    .sort((a, b) => (a.dueDate as string).localeCompare(b.dueDate as string))
-    .slice(0, limit);
+    .map((a) => ({ a, date: assessmentDate(a) }))
+    .filter(({ a, date }) => !a.excused && a.scoreEarned === null && date !== null && date >= today)
+    .sort((x, y) => (x.date as string).localeCompare(y.date as string))
+    .slice(0, limit)
+    .map(({ a }) => a);
 }

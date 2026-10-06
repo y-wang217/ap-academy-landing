@@ -9,6 +9,7 @@ import { InvitePanel, SyllabusEditor } from "@/components/teacher/panels";
 import { STEPS, WizardNav, type StepKey } from "@/components/teacher/wizard-nav";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Field, Notice, Page, buttonClass, linkClass, numberInputClass } from "@/components/ui";
+import { assessmentDate } from "@/lib/domain/assessment-date";
 import { checkCourseTargets } from "@/lib/domain/progress";
 import { TUNING } from "@/lib/domain/tuning";
 import { percent, points, studentName, studentNumber } from "@/lib/format";
@@ -25,7 +26,7 @@ export const maxDuration = 120;
 export default async function SetupPage({ params }: { params: Promise<{ studentId: string; step: string }> }) {
   const { studentId, step } = await params;
   if (!STEPS.some((s) => s.key === step)) notFound();
-  const { viewer, view, orgName } = await staffStudent(studentId);
+  const { viewer, view, orgName, today } = await staffStudent(studentId);
   const current = step as StepKey;
   const name = studentName(view.student);
 
@@ -46,7 +47,7 @@ export default async function SetupPage({ params }: { params: Promise<{ studentI
         {current === "targets" && <TargetsStep view={view} />}
         {current === "syllabus" && <SyllabusStep view={view} />}
         {current === "work" && <WorkStep view={view} />}
-        {current === "review" && <ReviewStep view={view} orgName={orgName} />}
+        {current === "review" && <ReviewStep view={view} orgName={orgName} today={today} />}
       </Page>
     </>
   );
@@ -175,7 +176,7 @@ function WorkStep({ view }: { view: V }) {
   );
 }
 
-function ReviewStep({ view, orgName }: { view: V; orgName: string }) {
+function ReviewStep({ view, orgName, today }: { view: V; orgName: string; today: string }) {
   const problems: string[] = [];
   if (!view.goal) problems.push("Add a goal.");
   if (view.courses.length === 0) problems.push("Add at least one course.");
@@ -190,6 +191,8 @@ function ReviewStep({ view, orgName }: { view: V; orgName: string }) {
   for (const c of view.courses) {
     for (const w of c.result.warnings) if (w.kind === "needs_review") warnings.push(`${c.course.code}: ${w.categoryName} is flagged for review.`);
   }
+  const undated = view.courses.reduce((n, c) => n + c.assessments.filter((a) => assessmentDate(a) === null).length, 0);
+  if (undated > 0) warnings.push(`${undated} assessment${undated === 1 ? " has" : "s have"} no date, so ${undated === 1 ? "it stays" : "they stay"} off the chart.`);
 
   const published = view.student.publishedAt !== null;
   return (
@@ -228,7 +231,7 @@ function ReviewStep({ view, orgName }: { view: V; orgName: string }) {
       </Card>
       <InvitePanel view={view} orgName={orgName} />
       <h2 className="text-lg font-semibold">What {view.student.firstName} will see</h2>
-      <StudentDashboard view={view} interactive={false} courseHref={(id) => `/students/${view.student.id}/courses/${id}`} />
+      <StudentDashboard view={view} interactive={false} courseHref={(id) => `/students/${view.student.id}/courses/${id}`} today={today} />
     </>
   );
 }

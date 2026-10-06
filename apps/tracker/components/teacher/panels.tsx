@@ -3,8 +3,9 @@ import {
   addAssessment, addCategory, addSuggestedTask, addTask, deleteAssessment, deleteCategory, deleteTask, moveTask, resolveFlag, saveScore,
   setTaskPinned, updateCategory,
 } from "@/app/actions/teacher";
+import { assessmentDate } from "@/lib/domain/assessment-date";
 import { STATE_LABEL } from "@/lib/domain/assessment-state";
-import { percent, points, shortDate, stamp } from "@/lib/format";
+import { percent, points, stamp, whenText } from "@/lib/format";
 import { FLAG_LABEL } from "@/lib/view/flags";
 import type { CourseView, StudentView } from "@/lib/view/student-view";
 import { TRACKER_URL } from "@/lib/config";
@@ -72,7 +73,7 @@ export function SyllabusEditor({ view }: { view: CourseView }) {
 /** Assessments: add upcoming items, then enter the score on the same record. */
 export function AssessmentManager({ view }: { view: CourseView }) {
   const order = { upcoming: 0, done: 1, awaiting_result: 2, graded: 3, excused: 4 } as const;
-  const items = [...view.assessments].sort((a, b) => order[a.state] - order[b.state] || (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
+  const items = [...view.assessments].sort((a, b) => order[a.state] - order[b.state] || (assessmentDate(a) ?? "").localeCompare(assessmentDate(b) ?? ""));
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,12 +100,13 @@ export function AssessmentManager({ view }: { view: CourseView }) {
                 <span className="min-w-0">
                   <span className="block font-medium">{a.title}</span>
                   <span className="block text-sm text-text-muted">
-                    {a.categoryName} · {shortDate(a.dueDate)}
+                    {a.categoryName} · {whenText(a)}
                     {a.studentDoneAt ? " · Student marked done" : ""}
                   </span>
                 </span>
                 <StateBadge state={a.state} label={a.state === "graded" ? percent(((a.scoreEarned as number) / a.scorePossible) * 100) : STATE_LABEL[a.state]} />
               </div>
+              {assessmentDate(a) === null && <Notice tone="warn">No date. It stays off the student&apos;s chart and never becomes awaiting result.</Notice>}
               {a.openFlag && (
                 <Notice tone="warn">
                   <span className="flex flex-wrap items-center gap-2">

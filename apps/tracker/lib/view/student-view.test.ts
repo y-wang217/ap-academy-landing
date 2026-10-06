@@ -12,7 +12,7 @@ function category(id: string, courseId: string, weight: number): Category {
   return { id, courseId, versionId: `v-${courseId}`, name: id, weight, aggregationMethod: "mean_of_percentages", needsReview: false, position: 0 };
 }
 function assessment(id: string, courseId: string, categoryId: string, earned: number | null, possible: number, due: string, o: Partial<Assessment> = {}): Assessment {
-  return { id, courseId, categoryId, title: id, dueDate: due, studentDoneAt: null, scoreEarned: earned, scorePossible: possible, excused: false, gradedAt: earned === null ? null : stamp, updatedAt: stamp, ...o };
+  return { id, courseId, categoryId, title: id, kind: "assignment", dueDate: due, heldOn: null, studentDoneAt: null, scoreEarned: earned, scorePossible: possible, excused: false, gradedAt: earned === null ? null : stamp, updatedAt: stamp, ...o };
 }
 function task(id: string, o: Partial<Task> = {}): Task {
   return { id, courseId: null, title: id, kind: "school", pinned: false, rank: 0, reason: null, suggestionKey: null, doneAt: null, createdAt: stamp, updatedAt: stamp, ...o };
@@ -75,6 +75,33 @@ describe("buildStudentView", () => {
 
   it("suggests nothing while every course is on target", () => {
     expect(view.suggestions).toEqual([]);
+  });
+
+  it("carries each course's history, trend and marked weight (ADR 0031)", () => {
+    const mhf = view.courses[0];
+    expect(mhf.history.map((p) => p.date)).toEqual(["2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13", "2026-09-14", "2026-09-20"]);
+    expect(mhf.history.at(-1)?.grade).toBeCloseTo(mhf.result.grade as number, 10);
+    expect(mhf.trend).toBe("improving");
+    expect(mhf.markedWeight).toBe(80);
+    expect(view.courses[1]).toMatchObject({ trend: "no_grades", trendDelta: null, history: [], markedWeight: 0 });
+  });
+
+  it("lists every course in the plan, whatever its status, and active courses outside it", () => {
+    const b = bundle();
+    b.courses.push(course("done", { status: "completed", inSixPlan: true }), course("extra", { status: "active", inSixPlan: false }));
+    const v = buildStudentView(b, TODAY);
+    expect(v.planCourses.map((c) => c.course.id)).toEqual(["mhf", "sch", "done"]);
+    expect(v.otherActive.map((c) => c.course.id)).toEqual(["extra"]);
+  });
+
+  it("tells the story from the facts on screen (ADR 0032)", () => {
+    expect(view.story.headline).toBe("1 of 6 courses graded. The average so far is 1.5 above target. SCH has no marks yet.");
+    // Tests weigh 50 over three items, so the upcoming test is about 17% of MHF, six days out.
+    expect(view.upcoming[0].share).toBeCloseTo(50 / 3, 10);
+    expect(view.story.aside).toBe("u1 on Sat, Oct 10 is about 17% of MHF.");
+    const b = bundle();
+    b.goal = null;
+    expect(buildStudentView(b, TODAY).story).toEqual({ headline: "No target set yet. Your teacher sets it with you.", aside: "u1 on Sat, Oct 10 is about 17% of MHF." });
   });
 
   it("words a suggestion's reason and hides it once it is an open task", () => {

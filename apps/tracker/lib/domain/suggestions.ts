@@ -3,6 +3,7 @@
  * the same suggestions. Returns facts, not sentences; lib/view words them.
  * Suggestions go to the teacher, who adds the ones that make sense as tasks.
  */
+import { assessmentDate, type DatedInput } from "./assessment-date";
 import type { AssessmentState } from "./assessment-state";
 import { TUNING } from "./tuning";
 
@@ -15,11 +16,10 @@ export type SuggestionCourse = {
   categories: readonly { name: string; percent: number | null }[];
 };
 
-export type SuggestionAssessment = {
+export type SuggestionAssessment = DatedInput & {
   id: string;
   courseId: string;
   title: string;
-  dueDate: string | null;
   state: AssessmentState;
 };
 
@@ -53,8 +53,10 @@ export function suggestPriorities(
     if (gap < TUNING.suggestGapPoints) continue;
 
     const soon = assessments
-      .filter((a) => a.courseId === course.id && a.state === "upcoming" && a.dueDate !== null)
-      .map((a) => ({ a, days: daysBetween(today, a.dueDate as string) }))
+      .filter((a) => a.courseId === course.id && a.state === "upcoming")
+      .map((a) => ({ a, date: assessmentDate(a) }))
+      .filter((x): x is { a: SuggestionAssessment; date: string } => x.date !== null)
+      .map(({ a, date }) => ({ a, days: daysBetween(today, date) }))
       .filter(({ days }) => days >= 0 && days <= TUNING.suggestSoonDays);
 
     if (soon.length > 0) {

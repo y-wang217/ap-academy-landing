@@ -62,12 +62,13 @@ export default async function TrackerHome() {
         </>
       );
     }
-    const view = buildStudentView(bundle, todayIso());
+    const today = todayIso();
+    const view = buildStudentView(bundle, today);
     return (
       <>
         <TopBar email={viewer.email} />
         <Page title={`Hi ${bundle.student.firstName}`}>
-          <StudentDashboard view={view} interactive courseHref={(id) => `/courses/${id}`} />
+          <StudentDashboard view={view} interactive courseHref={(id) => `/courses/${id}`} today={today} />
         </Page>
       </>
     );

@@ -15,6 +15,7 @@ Each step is done only when lint, typecheck and tests pass.
 | 7 | Reliability: audit, stamps, states, errors, backups, restore | done: `0005_tracker_audit.sql`, `scripts/backup.sh`, [`docs/RESTORE.md`](../../../docs/RESTORE.md) |
 | 8 | v1: suggestions, flags, AI paste (go-ahead 2026-10-05, [`spec/build-step-8.md`](spec/build-step-8.md)) | done: `0006_tracker_v1.sql` (live 2026-10-05), ADRs 0024 to 0027 |
 | 9 | AI intake: photos, PDFs, transcripts and requests; one change set for the whole student (go-ahead 2026-10-05, [`spec/build-step-9.md`](spec/build-step-9.md)) | done: `0007_tracker_intake.sql` (live 2026-10-05), ADRs 0028, 0029 |
+| 10 | Student dashboard redesign: tests vs assignments with one date each, grade history charts, trend pills, a factual story line (go-ahead 2026-10-06, [`spec/build-step-10.md`](spec/build-step-10.md), mock [`spec/build-step-10-mock.webp`](spec/build-step-10-mock.webp)) | done in code: `0008_tracker_assessment_kind.sql` (not yet live), ADRs 0030 to 0032 |
 
 ## Notes
 - Step 3: the brief's reference example is 96.4695 at full precision, not
@@ -72,6 +73,30 @@ Each step is done only when lint, typecheck and tests pass.
   tracker, a confirmed syllabus, or contradictory material. The e2e mock now
   answers in the wire shape ("" for not given).
 
+- Step 10: the student dashboard follows the owner's mock
+  (`spec/build-step-10-mock.webp`): a header strip, the honest partial
+  average with its gap, one factual sentence, a row per top-6 course with a
+  grade-over-time line against its target and a status pill, then
+  priorities and upcoming. An assessment is now an assignment with a due
+  date or a test with the day it is held, never both, and the teacher's
+  form toggles between them (ADR 0030); `graded_at` is an entry stamp and
+  nothing a student sees reads it. The chart replays the grade engine on
+  each assessment's date, so every point is reproducible (ADR 0031). The
+  sentence is a fact chosen by rule from a pool in one copy file, never a
+  forecast (ADR 0032). Every top-6 course is listed whatever its status;
+  before, a completed course was averaged in but never shown. Verified:
+  constraints and RLS (`supabase/tests/tracker_dashboard.sql`), 119 unit
+  tests, and 70 end-to-end checks (`e2e/tracker/flows.mjs`).
+
+## Before step 10 goes live
+
+1. ~~Apply `0008_tracker_assessment_kind` to the live project with sign-off.~~
+   Done 2026-10-06 with sign-off, through the Supabase MCP: `kind`, `held_on`,
+   the one-date check and the index are in place. No assessments existed yet,
+   so nothing was backfilled. Still to do: regenerate types.
+2. Tell the tutor: tests get the day they are written, assignments their
+   due date; an item with no date stays off the student's chart.
+
 ## Before step 9 goes live
 
 1. ~~Apply `0007_tracker_intake` to the live project with sign-off.~~ Done
@@ -109,8 +134,25 @@ Each step is done only when lint, typecheck and tests pass.
 4. Privacy policy: student data is stored in the US (workspace ADR 0001).
 5. Decide whether under-16 students need a parent-consent path.
 
+## To do
+
+Ideas with a go-ahead but no spec yet. Each becomes a step, with its prompt
+committed to `spec/` first, before any code.
+
+- **Field help on the teacher's pages.** A short "how to fill this in" beside
+  each field: what a category weight is and where to find it on the school
+  syllabus, when an item is a test (the day it is written) and when an
+  assignment (the day it is due), what "needs review" means, what a course
+  target does, what the benchmark note is for. One sentence per field, from a
+  single copy file, shown as a hint under the field or behind a small "?".
+  Owner's words (2026-10-06): "write a 'help' into the pages that teach a user
+  how to fill out each field."
+
 ## Not built (v0 scope or later)
 
 - Syllabus edits after publish (ADR 0018).
 - An audit history screen. The log is complete; nothing shows it yet.
 - An org-wide AI usage screen. Each student's page lists their drafts; nothing adds them up per org yet.
+- Changing an assessment's kind or date after it is created, other than through an AI draft (ADR 0030).
+- A photo of the marked test attached to its score. Deferred by the owner to its own spec: it needs file storage, a migration and a personal-data ADR.
+- A parent view (out of scope in `CLAUDE.md`). The dashboard is read-only enough that a parent can read it over the student's shoulder today.

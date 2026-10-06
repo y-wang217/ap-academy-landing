@@ -1,15 +1,19 @@
 import { STATE_LABEL } from "@/lib/domain/assessment-state";
-import { gap, percent, points, shortDate, stamp } from "@/lib/format";
+import { gap, percent, points, whenText, stamp } from "@/lib/format";
+import { TREND_TONE } from "@/lib/view/pill-text";
 import type { CourseView } from "@/lib/view/student-view";
 import { DoneButton } from "./done-button";
 import { FlagControl } from "./flag-control";
+import { TrendChart } from "./trend-chart";
+import { TrendPill } from "./trend-pill";
 import { Card, Empty, GradeNote, StateBadge } from "./ui";
 
 /**
- * Subject drill-down: current vs target, category breakdown, past scores,
- * to-dos, upcoming work, and supplemental work kept separate.
+ * Subject drill-down: current vs target with the grade over time, category
+ * breakdown, past scores, to-dos, upcoming work, and supplemental work kept
+ * separate.
  */
-export function CourseDetail({ view, interactive }: { view: CourseView; interactive: boolean }) {
+export function CourseDetail({ view, interactive, today }: { view: CourseView; interactive: boolean; today: string }) {
   const { course, result } = view;
   const lastUpdated = [course.updatedAt, ...view.assessments.map((a) => a.updatedAt)].sort().at(-1) ?? null;
 
@@ -20,11 +24,21 @@ export function CourseDetail({ view, interactive }: { view: CourseView; interact
           <div>
             <p className="text-3xl font-semibold">{percent(result.grade)}</p>
             <p className="text-sm text-text-muted">
-              {course.targetGrade !== null ? `Target ${course.targetGrade}%` : "No target set"}
+              {course.targetGrade !== null ? `Target ${percent(course.targetGrade)}` : "No target set"}
               {gap(view.gapToTarget) ? ` · ${gap(view.gapToTarget)}` : ""}
             </p>
+            {result.grade !== null && <p className="text-sm text-text-muted">{points(view.markedWeight)}% of this course is marked so far.</p>}
           </div>
+          <TrendPill trend={view.trend} />
         </div>
+        <TrendChart
+          points={view.history}
+          target={course.targetGrade}
+          tone={TREND_TONE[view.trend]}
+          marks={view.graded.map((a) => ({ id: a.id, title: a.title, scoreEarned: a.scoreEarned as number, scorePossible: a.scorePossible }))}
+          today={today}
+          label={`${course.code} grade over time`}
+        />
         <GradeNote />
       </Card>
 
@@ -58,7 +72,7 @@ export function CourseDetail({ view, interactive }: { view: CourseView; interact
                 <span className="min-w-0">
                   <span className="block font-medium">{a.title}</span>
                   <span className="block text-sm text-text-muted">
-                    {a.categoryName} · {shortDate(a.dueDate)}
+                    {a.categoryName} · {whenText(a)} · about {Math.round(a.share)}% of the grade
                     {a.state === "awaiting_result" ? " · Awaiting result" : ""}
                   </span>
                   {interactive && a.state === "awaiting_result" && (
@@ -103,7 +117,9 @@ export function CourseDetail({ view, interactive }: { view: CourseView; interact
               <li key={a.id} className="flex items-start justify-between gap-3 py-2">
                 <span className="min-w-0">
                   <span className="block font-medium">{a.title}</span>
-                  <span className="block text-xs text-text-muted">{a.categoryName}</span>
+                  <span className="block text-xs text-text-muted">
+                    {a.categoryName} · {whenText(a)}
+                  </span>
                   {interactive && (
                     <FlagControl key={`${a.id}-${a.openFlag?.reason ?? ""}`} assessmentId={a.id} state={a.state} reason={a.openFlag?.reason ?? null} label={a.title} />
                   )}

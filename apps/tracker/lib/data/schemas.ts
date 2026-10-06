@@ -62,14 +62,19 @@ export const CategoryRow = z
   }));
 export type Category = z.output<typeof CategoryRow>;
 
+export const ASSESSMENT_KINDS = ["assignment", "test"] as const;
+
+// An assignment has a due date, a test the day it is held, never both (ADR 0030).
 export const AssessmentRow = z
   .object({
-    id: uuid, course_id: uuid, category_id: uuid, title: z.string(), due_date: z.string().nullable(),
+    id: uuid, course_id: uuid, category_id: uuid, title: z.string(), kind: z.enum(ASSESSMENT_KINDS),
+    due_date: z.string().nullable(), held_on: z.string().nullable(),
     student_done_at: ts.nullable(), score_earned: numOrNull, score_possible: num, excused: z.boolean(),
     graded_at: ts.nullable(), updated_at: ts,
   })
   .transform((r) => ({
-    id: r.id, courseId: r.course_id, categoryId: r.category_id, title: r.title, dueDate: r.due_date,
+    id: r.id, courseId: r.course_id, categoryId: r.category_id, title: r.title, kind: r.kind,
+    dueDate: r.due_date, heldOn: r.held_on,
     studentDoneAt: r.student_done_at, scoreEarned: r.score_earned, scorePossible: r.score_possible,
     excused: r.excused, gradedAt: r.graded_at, updatedAt: r.updated_at,
   }));
@@ -168,13 +173,22 @@ export const CategoryInput = z.object({
   needsReview: checkbox,
 });
 
-export const AssessmentInput = z.object({
-  title: text(120),
-  categoryId: z.guid("Pick a category"),
-  dueDate: optionalDate,
-  scorePossible: requiredNumber.pipe(z.number().gt(0, "Must be more than 0")),
-  scoreEarned: optionalNumber.pipe(z.number().min(0, "Cannot be negative").nullable()),
-});
+/** The teacher picks assignment or test and gives that one's date. The other date is always null. */
+export const AssessmentInput = z
+  .object({
+    title: text(120),
+    categoryId: z.guid("Pick a category"),
+    kind: z.enum(ASSESSMENT_KINDS).default("assignment"),
+    dueDate: optionalDate.default(""),
+    heldOn: optionalDate.default(""),
+    scorePossible: requiredNumber.pipe(z.number().gt(0, "Must be more than 0")),
+    scoreEarned: optionalNumber.pipe(z.number().min(0, "Cannot be negative").nullable()),
+  })
+  .superRefine((v, ctx) => {
+    if (v.kind === "assignment" && v.dueDate === null) ctx.addIssue({ code: "custom", path: ["dueDate"], message: "Enter the due date" });
+    if (v.kind === "test" && v.heldOn === null) ctx.addIssue({ code: "custom", path: ["heldOn"], message: "Enter the test date" });
+  })
+  .transform((v) => (v.kind === "assignment" ? { ...v, heldOn: null } : { ...v, dueDate: null }));
 
 export const ScoreInput = z.object({
   scoreEarned: optionalNumber.pipe(z.number().min(0, "Cannot be negative").nullable()),
