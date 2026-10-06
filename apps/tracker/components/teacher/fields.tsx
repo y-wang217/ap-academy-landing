@@ -114,13 +114,33 @@ export function CategoryFields({ defaults, idPrefix }: { defaults?: { name: stri
   );
 }
 
-export const ASSESSMENT_LABELS = { title: "Title", categoryId: "Category", dueDate: "Due date", scorePossible: "Out of", scoreEarned: "Score" };
+export const ASSESSMENT_LABELS = { title: "Title", categoryId: "Category", kind: "Type", dueDate: "Due date", heldOn: "Test date", scorePossible: "Out of", scoreEarned: "Score" };
+const kindPill = "cursor-pointer rounded-full border border-border px-3 py-1.5 text-sm font-medium has-[:checked]:border-accent has-[:checked]:bg-accent has-[:checked]:text-surface";
+
+/**
+ * An assignment has a due date and a test has the day it is written, never
+ * both (ADR 0030). The toggle is two radios; CSS shows the matching date field
+ * and the server keeps only that one, so no script runs here.
+ */
 export function AssessmentFields({ categories }: { categories: { id: string; name: string }[] }) {
   return (
-    <>
+    <div className="group/kind flex flex-col gap-3">
       <Field label="Title" name="new-title">
         <input id="new-title" name="title" required className={inputClass} placeholder="Unit 2 test" />
       </Field>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="text-sm font-medium">Type</legend>
+        <div className="flex gap-2">
+          <label className={kindPill}>
+            <input type="radio" name="kind" value="assignment" defaultChecked className="sr-only" />
+            Assignment
+          </label>
+          <label className={kindPill}>
+            <input type="radio" name="kind" value="test" className="sr-only" />
+            Test
+          </label>
+        </div>
+      </fieldset>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Category" name="new-category">
           <select id="new-category" name="categoryId" required className={inputClass} defaultValue="">
@@ -134,9 +154,16 @@ export function AssessmentFields({ categories }: { categories: { id: string; nam
             ))}
           </select>
         </Field>
-        <Field label="Due date" name="new-due">
-          <input id="new-due" name="dueDate" type="date" className={inputClass} />
-        </Field>
+        <div className="group-has-[input[value=test]:checked]/kind:hidden">
+          <Field label="Due date" name="new-due">
+            <input id="new-due" name="dueDate" type="date" className={inputClass} />
+          </Field>
+        </div>
+        <div className="hidden group-has-[input[value=test]:checked]/kind:block">
+          <Field label="Test date" name="new-held" hint="The day the test is written.">
+            <input id="new-held" name="heldOn" type="date" className={inputClass} />
+          </Field>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Score" name="new-earned" hint="Leave blank if not marked yet.">
@@ -146,7 +173,7 @@ export function AssessmentFields({ categories }: { categories: { id: string; nam
           <input id="new-possible" name="scorePossible" inputMode="decimal" required className={inputClass} />
         </Field>
       </div>
-    </>
+    </div>
   );
 }
 

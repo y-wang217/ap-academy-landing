@@ -10,7 +10,7 @@ import { ChangeItem, applyChangeSet, contextFromBundle, dependencies, subsetChan
 import { dbMessage } from "@/lib/data/errors";
 import { getViewer, loadBundle } from "@/lib/data/queries";
 import { TUNING } from "@/lib/domain/tuning";
-import { points, shortDate } from "@/lib/format";
+import { points, shortDate, whenText } from "@/lib/format";
 import { failed, type Result } from "@/lib/result";
 
 // AI draft, preview, confirm, save (ADRs 0026, 0028, 0029). The model only
@@ -118,7 +118,7 @@ function preview(items: DraftItem[], ctx: StudentContext): PreviewItem[] {
       case "remove_category":
         return { ...common, kind: "remove", title: categoryLabel(item.categoryId), detail: "Remove the category", before: null, after: "Removed" };
       case "add_assessment":
-        return { ...common, kind: "add", title: item.title, detail: `New · ${courseLabel(item.courseId)} · ${categoryLabel(item.categoryId)} · ${shortDate(item.dueDate)}`, before: null, after: scoreText(item.scoreEarned, item.scorePossible, item.excused) };
+        return { ...common, kind: "add", title: item.title, detail: `New · ${courseLabel(item.courseId)} · ${categoryLabel(item.categoryId)} · ${whenText(item)}`, before: null, after: scoreText(item.scoreEarned, item.scorePossible, item.excused) };
       case "update_assessment": {
         const a = ctx.assessments.find((x) => x.id === item.assessmentId);
         const scored = item.scoreEarned !== undefined || item.scorePossible !== undefined || item.excused !== undefined;
@@ -126,7 +126,7 @@ function preview(items: DraftItem[], ctx: StudentContext): PreviewItem[] {
           a ? courseLabel(a.courseId) : null,
           item.title !== undefined ? `renamed to "${item.title}"` : null,
           item.categoryId !== undefined ? `moved to ${categoryLabel(item.categoryId)}` : null,
-          item.dueDate !== undefined ? `due ${shortDate(item.dueDate)}` : null,
+          item.heldOn ? `test ${shortDate(item.heldOn)}` : item.dueDate ? `due ${shortDate(item.dueDate)}` : item.dueDate === null || item.heldOn === null ? "no date" : null,
         ]);
         return {
           ...common, kind: "change", title: a?.title ?? "", detail: details || "Score",

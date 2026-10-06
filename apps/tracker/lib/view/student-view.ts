@@ -2,6 +2,7 @@
  * Turns one student's rows into what the screens show. Grades come only from
  * lib/domain; components render this and compute nothing (CLAUDE.md).
  */
+import { assessmentDate } from "../domain/assessment-date";
 import { assessmentState, type AssessmentState } from "../domain/assessment-state";
 import { computeCourseGrade, validateSyllabus, type CourseGradeResult } from "../domain/grades";
 import { nextPriorities, orderTasks, upcomingWork } from "../domain/priorities";
@@ -97,9 +98,10 @@ export function buildStudentView(bundle: BundleLike, today: string): StudentView
       result,
       gapToTarget: result.grade !== null && course.targetGrade !== null ? result.grade - course.targetGrade : null,
       assessments,
-      graded: assessments.filter((a) => a.state === "graded").sort((a, b) => (b.gradedAt ?? "").localeCompare(a.gradedAt ?? "")),
+      // Ordered by the day the work happened, never by the entry stamp (ADR 0030). Undated marks come last.
+      graded: assessments.filter((a) => a.state === "graded").sort((a, b) => (assessmentDate(b) ?? "").localeCompare(assessmentDate(a) ?? "")),
       upcoming: upcomingWork(assessments.filter((a) => a.state === "upcoming" || a.state === "done"), today, Infinity),
-      awaiting: assessments.filter((a) => a.state === "awaiting_result"),
+      awaiting: assessments.filter((a) => a.state === "awaiting_result").sort((a, b) => (assessmentDate(a) ?? "").localeCompare(assessmentDate(b) ?? "")),
       todos: tasks.filter((t) => t.kind === "school"),
       supplemental: tasks.filter((t) => t.kind === "supplemental"),
     };

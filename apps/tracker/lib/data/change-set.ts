@@ -85,16 +85,26 @@ export const UpdateCategoryItem = z
 
 export const RemoveCategoryItem = z.object({ op: z.literal("remove_category"), categoryId: rowRef });
 
-export const AddAssessmentItem = z.object({
-  op: z.literal("add_assessment"),
-  courseId: rowRef,
-  categoryId: rowRef,
-  title: text(120),
-  dueDate: isoDate.nullable().default(null),
-  scorePossible: possible,
-  scoreEarned: earned.default(null),
-  excused: z.boolean().default(false),
-});
+export const AssessmentKind = z.enum(["assignment", "test"]);
+const ONE_DATE = "An assignment has a due date and a test has a held date, never both";
+/** The database rule (ADR 0030), checked here so a bad draft fails before Postgres does. */
+const oneDate = (i: { kind?: "assignment" | "test"; dueDate?: string | null; heldOn?: string | null }) =>
+  !(i.kind === "assignment" && i.heldOn) && !(i.kind === "test" && i.dueDate) && !(i.dueDate && i.heldOn);
+
+export const AddAssessmentItem = z
+  .object({
+    op: z.literal("add_assessment"),
+    courseId: rowRef,
+    categoryId: rowRef,
+    title: text(120),
+    kind: AssessmentKind.default("assignment"),
+    dueDate: isoDate.nullable().default(null),
+    heldOn: isoDate.nullable().default(null),
+    scorePossible: possible,
+    scoreEarned: earned.default(null),
+    excused: z.boolean().default(false),
+  })
+  .refine(oneDate, ONE_DATE);
 
 export const UpdateAssessmentItem = z
   .object({
@@ -102,12 +112,15 @@ export const UpdateAssessmentItem = z
     assessmentId: rowRef,
     title: text(120).optional(),
     categoryId: rowRef.optional(),
+    kind: AssessmentKind.optional(),
     dueDate: isoDate.nullable().optional(),
+    heldOn: isoDate.nullable().optional(),
     scoreEarned: earned.optional(),
     scorePossible: possible.optional(),
     excused: z.boolean().optional(),
   })
-  .refine((i) => atLeastOneField(i, ["title", "categoryId", "dueDate", "scoreEarned", "scorePossible", "excused"]), NO_CHANGE);
+  .refine((i) => atLeastOneField(i, ["title", "categoryId", "kind", "dueDate", "heldOn", "scoreEarned", "scorePossible", "excused"]), NO_CHANGE)
+  .refine(oneDate, ONE_DATE);
 
 export const RemoveAssessmentItem = z.object({ op: z.literal("remove_assessment"), assessmentId: rowRef });
 
@@ -149,7 +162,7 @@ export type StudentContext = {
   courses: { id: string; code: string; name: string; term: string; status: "planned" | "active" | "completed"; inSixPlan: boolean; targetGrade: number | null; activeVersionId: string | null; confirmed: boolean }[];
   /** Every category, any version; `versionId` says which. */
   categories: { id: string; courseId: string; versionId: string; name: string; weight: number; aggregationMethod: "mean_of_percentages" | "pooled_points"; needsReview: boolean }[];
-  assessments: { id: string; courseId: string; categoryId: string; title: string; dueDate: string | null; scoreEarned: number | null; scorePossible: number; excused: boolean }[];
+  assessments: { id: string; courseId: string; categoryId: string; title: string; kind: "assignment" | "test"; dueDate: string | null; heldOn: string | null; scoreEarned: number | null; scorePossible: number; excused: boolean }[];
   tasks: { id: string; courseId: string | null; title: string; kind: "school" | "supplemental"; reason: string | null; pinned: boolean; rank: number }[];
 };
 
@@ -167,7 +180,7 @@ export function contextFromBundle(bundle: Bundle): StudentContext {
       id: c.id, courseId: c.courseId, versionId: c.versionId, name: c.name, weight: c.weight, aggregationMethod: c.aggregationMethod, needsReview: c.needsReview,
     })),
     assessments: bundle.assessments.map((a) => ({
-      id: a.id, courseId: a.courseId, categoryId: a.categoryId, title: a.title, dueDate: a.dueDate,
+      id: a.id, courseId: a.courseId, categoryId: a.categoryId, title: a.title, kind: a.kind, dueDate: a.dueDate, heldOn: a.heldOn,
       scoreEarned: a.scoreEarned, scorePossible: a.scorePossible, excused: a.excused,
     })),
     tasks: bundle.tasks.map((t) => ({ id: t.id, courseId: t.courseId, title: t.title, kind: t.kind, reason: t.reason, pinned: t.pinned, rank: t.rank })),
@@ -450,7 +463,8 @@ export async function applyChangeSet(db: Db, ctx: StudentContext, rawItems: read
         const { data, error } = await t
           .from("assessments")
           .insert({
-            ...base, course_id: resolve(item.courseId), category_id: resolve(item.categoryId), title: item.title, due_date: item.dueDate,
+            ...base, course_id: resolve(item.courseId), category_id: resolve(item.categoryId), title: item.title,
+            kind: item.kind, due_date: item.dueDate, held_on: item.heldOn,
             score_possible: item.scorePossible, score_earned: item.scoreEarned, excused: item.excused,
           })
           .select("id")
@@ -461,7 +475,9 @@ export async function applyChangeSet(db: Db, ctx: StudentContext, rawItems: read
         const patch = {
           ...(item.title !== undefined && { title: item.title }),
           ...(item.categoryId !== undefined && { category_id: resolve(item.categoryId) }),
+          ...(item.kind !== undefined && { kind: item.kind }),
           ...(item.dueDate !== undefined && { due_date: item.dueDate }),
+          ...(item.heldOn !== undefined && { held_on: item.heldOn }),
           ...(item.scoreEarned !== undefined && { score_earned: item.scoreEarned }),
           ...(item.scorePossible !== undefined && { score_possible: item.scorePossible }),
           ...(item.excused !== undefined && { excused: item.excused }),

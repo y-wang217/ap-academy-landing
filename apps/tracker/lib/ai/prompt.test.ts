@@ -30,8 +30,8 @@ const student: PromptStudent = {
     { id: CAT_LOCKED, courseId: LOCKED, versionId: V2, name: "Overall", weight: 100, aggregationMethod: "mean_of_percentages", needsReview: false },
   ],
   assessments: [
-    { id: A_TEST, courseId: COURSE, categoryId: CAT_TESTS, title: "Unit 1 Test", dueDate: null, scoreEarned: null, scorePossible: 40, excused: false },
-    { id: A_LAB, courseId: COURSE, categoryId: CAT_LABS, title: "Lab 1", dueDate: "2026-10-01", scoreEarned: 18, scorePossible: 20, excused: false },
+    { id: A_TEST, courseId: COURSE, categoryId: CAT_TESTS, title: "Unit 1 Test", kind: "test", dueDate: null, heldOn: null, scoreEarned: null, scorePossible: 40, excused: false },
+    { id: A_LAB, courseId: COURSE, categoryId: CAT_LABS, title: "Lab 1", kind: "assignment", dueDate: "2026-10-01", heldOn: null, scoreEarned: 18, scorePossible: 20, excused: false },
   ],
   tasks: [
     { id: TASK, courseId: COURSE, title: "Review moles", kind: "school", reason: null, pinned: false, doneAt: null },
@@ -55,7 +55,7 @@ const row = (o: Partial<AiOutput["items"][number]>): AiOutput["items"][number] =
   school: null, program: null, application_year: null, target_six_avg: null, benchmark_note: null,
   code: null, name: null, term: null, status: null, in_six_plan: null, target_grade: null,
   weight: null, aggregation_method: null, needs_review: null,
-  title: null, due_date: null, score_earned: null, score_possible: null, excused: null,
+  title: null, assessment_kind: null, due_date: null, held_on: null, score_earned: null, score_possible: null, excused: null,
   kind: null, reason: null, pinned: null, certain: true, check: null, source: "line", ...o,
 });
 
@@ -115,7 +115,7 @@ describe("toDraftItems", () => {
     expect(out.notes).toEqual([]);
     expect(out.items).toEqual([
       { op: "update_assessment", assessmentId: A_TEST, scoreEarned: 31, source: "Unit 1 Test 31/40", certain: true },
-      { op: "add_assessment", courseId: COURSE, categoryId: CAT_LABS, title: "Lab 2", dueDate: "2026-10-20", scorePossible: 20, scoreEarned: null, excused: false, source: "Lab 2 due Oct 20", certain: false },
+      { op: "add_assessment", courseId: COURSE, categoryId: CAT_LABS, title: "Lab 2", kind: "assignment", dueDate: "2026-10-20", heldOn: null, scorePossible: 20, scoreEarned: null, excused: false, source: "Lab 2 due Oct 20", certain: false },
       { op: "add_task", courseId: COURSE, title: "Redo the stoichiometry sheet", kind: "supplemental", reason: null, pinned: false, source: "extra practice", certain: true },
     ]);
   });
@@ -219,7 +219,24 @@ describe("toDraftItems", () => {
     ]);
     expect(out.items[0]).toMatchObject({ op: "update_assessment", scoreEarned: 35 });
     expect(out.items[0]).not.toHaveProperty("scorePossible");
-    expect(out.items[1]).toMatchObject({ op: "add_assessment", dueDate: null, scorePossible: 100, scoreEarned: 88 });
+    expect(out.items[1]).toMatchObject({ op: "add_assessment", kind: "assignment", dueDate: null, heldOn: null, scorePossible: 100, scoreEarned: 88 });
+  });
+
+  it("puts a test's date in held_on and an assignment's in due_date, whichever field the model used (ADR 0030)", () => {
+    const out = draft([
+      row({ op: "add_assessment", course: "C1", category: "K1", title: "Unit 2 Test", assessment_kind: "test", held_on: "2026-10-09", score_possible: 40 }),
+      row({ op: "add_assessment", course: "C1", category: "K1", title: "Quiz 3", assessment_kind: "test", due_date: "2026-10-12", score_possible: 10 }),
+      row({ op: "add_assessment", course: "C1", category: "K2", title: "Lab 3", held_on: "2026-10-15", score_possible: 20 }),
+      row({ op: "update_assessment", ref: "A2", assessment_kind: "test", held_on: "2026-10-02" }),
+      row({ op: "update_assessment", ref: "A1", due_date: "2026-10-20" }),
+    ]);
+    expect(out.notes).toEqual([]);
+    expect(out.items[0]).toMatchObject({ kind: "test", heldOn: "2026-10-09", dueDate: null });
+    expect(out.items[1]).toMatchObject({ kind: "test", heldOn: "2026-10-12", dueDate: null });
+    expect(out.items[2]).toMatchObject({ kind: "test", heldOn: "2026-10-15", dueDate: null });
+    expect(out.items[3]).toMatchObject({ op: "update_assessment", assessmentId: A_LAB, kind: "test", heldOn: "2026-10-02", dueDate: null });
+    expect(out.items[4]).toMatchObject({ op: "update_assessment", assessmentId: A_TEST, kind: "assignment", dueDate: "2026-10-20" });
+    expect(out.items[4]).not.toHaveProperty("heldOn");
   });
 });
 
@@ -251,11 +268,11 @@ describe("fromWire", () => {
     const wire = {
       ...row({ op: "add_course", code: "SBI4U", status: "active", in_six_plan: true }),
       ref: "", new_ref: " N1 ", course: "", category: "", school: "", program: "", benchmark_note: "",
-      code: "SBI4U", name: "", term: " ", status: "active", aggregation_method: "", title: "", due_date: "", kind: "", reason: "", check: "",
+      code: "SBI4U", name: "", term: " ", status: "active", aggregation_method: "", title: "", assessment_kind: "", due_date: "", held_on: "", kind: "", reason: "", check: "",
     } as AiWireOutputItem;
     const out = fromWire({ items: [wire], unmatched: ["x"] });
     expect(out.unmatched).toEqual(["x"]);
     expect(out.items[0]).toMatchObject({ op: "add_course", new_ref: "N1", code: "SBI4U", status: "active", in_six_plan: true });
-    for (const key of ["ref", "course", "name", "term", "aggregation_method", "kind", "due_date", "check"] as const) expect(out.items[0][key]).toBeNull();
+    for (const key of ["ref", "course", "name", "term", "aggregation_method", "kind", "assessment_kind", "due_date", "held_on", "check"] as const) expect(out.items[0][key]).toBeNull();
   });
 });

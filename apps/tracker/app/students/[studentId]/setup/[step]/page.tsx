@@ -9,6 +9,7 @@ import { InvitePanel, SyllabusEditor } from "@/components/teacher/panels";
 import { STEPS, WizardNav, type StepKey } from "@/components/teacher/wizard-nav";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Field, Notice, Page, buttonClass, linkClass, numberInputClass } from "@/components/ui";
+import { assessmentDate } from "@/lib/domain/assessment-date";
 import { checkCourseTargets } from "@/lib/domain/progress";
 import { TUNING } from "@/lib/domain/tuning";
 import { percent, points, studentName, studentNumber } from "@/lib/format";
@@ -190,6 +191,8 @@ function ReviewStep({ view, orgName }: { view: V; orgName: string }) {
   for (const c of view.courses) {
     for (const w of c.result.warnings) if (w.kind === "needs_review") warnings.push(`${c.course.code}: ${w.categoryName} is flagged for review.`);
   }
+  const undated = view.courses.reduce((n, c) => n + c.assessments.filter((a) => assessmentDate(a) === null).length, 0);
+  if (undated > 0) warnings.push(`${undated} assessment${undated === 1 ? " has" : "s have"} no date, so ${undated === 1 ? "it stays" : "they stay"} off the chart.`);
 
   const published = view.student.publishedAt !== null;
   return (

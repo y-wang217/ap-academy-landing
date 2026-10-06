@@ -72,7 +72,7 @@ export async function loadBundle(db: Db, studentId: string): Promise<Bundle | nu
     t.from("courses").select("id, code, name, term, status, in_six_plan, target_grade, active_syllabus_version_id, position, updated_at").eq("student_id", studentId).order("position").order("code"),
     t.from("syllabus_versions").select("id, course_id, version, confirmed_at").eq("student_id", studentId),
     t.from("categories").select("id, course_id, syllabus_version_id, name, weight, aggregation_method, needs_review, position").eq("student_id", studentId).order("position"),
-    t.from("assessments").select("id, course_id, category_id, title, due_date, student_done_at, score_earned, score_possible, excused, graded_at, updated_at").eq("student_id", studentId).order("due_date", { nullsFirst: false }).order("title"),
+    t.from("assessments").select("id, course_id, category_id, title, kind, due_date, held_on, student_done_at, score_earned, score_possible, excused, graded_at, updated_at").eq("student_id", studentId).order("title"),
     t.from("tasks").select("id, course_id, title, kind, pinned, rank, reason, suggestion_key, done_at, created_at, updated_at").eq("student_id", studentId),
     t.from("grade_flags").select("id, assessment_id, reason, created_at, resolved_at").eq("student_id", studentId).is("resolved_at", null),
   ]);

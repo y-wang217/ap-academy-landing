@@ -34,3 +34,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0027](0027-change-sets.md) | Assessment edits share one change-set shape, AI and manual alike | accepted |
 | [0028](0028-intake-sources.md) | AI intake reads photos, PDFs, transcripts and instructions; notes carry a student number, not a name | accepted |
 | [0029](0029-student-change-set.md) | One change set covers the whole student; every teacher edit is an item in it | accepted |
+| [0030](0030-assessment-kind-and-date.md) | An assessment is an assignment with a due date or a test with a held date | accepted |

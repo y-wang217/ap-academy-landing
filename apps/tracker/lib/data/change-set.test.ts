@@ -24,7 +24,7 @@ const ctx: StudentContext = {
     { id: CAT_OLD, courseId: COURSE, versionId: "40000000-0000-0000-0000-000000000000", name: "Old", weight: 100, aggregationMethod: "mean_of_percentages", needsReview: false },
     { id: CAT_LOCKED, courseId: LOCKED, versionId: V2, name: "Overall", weight: 100, aggregationMethod: "mean_of_percentages", needsReview: false },
   ],
-  assessments: [{ id: A_TEST, courseId: COURSE, categoryId: CAT_TESTS, title: "Unit 1 Test", dueDate: null, scoreEarned: null, scorePossible: 40, excused: false }],
+  assessments: [{ id: A_TEST, courseId: COURSE, categoryId: CAT_TESTS, title: "Unit 1 Test", kind: "test", dueDate: null, heldOn: null, scoreEarned: null, scorePossible: 40, excused: false }],
   tasks: [{ id: TASK, courseId: null, title: "Review", kind: "school", reason: null, pinned: false, rank: 0 }],
 };
 
@@ -39,6 +39,16 @@ describe("ChangeItem", () => {
     expect(ChangeItem.safeParse({ op: "update_course", courseId: COURSE }).success).toBe(false);
     expect(ChangeItem.safeParse({ op: "update_course", courseId: COURSE, targetGrade: null }).success).toBe(true);
   });
+  it("gives an assessment one date for its kind, never both (ADR 0030)", () => {
+    const add = { op: "add_assessment", courseId: COURSE, categoryId: CAT_TESTS, title: "Quiz", scorePossible: 10 };
+    expect(ChangeItem.parse(add)).toMatchObject({ kind: "assignment", dueDate: null, heldOn: null });
+    expect(ChangeItem.parse({ ...add, kind: "test", heldOn: "2026-10-09" })).toMatchObject({ kind: "test", heldOn: "2026-10-09", dueDate: null });
+    expect(ChangeItem.safeParse({ ...add, kind: "test", dueDate: "2026-10-09" }).success).toBe(false);
+    expect(ChangeItem.safeParse({ ...add, kind: "assignment", heldOn: "2026-10-09" }).success).toBe(false);
+    expect(ChangeItem.safeParse({ ...add, dueDate: "2026-10-09", heldOn: "2026-10-09" }).success).toBe(false);
+    expect(ChangeItem.safeParse({ op: "update_assessment", assessmentId: A_TEST, kind: "test", heldOn: "2026-10-09", dueDate: null }).success).toBe(true);
+    expect(ChangeItem.safeParse({ op: "update_assessment", assessmentId: A_TEST, dueDate: "2026-10-09", heldOn: "2026-10-10" }).success).toBe(false);
+  });
 });
 
 describe("itemProblem", () => {
@@ -48,7 +58,7 @@ describe("itemProblem", () => {
     expect(itemProblem({ op: "remove_task", taskId: OTHER }, ctx)).toBe("That task is not this student's.");
   });
   it("wants a category from the course's active syllabus", () => {
-    const base = { op: "add_assessment" as const, courseId: COURSE, title: "Quiz", dueDate: null, scorePossible: 10, scoreEarned: null, excused: false };
+    const base = { op: "add_assessment" as const, courseId: COURSE, title: "Quiz", kind: "assignment" as const, dueDate: null, heldOn: null, scorePossible: 10, scoreEarned: null, excused: false };
     expect(itemProblem({ ...base, categoryId: CAT_TESTS }, ctx)).toBeNull();
     expect(itemProblem({ ...base, categoryId: CAT_OLD }, ctx)).toBe("Pick a category from this course.");
     expect(itemProblem({ ...base, categoryId: CAT_LOCKED }, ctx)).toBe("Pick a category from this course.");
@@ -61,7 +71,7 @@ describe("itemProblem", () => {
   it("resolves $k refs against earlier items of the right kind", () => {
     const course: ChangeItem = { op: "add_course", code: "SPH4U", name: "Physics", term: "", status: "active", inSixPlan: true, targetGrade: 88 };
     const category = { op: "add_category" as const, courseId: "$0", name: "Tests", weight: 100, aggregationMethod: "mean_of_percentages" as const, needsReview: false };
-    const work = { op: "add_assessment" as const, courseId: "$0", categoryId: "$1", title: "Unit 1", dueDate: null, scorePossible: 50, scoreEarned: 45, excused: false };
+    const work = { op: "add_assessment" as const, courseId: "$0", categoryId: "$1", title: "Unit 1", kind: "assignment" as const, dueDate: null, heldOn: null, scorePossible: 50, scoreEarned: 45, excused: false };
     const items: ChangeItem[] = [course, category, work];
     expect(validateChangeSet(items, ctx).error).toBeNull();
     expect(itemProblem(work, ctx, items, 2)).toBeNull();
@@ -84,7 +94,7 @@ describe("subsetChangeSet", () => {
     { op: "add_course", code: "SPH4U", name: "Physics", term: "", status: "active", inSixPlan: true, targetGrade: null },
     { op: "update_task", taskId: TASK, pinned: true },
     { op: "add_category", courseId: "$0", name: "Tests", weight: 100, aggregationMethod: "mean_of_percentages", needsReview: false },
-    { op: "add_assessment", courseId: "$0", categoryId: "$2", title: "Unit 1", dueDate: null, scorePossible: 50, scoreEarned: null, excused: false },
+    { op: "add_assessment", courseId: "$0", categoryId: "$2", title: "Unit 1", kind: "assignment", dueDate: null, heldOn: null, scorePossible: 50, scoreEarned: null, excused: false },
   ];
   it("keeps the selected items with their dependencies and renumbers refs", () => {
     const subset = subsetChangeSet(items, [3]);

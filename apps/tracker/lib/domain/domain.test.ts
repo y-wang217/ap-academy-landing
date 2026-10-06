@@ -59,6 +59,11 @@ describe("assessmentState", () => {
     expect(assessmentState({ ...base, dueDate: today }, today)).toBe("upcoming");
     expect(assessmentState({ ...base, excused: true, scoreEarned: 5 }, today)).toBe("excused");
   });
+  it("reads a test's held date the same way as a due date (ADR 0030)", () => {
+    expect(assessmentState({ ...base, dueDate: null, heldOn: "2026-10-01" }, today)).toBe("awaiting_result");
+    expect(assessmentState({ ...base, dueDate: null, heldOn: "2026-10-10" }, today)).toBe("upcoming");
+    expect(assessmentState({ ...base, dueDate: null, heldOn: null, studentDoneAt: "x" }, today)).toBe("done");
+  });
   it("done never awards marks: a done item has no grade state", () => {
     expect(assessmentState({ ...base, studentDoneAt: "x" }, today)).not.toBe("graded");
   });
@@ -82,7 +87,8 @@ describe("priorities", () => {
       { id: 3, dueDate: "2026-10-01", scoreEarned: null, excused: false },
       { id: 4, dueDate: "2026-10-05", scoreEarned: 8, excused: false },
       { id: 5, dueDate: null, scoreEarned: null, excused: false },
+      { id: 6, dueDate: null, heldOn: "2026-10-06", scoreEarned: null, excused: false },
     ];
-    expect(upcomingWork(items, "2026-10-04").map((x) => x.id)).toEqual([2, 1]);
+    expect(upcomingWork(items, "2026-10-04").map((x) => x.id)).toEqual([2, 6, 1]);
   });
 });

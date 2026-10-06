@@ -69,7 +69,8 @@ syllabus_versions(id, course_id, version int, confirmed_by, confirmed_at, notes)
 categories(id, syllabus_version_id, name, weight numeric,
            aggregation_method: mean_of_percentages|pooled_points,
            needs_review bool)
-assessments(id, course_id, category_id, title, due_date date,
+assessments(id, course_id, category_id, title, kind: assignment|test,
+            due_date date NULL, held_on date NULL,   -- one or the other, never both
             student_done_at NULL, score_earned numeric NULL,
             score_possible numeric, excused bool, graded_at NULL)
 tasks(id, student_id, course_id NULL, title, kind: school|supplemental,
@@ -79,7 +80,7 @@ audit_log(id, org_id, actor_id, table_name, row_id, action,
 
 ```
 
-Assessment display state is derived, not stored: upcoming → done (student tapped) → awaiting result (due date passed) → graded (score present).
+Assessment display state is derived, not stored: upcoming → done (student tapped) → awaiting result (the due or test date passed) → graded (score present). `graded_at` is the entry stamp, for internal use only; nothing a student sees reads it.
 
 ## Grade engine spec
 
