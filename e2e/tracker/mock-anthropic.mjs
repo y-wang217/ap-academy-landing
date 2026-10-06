@@ -7,13 +7,14 @@ import http from "node:http";
 
 let last = null;
 
+// Text and choice fields say "not given" with "", as the wire schema does.
 const blank = {
-  ref: null, new_ref: null, course: null, category: null,
-  school: null, program: null, application_year: null, target_six_avg: null, benchmark_note: null,
-  code: null, name: null, term: null, status: null, in_six_plan: null, target_grade: null,
-  weight: null, aggregation_method: null, needs_review: null,
-  title: null, due_date: null, score_earned: null, score_possible: null, excused: null,
-  kind: null, reason: null, pinned: null, certain: true, source: "",
+  ref: "", new_ref: "", course: "", category: "",
+  school: "", program: "", application_year: null, target_six_avg: null, benchmark_note: "",
+  code: "", name: "", term: "", status: "", in_six_plan: null, target_grade: null,
+  weight: null, aggregation_method: "", needs_review: null,
+  title: "", due_date: "", score_earned: null, score_possible: null, excused: null,
+  kind: "", reason: "", pinned: null, certain: true, check: "", source: "",
 };
 
 const server = http.createServer((req, res) => {
@@ -38,9 +39,9 @@ const server = http.createServer((req, res) => {
     const assignments = course?.categories.find((c) => c.name === "Assignments");
     const answer = {
       items: [
-        { ...blank, op: "update_assessment", ref: lab?.ref ?? null, score_earned: 18, score_possible: 20, source: "Lab report 18/20" },
-        { ...blank, op: "add_assessment", course: course?.ref ?? null, category: assignments?.ref ?? null, title: "Quiz 2", score_earned: 9, score_possible: 10, source: "Quiz 2 9/10" },
-        { ...blank, op: "add_task", course: course?.ref ?? null, title: "Review unit 3 before the test", certain: false, source: "maybe review unit 3" },
+        { ...blank, op: "update_assessment", ref: lab?.ref ?? "", score_earned: 18, score_possible: 20, source: "Lab report 18/20" },
+        { ...blank, op: "add_assessment", course: course?.ref ?? "", category: assignments?.ref ?? "", title: "Quiz 2", score_earned: 9, score_possible: 10, source: "Quiz 2 9/10" },
+        { ...blank, op: "add_task", course: course?.ref ?? "", title: "Review unit 3 before the test", certain: false, check: "Is this school work?", source: "maybe review unit 3" },
       ],
       unmatched: ["Field trip money due Friday"],
     };
