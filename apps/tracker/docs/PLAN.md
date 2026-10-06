@@ -56,6 +56,14 @@ Each step is done only when lint, typecheck and tests pass.
   API's limits. A 400 now blames files only when files were sent, and the API's
   reason goes to the Vercel log.
 
+  Fix 2026-10-06: "add biology and english" drafted no courses. The tutor gave
+  subjects, not codes, the model left `code` empty, and `add_course` failed
+  with a bare "Required"; every category hung off those courses then failed
+  as "no course for this category". The model now gets the student's grade
+  level and is told to give the usual Ontario code (SBI4U) with certain false
+  when only a subject is named. A course without a code says so in the notes,
+  and items that hang off a failed add say that instead of a vaguer reason.
+
 ## Before step 9 goes live
 
 1. ~~Apply `0007_tracker_intake` to the live project with sign-off.~~ Done

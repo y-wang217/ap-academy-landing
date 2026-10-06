@@ -16,6 +16,7 @@ const A_LAB = "60000000-0000-0000-0000-000000000002";
 const TASK = "70000000-0000-0000-0000-000000000001";
 
 const student: PromptStudent = {
+  student: { gradeLevel: 12 },
   goal: { school: "University of Waterloo", program: "Software Engineering", applicationYear: 2027, targetSixAvg: 95, benchmarkNote: null },
   courses: [
     { id: COURSE, code: "SCH4U", name: "Chemistry", term: "Fall", status: "active", inSixPlan: true, targetGrade: 90, activeVersionId: V1 },
@@ -94,6 +95,7 @@ describe("buildUserMessage", () => {
     expect(text).toContain("2 attached files are the material.");
     expect(text).toContain('"syllabus_confirmed": true');
     expect(text).toContain("<sent>\nUnit 1 Test 31/40\n</sent>");
+    expect(text).toContain('"grade_level": 12');
   });
   it("says so when only files were sent", () => {
     expect(buildUserMessage(student, "   ", null, 1).text).toContain("The tutor sent no words, only the attached material.");
@@ -137,6 +139,20 @@ describe("toDraftItems", () => {
     expect(out.items[1]).toMatchObject({ courseId: "$0", name: "Tests", weight: 60 });
     expect(out.items[3]).toMatchObject({ courseId: "$0", categoryId: "$1", scoreEarned: 42, scorePossible: 50 });
     expect(out.items[4]).toMatchObject({ courseId: "$0" });
+  });
+
+  it("says why a course without a code, and everything hanging off it, was not drafted", () => {
+    const out = draft([
+      row({ op: "add_course", new_ref: "N1", name: "Biology", source: "add biology" }),
+      row({ op: "add_category", course: "N1", new_ref: "N2", name: "Tests", weight: 40, source: "tests 40%" }),
+      row({ op: "add_assessment", course: "N1", category: "N2", title: "Quiz", score_possible: 10, source: "quiz" }),
+    ]);
+    expect(out.items).toEqual([]);
+    expect(out.notes).toEqual([
+      "add biology (a new course needs a course code, like SBI4U)",
+      "tests 40% (needs a new course or category that could not be added)",
+      "quiz (needs a new course or category that could not be added)",
+    ]);
   });
 
   it("fills the goal from the current one when the model gives only what changed", () => {
