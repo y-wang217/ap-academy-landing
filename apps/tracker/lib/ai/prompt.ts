@@ -55,6 +55,7 @@ export const AiWireOutput = z.object({
       reason: text("Why this task matters, for a task"),
       pinned: z.boolean().nullable(),
       certain: z.boolean().describe("true when the material clearly supports this exact change; false when the teacher should check it"),
+      check: text("When certain is false: what the tutor should check, in a few words"),
       source: z.string().describe("The words of the material or request this change comes from, copied exactly"),
     }),
   ),
@@ -65,7 +66,7 @@ export type AiWireOutput = z.output<typeof AiWireOutput>;
 type Unset<T> = { [K in keyof T]: T[K] extends string ? Exclude<T[K], ""> | null : T[K] };
 const TEXT_FIELDS = [
   "ref", "new_ref", "course", "category", "school", "program", "benchmark_note", "code", "name", "term",
-  "status", "aggregation_method", "title", "due_date", "kind", "reason",
+  "status", "aggregation_method", "title", "due_date", "kind", "reason", "check",
 ] as const;
 
 /** The model's answer with "not given" as null, which is what `toDraftItems` reads. */
@@ -97,14 +98,15 @@ The tutor sends the student as it is now (refs, never ids) and then either mater
 
 Ops: set_goal; add_course, update_course, remove_course; add_category, update_category, remove_category; add_assessment, update_assessment, remove_assessment; add_task, update_task, remove_task.
 - update_* and remove_* name the existing row in ref. In update_*, leave a field null to keep it as it is.
-- add_* may give new_ref (N1, N2, ...) so a later item can name the new row in course or category.
+- add_* may give new_ref (N1, N2, ...) so a later item can name the new row in course or category. An add comes before the items that name its new_ref.
 - add_course needs a course code. When the tutor names a subject without one, give the usual Ontario code for the student's grade_level (grade 12 Biology is SBI4U, grade 12 English is ENG4U, grade 11 Chemistry is SCH3U), put the subject in name, and set certain false. One add_course per course.
 - Categories are a course's syllabus: name and weight, weights adding up to 100. A course whose syllabus is confirmed cannot have its categories changed; put such material in unmatched.
 - Marks: give score_earned and score_possible as numbers. A percentage alone means score_possible 100. Blank, dash or "not marked" means score_earned null. "Excused", "EX" or "exempt" means excused true. To set a mark on an existing assessment use update_assessment with score_possible given.
 - Match existing rows by meaning, not exact words ("Unit 3 Test" and "U3 test" are the same). Leave out a change that would not change anything.
 - Ignore course averages, term marks, comments and anything about other students.
-- certain is true only when the material clearly states this exact change. A guess at a category, a date, a weight or a course is certain false.
-- If something is about this student's work but you cannot tell where it goes, put it in unmatched instead of guessing.`;
+- certain is true only when the material clearly states this exact change. A guess at a category, a date, a weight or a course is certain false, and check says in a few words what to confirm ("Biology or English?").
+- The tutor wants everything the tracker can hold turned into changes, so the material never has to be typed in by hand. When you can't tell where something goes, make your best guess as a change with certain false; don't also put it in unmatched.
+- unmatched is only for what no change can hold: something with no place in the tracker, a change to a confirmed syllabus, or material that contradicts itself.`;
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -188,7 +190,7 @@ export function buildUserMessage(student: PromptStudent, sent: string, focusCour
   return { text: parts.filter((p): p is string => p !== null).join("\n\n"), refs };
 }
 
-export type DraftItem = ChangeItem & { source: string; certain: boolean };
+export type DraftItem = ChangeItem & { source: string; certain: boolean; check?: string };
 
 const isoDate = (s: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
 const given = <T>(v: T | null | undefined): v is T => v !== null && v !== undefined;
@@ -262,7 +264,8 @@ export function toDraftItems(output: AiOutput, refs: Refs, ctx: StudentContext, 
       if (touched.has(key)) continue;
       touched.add(key);
     }
-    items.push({ ...item, source, certain: raw.certain });
+    const check = raw.certain ? null : raw.check?.slice(0, 200);
+    items.push({ ...item, source, certain: raw.certain, ...(check ? { check } : {}) });
     if (raw.new_ref && item.op.startsWith("add_")) {
       newRefs.set(raw.new_ref.trim(), { index: items.length - 1, kind: item.op.slice(4) as "course" | "category" | "assessment" | "task" });
     }

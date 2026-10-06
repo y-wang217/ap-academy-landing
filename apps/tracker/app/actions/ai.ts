@@ -27,6 +27,8 @@ export type PreviewItem = {
   after: string;
   source: string;
   certain: boolean;
+  /** For an uncertain change: what to confirm. */
+  check: string | null;
   /** Earlier items this one needs (a new course for its categories, say). */
   dependsOn: number[];
 };
@@ -93,7 +95,7 @@ function preview(items: DraftItem[], ctx: StudentContext): PreviewItem[] {
     ]);
 
   return items.map((item, index) => {
-    const common = { index, source: item.source, certain: item.certain, dependsOn: dependencies(item) };
+    const common = { index, source: item.source, certain: item.certain, check: item.check ?? null, dependsOn: dependencies(item) };
     switch (item.op) {
       case "set_goal":
         return { ...common, kind: "change", title: "Goal", detail: join([item.program, item.school, item.applicationYear ? `apply ${item.applicationYear}` : null]), before: null, after: `Target ${points(item.targetSixAvg)}%` };

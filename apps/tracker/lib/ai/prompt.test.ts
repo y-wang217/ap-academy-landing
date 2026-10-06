@@ -56,7 +56,7 @@ const row = (o: Partial<AiOutput["items"][number]>): AiOutput["items"][number] =
   code: null, name: null, term: null, status: null, in_six_plan: null, target_grade: null,
   weight: null, aggregation_method: null, needs_review: null,
   title: null, due_date: null, score_earned: null, score_possible: null, excused: null,
-  kind: null, reason: null, pinned: null, certain: true, source: "line", ...o,
+  kind: null, reason: null, pinned: null, certain: true, check: null, source: "line", ...o,
 });
 
 describe("stripPersonalData", () => {
@@ -155,6 +155,15 @@ describe("toDraftItems", () => {
     ]);
   });
 
+  it("carries what to check on an uncertain change, and only there", () => {
+    const out = draft([
+      row({ op: "add_task", title: "Read chapter 3", certain: false, check: "Biology or English?" }),
+      row({ op: "add_task", title: "Read chapter 4", certain: true, check: "ignored" }),
+    ]);
+    expect(out.items[0]).toMatchObject({ certain: false, check: "Biology or English?" });
+    expect(out.items[1]).not.toHaveProperty("check");
+  });
+
   it("fills the goal from the current one when the model gives only what changed", () => {
     const out = draft([row({ op: "set_goal", target_six_avg: 93, source: "lowering the target to 93" })]);
     expect(out.items[0]).toMatchObject({ op: "set_goal", school: "University of Waterloo", program: "Software Engineering", applicationYear: 2027, targetSixAvg: 93 });
@@ -242,11 +251,11 @@ describe("fromWire", () => {
     const wire = {
       ...row({ op: "add_course", code: "SBI4U", status: "active", in_six_plan: true }),
       ref: "", new_ref: " N1 ", course: "", category: "", school: "", program: "", benchmark_note: "",
-      code: "SBI4U", name: "", term: " ", status: "active", aggregation_method: "", title: "", due_date: "", kind: "", reason: "",
+      code: "SBI4U", name: "", term: " ", status: "active", aggregation_method: "", title: "", due_date: "", kind: "", reason: "", check: "",
     } as AiWireOutputItem;
     const out = fromWire({ items: [wire], unmatched: ["x"] });
     expect(out.unmatched).toEqual(["x"]);
     expect(out.items[0]).toMatchObject({ op: "add_course", new_ref: "N1", code: "SBI4U", status: "active", in_six_plan: true });
-    for (const key of ["ref", "course", "name", "term", "aggregation_method", "kind", "due_date"] as const) expect(out.items[0][key]).toBeNull();
+    for (const key of ["ref", "course", "name", "term", "aggregation_method", "kind", "due_date", "check"] as const) expect(out.items[0][key]).toBeNull();
   });
 });

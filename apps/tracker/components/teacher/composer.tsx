@@ -74,6 +74,7 @@ export function Composer({ scope, limits, placeholder }: { scope: DraftScope; li
                       {item.title}
                       {!item.certain && <span className="ml-2 rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">Check this one</span>}
                     </span>
+                    {item.check && <span className="block text-sm text-warn">{item.check}</span>}
                     <span className="block text-sm text-text-muted">{item.detail}</span>
                     <span className="block text-sm">{item.before !== null && item.before !== "" ? `${item.before} → ${item.after}` : item.after}</span>
                     {item.source && <span className="block text-xs text-text-muted">From: &ldquo;{item.source}&rdquo;</span>}
