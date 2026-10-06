@@ -5,10 +5,14 @@
 import { assessmentDate } from "../domain/assessment-date";
 import { assessmentState, type AssessmentState } from "../domain/assessment-state";
 import { computeCourseGrade, validateSyllabus, type CourseGradeResult } from "../domain/grades";
+import { assessmentShares, gradeHistory, type HistoryPoint } from "../domain/history";
 import { nextPriorities, orderTasks, upcomingWork } from "../domain/priorities";
 import { sixCourseProgress, type SixCourseProgress } from "../domain/progress";
+import { storyFacts } from "../domain/story";
 import { suggestPriorities, type Suggestion } from "../domain/suggestions";
+import { courseTrend, trendDelta, type Trend } from "../domain/trend";
 import type { Assessment, Category, Course, Flag, Goal, Student, Task, Version } from "../data/schemas";
+import { storyText, type StoryText } from "./story-text";
 import { suggestionReason } from "./suggestion-text";
 
 export type BundleLike = {
@@ -27,6 +31,8 @@ export type AssessmentView = Assessment & {
   state: AssessmentState;
   courseCode: string;
   categoryName: string;
+  /** Rough share of the course grade, 0 to 100, from the syllabus weights. */
+  share: number;
   /** The student's open flag on this grade, if any (ADR 0025). */
   openFlag: Flag | null;
 };
@@ -40,6 +46,12 @@ export type CourseView = {
   syllabusErrors: ReturnType<typeof validateSyllabus>;
   result: CourseGradeResult;
   gapToTarget: number | null;
+  /** Sum of the weights of categories with at least one mark, 0 to 100. */
+  markedWeight: number;
+  /** The grade on each date with a mark, oldest first (ADR 0031). */
+  history: HistoryPoint[];
+  trend: Trend;
+  trendDelta: number | null;
   assessments: AssessmentView[];
   graded: AssessmentView[];
   upcoming: AssessmentView[];
@@ -53,7 +65,13 @@ export type StudentView = {
   goal: Goal | null;
   progress: SixCourseProgress;
   courses: CourseView[];
+  /** Every course that counts toward the six-course average, in position order, whatever its status. */
+  planCourses: CourseView[];
+  /** Active courses outside the plan. */
+  otherActive: CourseView[];
   activeCourses: CourseView[];
+  /** The one factual sentence under the progress number, and an optional second (ADR 0032). */
+  story: StoryText;
   /** The dashboard's next priorities: open school tasks, pinned first, capped. */
   priorities: Task[];
   /** Every open school task in display order (teacher view). */
@@ -76,11 +94,18 @@ export function buildStudentView(bundle: BundleLike, today: string): StudentView
   const courseCode = new Map(bundle.courses.map((c) => [c.id, c.code]));
   const categoryName = new Map(bundle.categories.map((c) => [c.id, c.name]));
   const openFlag = new Map(bundle.flags.filter((f) => f.resolvedAt === null).map((f) => [f.assessmentId, f]));
+  const versionOf = new Map(bundle.courses.map((c) => [c.id, c.activeVersionId]));
+  const shares = new Map<string, number>();
+  for (const course of bundle.courses) {
+    const categories = bundle.categories.filter((c) => c.versionId === versionOf.get(course.id));
+    for (const [id, share] of assessmentShares(categories, bundle.assessments.filter((a) => a.courseId === course.id))) shares.set(id, share);
+  }
   const allAssessments: AssessmentView[] = bundle.assessments.map((a) => ({
     ...a,
     state: assessmentState(a, today),
     courseCode: courseCode.get(a.courseId) ?? "",
     categoryName: categoryName.get(a.categoryId) ?? "",
+    share: shares.get(a.id) ?? 0,
     openFlag: openFlag.get(a.id) ?? null,
   }));
 
@@ -89,6 +114,7 @@ export function buildStudentView(bundle: BundleLike, today: string): StudentView
     const categories = bundle.categories.filter((c) => version && c.versionId === version.id);
     const assessments = allAssessments.filter((a) => a.courseId === course.id);
     const result = computeCourseGrade(categories, assessments);
+    const history = gradeHistory(categories, assessments);
     const tasks = orderTasks(bundle.tasks.filter((t) => t.courseId === course.id));
     return {
       course,
@@ -97,6 +123,10 @@ export function buildStudentView(bundle: BundleLike, today: string): StudentView
       syllabusErrors: validateSyllabus(categories),
       result,
       gapToTarget: result.grade !== null && course.targetGrade !== null ? result.grade - course.targetGrade : null,
+      markedWeight: result.categories.filter((c) => c.scoredCount > 0).reduce((s, c) => s + c.weight, 0),
+      history,
+      trend: courseTrend({ grade: result.grade, targetGrade: course.targetGrade, history }),
+      trendDelta: trendDelta(history),
       assessments,
       // Ordered by the day the work happened, never by the entry stamp (ADR 0030). Undated marks come last.
       graded: assessments.filter((a) => a.state === "graded").sort((a, b) => (assessmentDate(b) ?? "").localeCompare(assessmentDate(a) ?? "")),
@@ -121,15 +151,31 @@ export function buildStudentView(bundle: BundleLike, today: string): StudentView
     return { ...s, courseCode: code, reason: suggestionReason(s, code) };
   });
 
+  const planCourses = courses.filter((c) => c.course.inSixPlan);
+  const progress = sixCourseProgress(
+    courses.map((c) => ({ inSixPlan: c.course.inSixPlan, grade: c.result.grade, targetGrade: c.course.targetGrade })),
+    bundle.goal?.targetSixAvg ?? null,
+  );
+  const story = storyText(
+    storyFacts({
+      hasGoal: bundle.goal !== null,
+      progress,
+      courses: planCourses.map((c) => ({ code: c.course.code, grade: c.result.grade, targetGrade: c.course.targetGrade, trendDelta: c.trendDelta })),
+      upcoming: upcomingWork(allAssessments, today, Infinity).map((a) => ({ title: a.title, courseCode: a.courseCode, date: assessmentDate(a) as string, share: a.share })),
+      awaitingCount: allAssessments.filter((a) => a.state === "awaiting_result").length,
+      today,
+    }),
+  );
+
   return {
     student: bundle.student,
     goal: bundle.goal,
-    progress: sixCourseProgress(
-      courses.map((c) => ({ inSixPlan: c.course.inSixPlan, grade: c.result.grade, targetGrade: c.course.targetGrade })),
-      bundle.goal?.targetSixAvg ?? null,
-    ),
+    progress,
     courses,
+    planCourses,
+    otherActive: courses.filter((c) => c.course.status === "active" && !c.course.inSixPlan),
     activeCourses: courses.filter((c) => c.course.status === "active"),
+    story,
     priorities: nextPriorities(bundle.tasks),
     schoolTasks: orderTasks(bundle.tasks.filter((t) => t.kind === "school")),
     supplemental: orderTasks(bundle.tasks.filter((t) => t.kind === "supplemental")),

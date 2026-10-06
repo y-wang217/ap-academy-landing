@@ -27,6 +27,27 @@ function counts(a: GradeAssessment): boolean {
  * always equals the headline grade. A course whose marks are all undated has
  * no points.
  */
+/**
+ * Each assessment's rough share of the course grade, 0 to 100: its
+ * category's weight split evenly across the category's non-excused items.
+ * A fact about the syllabus, not a forecast of the mark.
+ */
+export function assessmentShares(
+  categories: readonly Pick<GradeCategory, "id" | "weight">[],
+  assessments: readonly { id: string; categoryId: string; excused: boolean }[],
+): Map<string, number> {
+  const count = new Map<string, number>();
+  for (const a of assessments) if (!a.excused) count.set(a.categoryId, (count.get(a.categoryId) ?? 0) + 1);
+  const weight = new Map(categories.map((c) => [c.id, c.weight]));
+  const shares = new Map<string, number>();
+  for (const a of assessments) {
+    const w = weight.get(a.categoryId);
+    if (w === undefined || a.excused) continue;
+    shares.set(a.id, w / Math.max(1, count.get(a.categoryId) ?? 1));
+  }
+  return shares;
+}
+
 export function gradeHistory(categories: readonly GradeCategory[], assessments: readonly HistoryAssessment[]): HistoryPoint[] {
   const scored = assessments.filter(counts);
   const undated = scored.filter((a) => assessmentDate(a) === null);
