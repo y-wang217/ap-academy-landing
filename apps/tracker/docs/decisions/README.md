@@ -35,3 +35,5 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0028](0028-intake-sources.md) | AI intake reads photos, PDFs, transcripts and instructions; notes carry a student number, not a name | accepted |
 | [0029](0029-student-change-set.md) | One change set covers the whole student; every teacher edit is an item in it | accepted |
 | [0030](0030-assessment-kind-and-date.md) | An assessment is an assignment with a due date or a test with a held date | accepted |
+| [0031](0031-grade-history-and-trend-pills.md) | Grade history is replayed on the assessment date; the pill follows four rules | accepted |
+| [0032](0032-story-line.md) | The story line is a fact chosen by rule, never a forecast | accepted |

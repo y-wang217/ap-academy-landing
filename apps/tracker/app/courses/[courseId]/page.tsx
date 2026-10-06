@@ -14,14 +14,15 @@ export default async function StudentCoursePage({ params }: { params: Promise<{ 
   const viewer = await getViewer();
   if (viewer.kind !== "student") notFound();
   const bundle = await loadBundle(viewer.db, viewer.studentId);
-  const view = bundle ? buildStudentView(bundle, todayIso()) : null;
+  const today = todayIso();
+  const view = bundle ? buildStudentView(bundle, today) : null;
   const course = view?.courses.find((c) => c.course.id === courseId);
   if (!course) notFound();
   return (
     <>
       <TopBar email={viewer.email} />
       <Page title={`${course.course.code} ${course.course.name}`} back={{ href: "/", label: "Back to dashboard" }}>
-        <CourseDetail view={course} interactive />
+        <CourseDetail view={course} interactive today={today} />
       </Page>
     </>
   );

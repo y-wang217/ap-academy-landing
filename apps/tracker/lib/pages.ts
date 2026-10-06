@@ -9,11 +9,14 @@ export async function staffStudent(studentId: string): Promise<{
   bundle: Bundle;
   view: StudentView;
   orgName: string;
+  /** The ISO date the view was built for; the charts take the same one. */
+  today: string;
 }> {
   const viewer = await getViewer();
   if (viewer.kind !== "staff") notFound();
   const bundle = await loadBundle(viewer.db, studentId).catch(() => null);
   if (!bundle || bundle.student.orgId !== viewer.orgId) notFound();
   const { data: org } = await viewer.db.tracker.from("orgs").select("name").eq("id", viewer.orgId).maybeSingle();
-  return { viewer, bundle, view: buildStudentView(bundle, todayIso()), orgName: org?.name ?? "Your tutor" };
+  const today = todayIso();
+  return { viewer, bundle, view: buildStudentView(bundle, today), orgName: org?.name ?? "Your tutor", today };
 }

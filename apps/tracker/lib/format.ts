@@ -21,6 +21,12 @@ export function shortDate(iso: string | null): string {
   return new Intl.DateTimeFormat("en-CA", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(d);
 }
 
+/** "Oct 9", for chart axes. */
+export function monthDay(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+  return new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric", timeZone: "UTC" }).format(d);
+}
+
 /** "Test · Fri, Oct 9", "Due Fri, Oct 9", or "No date" (ADR 0030). */
 export function whenText(a: { kind: "assignment" | "test"; dueDate: string | null; heldOn: string | null }): string {
   if (a.kind === "test") return a.heldOn ? `Test · ${shortDate(a.heldOn)}` : "Test · No date";
