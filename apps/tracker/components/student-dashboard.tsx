@@ -109,7 +109,7 @@ export function StudentDashboard({
                     </span>
                   </span>
                   <span className="shrink-0 text-right sm:hidden">
-                    <span className="block text-2xl font-semibold">{percent(c.result.grade)}</span>
+                    {c.result.grade !== null && <span className="block text-2xl font-semibold">{percent(c.result.grade)}</span>}
                     <span className="block text-xs text-text-muted">{c.course.targetGrade !== null ? `Target ${percent(c.course.targetGrade)}` : "No target"}</span>
                     {c.result.grade !== null && <span className="block text-xs text-text-muted">{points(c.markedWeight)}% marked</span>}
                   </span>
@@ -122,9 +122,10 @@ export function StudentDashboard({
                   today={today}
                   label={`${c.course.code} grade over time`}
                 />
+                {/* The pill already says "No grades yet"; the big slot stays empty until there is a grade. */}
                 <div className="hidden text-right sm:block">
                   <p className="text-xs text-text-muted">{c.course.targetGrade !== null ? `Target ${percent(c.course.targetGrade)}` : "No target"}</p>
-                  <p className="text-2xl font-semibold">{percent(c.result.grade)}</p>
+                  {c.result.grade !== null && <p className="text-2xl font-semibold">{percent(c.result.grade)}</p>}
                   {c.result.grade !== null && <p className="text-xs text-text-muted">{points(c.markedWeight)}% marked</p>}
                 </div>
               </li>
