@@ -90,10 +90,10 @@ Each step is done only when lint, typecheck and tests pass.
 
 ## Before step 10 goes live
 
-1. Apply `0008_tracker_assessment_kind` to the live project with sign-off
-   (through the Supabase MCP, named after the file). Existing rows become
-   assignments and keep their due dates. Then add it to the root
-   `CLAUDE.md` "Applied so far" line and regenerate types.
+1. ~~Apply `0008_tracker_assessment_kind` to the live project with sign-off.~~
+   Done 2026-10-06 with sign-off, through the Supabase MCP: `kind`, `held_on`,
+   the one-date check and the index are in place. No assessments existed yet,
+   so nothing was backfilled. Still to do: regenerate types.
 2. Tell the tutor: tests get the day they are written, assignments their
    due date; an item with no date stays off the student's chart.
 
@@ -133,6 +133,20 @@ Each step is done only when lint, typecheck and tests pass.
 3. Move Supabase to Pro (no pausing, daily backups).
 4. Privacy policy: student data is stored in the US (workspace ADR 0001).
 5. Decide whether under-16 students need a parent-consent path.
+
+## To do
+
+Ideas with a go-ahead but no spec yet. Each becomes a step, with its prompt
+committed to `spec/` first, before any code.
+
+- **Field help on the teacher's pages.** A short "how to fill this in" beside
+  each field: what a category weight is and where to find it on the school
+  syllabus, when an item is a test (the day it is written) and when an
+  assignment (the day it is due), what "needs review" means, what a course
+  target does, what the benchmark note is for. One sentence per field, from a
+  single copy file, shown as a hint under the field or behind a small "?".
+  Owner's words (2026-10-06): "write a 'help' into the pages that teach a user
+  how to fill out each field."
 
 ## Not built (v0 scope or later)
 
