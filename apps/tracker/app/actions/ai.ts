@@ -6,7 +6,7 @@ import { aiConfigured } from "@/lib/ai/config";
 import { askModel, type Attachment } from "@/lib/ai/draft";
 import { buildUserMessage, stripPersonalData, toDraftItems, type DraftItem } from "@/lib/ai/prompt";
 import { isTranscriptName, transcriptWords } from "@/lib/ai/transcript";
-import { ChangeItem, applyChangeSet, contextFromBundle, dependencies, subsetChangeSet, validateChangeSet, type StudentContext } from "@/lib/data/change-set";
+import { ChangeItem, applyChangeSet, contextFromBundle, dependencies, localIndex, localPart, subsetChangeSet, validateChangeSet, type StudentContext } from "@/lib/data/change-set";
 import { dbMessage } from "@/lib/data/errors";
 import { getViewer, loadBundle } from "@/lib/data/queries";
 import { TUNING } from "@/lib/domain/tuning";
@@ -63,14 +63,16 @@ const METHOD = { mean_of_percentages: "average of percentages", pooled_points: "
 function preview(items: DraftItem[], ctx: StudentContext): PreviewItem[] {
   const courseLabel = (ref: string) => {
     if (ref.startsWith("$")) {
-      const made = items[Number(ref.slice(1))];
+      const made = items[localIndex(ref)];
       return made?.op === "add_course" ? made.code : "new course";
     }
     return ctx.courses.find((c) => c.id === ref)?.code ?? "";
   };
   const categoryLabel = (ref: string) => {
     if (ref.startsWith("$")) {
-      const made = items[Number(ref.slice(1))];
+      const made = items[localIndex(ref)];
+      const j = localPart(ref);
+      if (j !== null) return made?.op === "revise_syllabus" ? made.categories[j]?.name ?? "new category" : "new category";
       return made?.op === "add_category" ? made.name : "new category";
     }
     return ctx.categories.find((c) => c.id === ref)?.name ?? "";
@@ -145,6 +147,21 @@ function preview(items: DraftItem[], ctx: StudentContext): PreviewItem[] {
       }
       case "remove_task":
         return { ...common, kind: "remove", title: ctx.tasks.find((x) => x.id === item.taskId)?.title ?? "", detail: "Remove the priority", before: null, after: "Removed" };
+      case "revise_syllabus": {
+        const course = ctx.courses.find((c) => c.id === item.courseId);
+        const current = ctx.categories.filter((c) => c.versionId === course?.activeVersionId);
+        const nameOf = (id: string) => current.find((c) => c.id === id)?.name ?? "";
+        const version = (n: number) => `${points(n)}%`;
+        const before = current.map((c) => `${c.name} ${version(c.weight)}`).join(" · ");
+        const after = item.categories
+          .map((c) => {
+            const merged = c.from.map(nameOf).filter((name) => name !== c.name);
+            const tag = c.from.length === 0 ? " (new)" : merged.length > 0 ? ` (with ${merged.join(", ")})` : "";
+            return `${c.name} ${version(c.weight)}${tag}`;
+          })
+          .join(" · ");
+        return { ...common, kind: "change", title: `${course?.code ?? ""} syllabus`, detail: "New syllabus version. Past marks move with their categories", before, after };
+      }
     }
   });
 }

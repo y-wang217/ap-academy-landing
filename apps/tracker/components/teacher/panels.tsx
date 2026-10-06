@@ -14,7 +14,7 @@ import { ASSESSMENT_LABELS, AssessmentFields, CATEGORY_LABELS, CategoryFields, T
 
 const small = "rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium hover:bg-background disabled:opacity-50";
 
-/** Categories and weights. Editable until the syllabus is confirmed at publish (ADR 0018). */
+/** Categories and weights. Editable until confirmed at publish; after that, changes are new versions (ADR 0030). */
 export function SyllabusEditor({ view }: { view: CourseView }) {
   const confirmed = view.version?.confirmedAt != null;
   const total = view.categories.reduce((s, c) => s + c.weight, 0);
@@ -36,7 +36,10 @@ export function SyllabusEditor({ view }: { view: CourseView }) {
             </li>
           ))}
         </ul>
-        <p className="text-xs text-text-muted">Confirmed at publish. A changed syllabus needs a new version (not built yet).</p>
+        <p className="text-xs text-text-muted">
+          Version {view.version?.version}, confirmed {stamp(view.version?.confirmedAt ?? null)}. To change it, describe the change under Update from
+          notes or a request. It is saved as a new version, and past marks move with their categories.
+        </p>
       </div>
     );
   }

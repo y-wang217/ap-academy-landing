@@ -1,7 +1,8 @@
 // Tracker end-to-end flows (build steps 4 to 9) in Chromium, against the
 // local stack (stack.sh): a teacher onboards a student, publishes, the student
 // signs in, marks work done, and sees a score the teacher enters. Then v1:
-// a priority suggestion, a grade flag, and AI drafts against a mock model.
+// a priority suggestion, a grade flag, AI drafts against a mock model, and a
+// new syllabus version after publish.
 // Run through ./run.sh, or directly with TRACKER_BASE set to a running tracker.
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
@@ -168,9 +169,12 @@ try {
   const mailto = await teacher.getByRole("link", { name: "Open invite email" }).getAttribute("href");
   check("the invite goes to the student's email", mailto?.startsWith("mailto:sam%40example.com"), mailto?.slice(0, 40));
 
-  // A confirmed syllabus is read-only.
+  // A confirmed syllabus has no edit forms; it changes only as a new version (ADR 0030).
   await teacher.goto(`${BASE}${coursePath}`);
-  check("syllabus is read-only after publish", await teacher.getByText(/Confirmed at publish/).isVisible());
+  check(
+    "syllabus is read-only after publish",
+    (await teacher.getByText(/^Version 1, confirmed/).isVisible()) && (await teacher.getByRole("button", { name: "Save category" }).count()) === 0,
+  );
 
   // A pinned priority.
   await teacher.goto(`${BASE}${studentPath}`);
@@ -327,6 +331,23 @@ try {
   check("a change that changes nothing is left out of the draft", (await whole.getByText("Lab report", { exact: true }).count()) === 0);
   await whole.getByRole("button", { name: "Discard" }).click();
   await whole.getByRole("button", { name: "Draft changes" }).waitFor({ timeout: 15000 });
+
+  // A confirmed syllabus changes as a new version, past marks moving with their categories (ADR 0030).
+  await teacher.goto(`${BASE}${coursePath}`);
+  const marksBefore = await section(teacher, "Assessments").locator("li").count();
+  const revise = section(teacher, "Update from notes or a request");
+  await revise.getByRole("textbox").fill("syllabus change: participation now counts as assignments");
+  await revise.getByRole("button", { name: "Draft changes" }).click();
+  await revise.getByText("Nothing has been saved yet.", { exact: false }).waitFor({ timeout: 30000 });
+  check("a syllabus change drafts as one new version", await revise.getByText("MHF4U syllabus", { exact: true }).isVisible() && (await revise.getByText("New syllabus version. Past marks move with their categories").isVisible()));
+  check("the new version shows the merge against the current weights", await revise.getByText(/Assignments 30% \(with Participation\)/).isVisible());
+  await revise.getByRole("button", { name: "Save selected (1)" }).click();
+  await revise.getByText("Saved 1 change").waitFor({ timeout: 15000 });
+  await teacher.reload();
+  const syllabusCard = section(teacher, "Syllabus");
+  check("the course is on version 2", await syllabusCard.getByText(/^Version 2, confirmed/).isVisible());
+  check("the merged category is gone and its weight moved", (await syllabusCard.getByText("Participation", { exact: true }).count()) === 0 && (await syllabusCard.locator("li", { hasText: "Assignments" }).getByText(/^30%/).isVisible()));
+  check("no mark was lost", (await section(teacher, "Assessments").locator("li").count()) === marksBefore);
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {

@@ -1,5 +1,5 @@
 # 0018: Syllabus editing after publish is deferred
-Status: accepted
+Status: superseded by 0030
 Date: 2026-10-04
 
 ## Context

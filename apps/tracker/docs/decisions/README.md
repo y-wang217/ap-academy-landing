@@ -22,7 +22,7 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0015](0015-student-writes-through-functions.md) | Students write only through narrow SQL functions | accepted |
 | [0016](0016-invite-and-claim.md) | Invite is a prefilled email from the teacher; the login is claimed by email | accepted |
 | [0017](0017-zod-at-the-data-boundary.md) | Rows are validated with Zod at the data boundary | accepted |
-| [0018](0018-syllabus-editing-deferred.md) | Syllabus editing after publish is deferred | accepted |
+| [0018](0018-syllabus-editing-deferred.md) | Syllabus editing after publish is deferred | superseded by 0030 |
 | [0019](0019-reference-example-precision.md) | The reference example is 96.4695 at full precision | accepted |
 | [0020](0020-backups.md) | Nightly encrypted pg_dump to GitHub Actions artifacts | accepted |
 | [0021](0021-one-goal-per-student.md) | One goal per student | accepted |
@@ -34,3 +34,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0027](0027-change-sets.md) | Assessment edits share one change-set shape, AI and manual alike | accepted |
 | [0028](0028-intake-sources.md) | AI intake reads photos, PDFs, transcripts and instructions; notes carry a student number, not a name | accepted |
 | [0029](0029-student-change-set.md) | One change set covers the whole student; every teacher edit is an item in it | accepted |
+| [0030](0030-syllabus-revisions.md) | A changed syllabus after publish is a new confirmed version, written in one transaction | accepted |

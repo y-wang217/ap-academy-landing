@@ -4,7 +4,10 @@
  * K1, A1, T1, G), never row ids, and never the student's name or email.
  */
 import { z } from "zod";
-import { AggregationMethod, ChangeItem, CourseStatus, TaskKind, itemProblem, type StudentContext } from "../data/change-set";
+import {
+  AggregationMethod, ChangeItem, CourseStatus, RevisedCategory, TaskKind, isLocalRef, itemProblem, localIndex, localPart, mapLocalRefs,
+  subsetChangeSet, type StudentContext,
+} from "../data/change-set";
 
 const OPS = [
   "set_goal",
@@ -100,13 +103,13 @@ Ops: set_goal; add_course, update_course, remove_course; add_category, update_ca
 - update_* and remove_* name the existing row in ref. In update_*, leave a field null to keep it as it is.
 - add_* may give new_ref (N1, N2, ...) so a later item can name the new row in course or category. An add comes before the items that name its new_ref.
 - add_course needs a course code. When the tutor names a subject without one, give the usual Ontario code for the student's grade_level (grade 12 Biology is SBI4U, grade 12 English is ENG4U, grade 11 Chemistry is SCH3U), put the subject in name, and set certain false. One add_course per course.
-- Categories are a course's syllabus: name and weight, weights adding up to 100. A course whose syllabus is confirmed cannot have its categories changed; put such material in unmatched.
+- Categories are a course's syllabus: name and weight, weights adding up to 100. Change any syllabus with add_category, update_category and remove_category, confirmed or not; a confirmed one (syllabus_confirmed true) is saved as a new version, and past marks move with their categories. When a category goes away but its work counts somewhere else ("labs now count as tests"), give remove_category the receiving category in category.
 - Marks: give score_earned and score_possible as numbers. A percentage alone means score_possible 100. Blank, dash or "not marked" means score_earned null. "Excused", "EX" or "exempt" means excused true. To set a mark on an existing assessment use update_assessment with score_possible given.
 - Match existing rows by meaning, not exact words ("Unit 3 Test" and "U3 test" are the same). Leave out a change that would not change anything.
 - Ignore course averages, term marks, comments and anything about other students.
 - certain is true only when the material clearly states this exact change. A guess at a category, a date, a weight or a course is certain false, and check says in a few words what to confirm ("Biology or English?").
 - The tutor wants everything the tracker can hold turned into changes, so the material never has to be typed in by hand. When you can't tell where something goes, make your best guess as a change with certain false; don't also put it in unmatched.
-- unmatched is only for what no change can hold: something with no place in the tracker, a change to a confirmed syllabus, or material that contradicts itself.`;
+- unmatched is only for what no change can hold: something with no place in the tracker, or material that contradicts itself.`;
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -211,16 +214,22 @@ function prune<T extends Record<string, unknown>>(patch: T, current: Record<stri
 export function toDraftItems(output: AiOutput, refs: Refs, ctx: StudentContext, goal: PromptStudent["goal"]): { items: DraftItem[]; notes: string[] } {
   const items: DraftItem[] = [];
   const notes = output.unmatched.map((line) => line.trim()).filter(Boolean);
-  const newRefs = new Map<string, { index: number; kind: "course" | "category" | "assessment" | "task" }>();
+  /** `sub`: a category of a new syllabus version, addressed as `$index.sub`. */
+  const newRefs = new Map<string, { index: number; kind: "course" | "category" | "assessment" | "task"; sub?: number }>();
   const touched = new Set<string>();
   /** new_refs of adds that became notes, so their dependents say why. */
   const failed = new Set<string>();
+  /** Category changes on a confirmed course, gathered into one new version per course (ADR 0030). */
+  const revisions = new Map<string, Revision>();
 
   const resolve = (ref: string | null, kind: "course" | "category" | "assessment" | "task"): string | null => {
     if (!ref) return null;
     const key = ref.trim();
     const made = newRefs.get(key);
-    if (made) return made.kind === kind ? `$${made.index}` : null;
+    if (made) {
+      if (made.kind !== kind) return null;
+      return made.sub === undefined ? `$${made.index}` : `$${made.index}.${made.sub}`;
+    }
     const table = kind === "course" ? refs.courses : kind === "category" ? refs.categories : kind === "assessment" ? refs.assessments : refs.tasks;
     return table.get(key) ?? null;
   };
@@ -229,6 +238,33 @@ export function toDraftItems(output: AiOutput, refs: Refs, ctx: StudentContext, 
     category: (id: string | null) => ctx.categories.find((c) => c.id === id),
     assessment: (id: string | null) => ctx.assessments.find((x) => x.id === id),
     task: (id: string | null) => ctx.tasks.find((x) => x.id === id),
+  };
+
+  /** The confirmed course a category op is about, or null when it goes the ordinary way. */
+  const confirmedCourseOf = (raw: RawItem): string | null => {
+    const confirmed = (id: string | null | undefined) => (id && !isLocalRef(id) && current.course(id)?.confirmed ? id : null);
+    if (raw.op === "add_category") return confirmed(resolve(raw.course, "course"));
+    if (raw.op !== "update_category" && raw.op !== "remove_category") return null;
+    const ref = resolve(raw.ref, "category");
+    if (!ref) return null;
+    if (isLocalRef(ref)) {
+      const made = items[localIndex(ref)];
+      return localPart(ref) !== null && made?.op === "revise_syllabus" ? made.courseId : null;
+    }
+    return confirmed(current.category(ref)?.courseId);
+  };
+  const revisionFor = (courseId: string): Revision => {
+    const existing = revisions.get(courseId);
+    if (existing) return existing;
+    const course = current.course(courseId);
+    const entries: RevisionEntry[] = ctx.categories
+      .filter((c) => c.versionId === course?.activeVersionId)
+      .map((c) => ({ name: c.name, weight: c.weight, aggregationMethod: c.aggregationMethod, needsReview: c.needsReview, from: [c.id], removed: false }));
+    const revision: Revision = { index: items.length, courseId, entries, changed: false, sources: [], certain: true, checks: [] };
+    // Holds the item's place so later items can name its categories; filled in below.
+    items.push({ op: "revise_syllabus", courseId, categories: entries, notes: null, source: "", certain: true });
+    revisions.set(courseId, revision);
+    return revision;
   };
 
   for (const raw of output.items) {
@@ -240,6 +276,22 @@ export function toDraftItems(output: AiOutput, refs: Refs, ctx: StudentContext, 
     const blocked = [raw.course, raw.category].find((r) => r && failed.has(r.trim()));
     if (blocked) {
       fail("needs a new course or category that could not be added");
+      continue;
+    }
+    const revisedCourse = confirmedCourseOf(raw);
+    if (revisedCourse) {
+      const revision = revisionFor(revisedCourse);
+      const outcome = revise(revision, raw, (ref) => resolve(ref, "category"));
+      if (typeof outcome === "string") {
+        fail(outcome);
+        continue;
+      }
+      if (outcome === null) continue; // nothing would change
+      revision.changed = true;
+      revision.sources.push(source);
+      revision.certain &&= raw.certain;
+      if (!raw.certain && raw.check) revision.checks.push(raw.check);
+      if (raw.new_ref && outcome.added !== undefined) newRefs.set(raw.new_ref.trim(), { index: revision.index, kind: "category", sub: outcome.added });
       continue;
     }
     const candidate = toCandidate(raw, resolve, current, goal);
@@ -270,7 +322,117 @@ export function toDraftItems(output: AiOutput, refs: Refs, ctx: StudentContext, 
       newRefs.set(raw.new_ref.trim(), { index: items.length - 1, kind: item.op.slice(4) as "course" | "category" | "assessment" | "task" });
     }
   }
-  return { items, notes };
+
+  // Each new version, checked whole; what fails goes to notes with what needed it.
+  const dropped = new Set<number>();
+  const positions = new Map<number, Map<number, number>>();
+  for (const revision of revisions.values()) {
+    if (!revision.changed) {
+      dropped.add(revision.index);
+      continue;
+    }
+    const source = [...new Set(revision.sources.filter(Boolean))].join("; ").slice(0, 300);
+    const parsed = ChangeItem.safeParse({
+      op: "revise_syllabus", courseId: revision.courseId, notes: source || null,
+      categories: revision.entries
+        .filter((e) => !e.removed)
+        .map((e) => ({ name: e.name, weight: e.weight, aggregationMethod: e.aggregationMethod, needsReview: e.needsReview, from: e.from })),
+    });
+    const problem = parsed.success ? itemProblem(parsed.data, ctx) : (parsed.error.issues[0]?.message ?? "a value is out of range");
+    if (!parsed.success || problem) {
+      notes.push(source ? `${source} (${problem})` : (problem ?? ""));
+      dropped.add(revision.index);
+      continue;
+    }
+    const position = new Map<number, number>();
+    revision.entries.forEach((e, k) => !e.removed && position.set(k, position.size));
+    positions.set(revision.index, position);
+    const check = revision.certain ? null : [...new Set(revision.checks)].join(" ").slice(0, 200);
+    items[revision.index] = { ...parsed.data, source, certain: revision.certain, ...(check ? { check } : {}) };
+  }
+  if (revisions.size === 0) return { items, notes };
+
+  const keep: number[] = [];
+  items.forEach((item, i) => {
+    if (dropped.has(i)) return;
+    let broken = false;
+    const renumbered = mapLocalRefs(item, (ref) => {
+      const k = localIndex(ref);
+      const j = localPart(ref);
+      const to = j === null ? j : positions.get(k)?.get(j);
+      if (dropped.has(k) || to === undefined) broken = true;
+      return to === null || to === undefined ? ref : `$${k}.${to}`;
+    });
+    if (broken) {
+      dropped.add(i);
+      notes.push(item.source ? `${item.source} (needs a syllabus change that could not be drafted)` : "needs a syllabus change that could not be drafted");
+      return;
+    }
+    items[i] = renumbered;
+    keep.push(i);
+  });
+  return { items: subsetChangeSet(items, keep), notes };
+}
+
+type RevisionEntry = RevisedCategory & { removed: boolean };
+type Revision = { index: number; courseId: string; entries: RevisionEntry[]; changed: boolean; sources: string[]; certain: boolean; checks: string[] };
+
+/**
+ * One category op applied to a course's new version. Returns the position
+ * of an added category, a reason it can't apply, or null when it changes nothing.
+ */
+function revise(revision: Revision, raw: RawItem, resolve: (ref: string | null) => string | null): { added?: number } | string | null {
+  const entryOf = (ref: string | null) => {
+    if (!ref) return undefined;
+    const entry = isLocalRef(ref) ? revision.entries[localPart(ref) ?? -1] : revision.entries.find((e) => !e.removed && e.from.includes(ref));
+    return entry && !entry.removed ? entry : undefined;
+  };
+  const valid = (c: RevisedCategory) => {
+    const parsed = RevisedCategory.safeParse(c);
+    return parsed.success ? null : (parsed.error.issues[0]?.message ?? "a value is out of range");
+  };
+  switch (raw.op) {
+    case "add_category": {
+      if (!given(raw.weight)) return "a new category needs a weight";
+      const entry: RevisionEntry = {
+        name: (raw.name ?? "").trim(), weight: raw.weight, aggregationMethod: raw.aggregation_method ?? "mean_of_percentages",
+        needsReview: raw.needs_review ?? false, from: [], removed: false,
+      };
+      const why = valid(entry);
+      if (why) return why;
+      revision.entries.push(entry);
+      return { added: revision.entries.length - 1 };
+    }
+    case "update_category": {
+      const entry = entryOf(resolve(raw.ref));
+      if (!entry) return "no such category";
+      const next = {
+        ...entry,
+        ...(raw.name ? { name: raw.name.trim() } : {}),
+        ...(given(raw.weight) ? { weight: raw.weight } : {}),
+        ...(raw.aggregation_method ? { aggregationMethod: raw.aggregation_method } : {}),
+        ...(given(raw.needs_review) ? { needsReview: raw.needs_review } : {}),
+      };
+      const why = valid(next);
+      if (why) return why;
+      const same = next.name === entry.name && next.weight === entry.weight && next.aggregationMethod === entry.aggregationMethod && next.needsReview === entry.needsReview;
+      if (same) return null;
+      Object.assign(entry, next);
+      return {};
+    }
+    case "remove_category": {
+      const entry = entryOf(resolve(raw.ref));
+      if (!entry) return "no such category";
+      const target = raw.category ? entryOf(resolve(raw.category)) : null;
+      if (raw.category && (!target || target === entry)) return "no category matched for its work";
+      if (target) target.from.push(...entry.from);
+      entry.from = [];
+      entry.removed = true;
+      return {};
+    }
+    default:
+      return "not a category change";
+  }
 }
 
 /** One update or remove per row per draft. */

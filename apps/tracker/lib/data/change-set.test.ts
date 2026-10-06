@@ -54,7 +54,7 @@ describe("itemProblem", () => {
     expect(itemProblem({ ...base, categoryId: CAT_LOCKED }, ctx)).toBe("Pick a category from this course.");
   });
   it("refuses category changes on a confirmed syllabus before the database does", () => {
-    expect(itemProblem({ op: "add_category", courseId: LOCKED, name: "Labs", weight: 10, aggregationMethod: "mean_of_percentages", needsReview: false }, ctx)).toMatch(/MHF4U's syllabus was confirmed/);
+    expect(itemProblem({ op: "add_category", courseId: LOCKED, name: "Labs", weight: 10, aggregationMethod: "mean_of_percentages", needsReview: false }, ctx)).toMatch(/MHF4U's syllabus is confirmed. Describe the change in the request box/);
     expect(itemProblem({ op: "update_category", categoryId: CAT_LOCKED, weight: 90 }, ctx)).toMatch(/confirmed/);
     expect(itemProblem({ op: "update_category", categoryId: CAT_TESTS, weight: 60 }, ctx)).toBeNull();
   });
@@ -96,5 +96,52 @@ describe("subsetChangeSet", () => {
   it("leaves out what was not selected and ignores unknown positions", () => {
     expect(subsetChangeSet(items, [1, 9]).map((i) => i.op)).toEqual(["update_task"]);
     expect(subsetChangeSet(items, [])).toEqual([]);
+  });
+});
+
+describe("revise_syllabus", () => {
+  const A_LOCKED = "60000000-0000-0000-0000-000000000002";
+  const marked: StudentContext = {
+    ...ctx,
+    assessments: [...ctx.assessments, { id: A_LOCKED, courseId: LOCKED, categoryId: CAT_LOCKED, title: "Quiz 1", dueDate: null, scoreEarned: 9, scorePossible: 10, excused: false }],
+  };
+  const cat = (name: string, weight: number, from: string[] = []) => ({ name, weight, aggregationMethod: "mean_of_percentages" as const, needsReview: false, from });
+  const revise = (categories: ReturnType<typeof cat>[], courseId = LOCKED) => ChangeItem.parse({ op: "revise_syllabus", courseId, categories });
+
+  it("wants weights that add up to 100, and says what they add up to", () => {
+    const bad = ChangeItem.safeParse({ op: "revise_syllabus", courseId: LOCKED, categories: [cat("Tests", 60), cat("Labs", 30)] });
+    expect(bad.success).toBe(false);
+    expect(bad.error?.issues[0]?.message).toBe("Category weights must add up to 100. They add up to 90.");
+  });
+  it("applies only to a confirmed syllabus, carrying its own categories once each", () => {
+    expect(itemProblem(revise([cat("Overall", 60, [CAT_LOCKED]), cat("Labs", 40)]), marked)).toBeNull();
+    expect(itemProblem(revise([cat("Tests", 100, [CAT_TESTS])], COURSE), marked)).toMatch(/SCH4U's syllabus is not confirmed yet/);
+    expect(itemProblem(revise([cat("Overall", 100, [CAT_TESTS])]), marked)).toMatch(/not on MHF4U's current syllabus/);
+    expect(itemProblem(revise([cat("A", 50, [CAT_LOCKED]), cat("B", 50, [CAT_LOCKED])]), marked)).toMatch(/carried into two/);
+  });
+  it("refuses to leave marks behind", () => {
+    expect(itemProblem(revise([cat("Tests", 100)]), marked)).toBe("Say where the work in Overall goes. It has marks.");
+    expect(itemProblem(revise([cat("Tests", 100)]), ctx)).toBeNull();
+  });
+  it("lets later items name its categories as $k.j, and old ones only if carried over", () => {
+    const work = (categoryId: string) => ({ op: "add_assessment" as const, courseId: LOCKED, categoryId, title: "Lab 1", dueDate: null, scorePossible: 20, scoreEarned: 18, excused: false });
+    const kept = revise([cat("Overall", 60, [CAT_LOCKED]), cat("Labs", 40)]);
+    expect(validateChangeSet([kept, work("$0.1")], marked).error).toBeNull();
+    expect(validateChangeSet([kept, work(CAT_LOCKED)], marked).error).toBeNull();
+    expect(validateChangeSet([kept, work("$0.2")], marked).error).toMatch(/refers to a category that is not added before it/);
+    const dropped = revise([cat("Tests", 100)]);
+    expect(validateChangeSet([dropped, work(CAT_LOCKED)], ctx).error).toBe("Pick a category from this course.");
+    expect(validateChangeSet([kept, kept], marked).error).toBe("One new syllabus version per course at a time.");
+  });
+  it("keeps $k.j refs and their dependency in a subset", () => {
+    const items: ChangeItem[] = [
+      { op: "update_task", taskId: TASK, pinned: true },
+      revise([cat("Overall", 60, [CAT_LOCKED]), cat("Labs", 40)]),
+      { op: "add_assessment", courseId: LOCKED, categoryId: "$1.1", title: "Lab 1", dueDate: null, scorePossible: 20, scoreEarned: null, excused: false },
+    ];
+    expect(dependencies(items[2])).toEqual([1]);
+    const subset = subsetChangeSet(items, [2]);
+    expect(subset.map((i) => i.op)).toEqual(["revise_syllabus", "add_assessment"]);
+    expect(subset[1]).toMatchObject({ categoryId: "$0.1" });
   });
 });

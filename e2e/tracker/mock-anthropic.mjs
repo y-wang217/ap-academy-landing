@@ -1,7 +1,8 @@
 // Stand-in for the Anthropic Messages API, for the AI draft flow. Reads the
 // student refs the tracker sent and answers with a fixed structured draft:
 // a score for "Lab report", a new "Quiz 2" in Assignments, an uncertain new
-// priority, and one line it could not place. GET /__last returns the last
+// priority, and one line it could not place. A request naming the syllabus
+// gets a merge of Participation into Assignments instead. GET /__last returns the last
 // request body, so the flow can check what left the app.
 import http from "node:http";
 
@@ -37,7 +38,17 @@ const server = http.createServer((req, res) => {
     const course = student.courses.find((c) => c.assessments.some((a) => a.title === "Lab report")) ?? student.courses[0];
     const lab = course?.assessments.find((a) => a.title === "Lab report");
     const assignments = course?.categories.find((c) => c.name === "Assignments");
-    const answer = {
+    // A syllabus request: Participation now counts as Assignments (ADR 0030).
+    const syllabus = /syllabus/i.test(text.slice(end === -1 ? text.length : end));
+    const assignmentsCat = student.courses.flatMap((c) => c.categories).find((c) => c.name === "Assignments");
+    const participation = student.courses.flatMap((c) => c.categories).find((c) => c.name === "Participation");
+    const answer = syllabus && assignmentsCat && participation ? {
+      items: [
+        { ...blank, op: "update_category", ref: assignmentsCat.ref, weight: assignmentsCat.weight + participation.weight, source: "participation now counts as assignments" },
+        { ...blank, op: "remove_category", ref: participation.ref, category: assignmentsCat.ref, source: "participation now counts as assignments" },
+      ],
+      unmatched: [],
+    } : {
       items: [
         { ...blank, op: "update_assessment", ref: lab?.ref ?? "", score_earned: 18, score_possible: 20, source: "Lab report 18/20" },
         { ...blank, op: "add_assessment", course: course?.ref ?? "", category: assignments?.ref ?? "", title: "Quiz 2", score_earned: 9, score_possible: 10, source: "Quiz 2 9/10" },

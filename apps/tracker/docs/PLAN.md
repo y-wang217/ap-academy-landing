@@ -15,6 +15,7 @@ Each step is done only when lint, typecheck and tests pass.
 | 7 | Reliability: audit, stamps, states, errors, backups, restore | done: `0005_tracker_audit.sql`, `scripts/backup.sh`, [`docs/RESTORE.md`](../../../docs/RESTORE.md) |
 | 8 | v1: suggestions, flags, AI paste (go-ahead 2026-10-05, [`spec/build-step-8.md`](spec/build-step-8.md)) | done: `0006_tracker_v1.sql` (live 2026-10-05), ADRs 0024 to 0027 |
 | 9 | AI intake: photos, PDFs, transcripts and requests; one change set for the whole student (go-ahead 2026-10-05, [`spec/build-step-9.md`](spec/build-step-9.md)) | done: `0007_tracker_intake.sql` (live 2026-10-05), ADRs 0028, 0029 |
+| 10 | A changed syllabus after publish (2026-10-06, [`spec/syllabus-revision.md`](spec/syllabus-revision.md)) | built: `0008_tracker_syllabus_revision.sql` (not applied to live), ADR 0030 |
 
 ## Notes
 - Step 3: the brief's reference example is 96.4695 at full precision, not
@@ -72,6 +73,20 @@ Each step is done only when lint, typecheck and tests pass.
   tracker, a confirmed syllabus, or contradictory material. The e2e mock now
   answers in the wire shape ("" for not given).
 
+- Step 10: a confirmed syllabus changes as version n+1 through
+  `tracker.revise_syllabus`, one transaction that moves every mark onto the
+  new categories (ADR 0030). The AI's category ops on a confirmed course
+  become one `revise_syllabus` item. Verified: `supabase/tests/tracker_revision.sql`
+  (refusals save nothing, other orgs and students are refused, marks move
+  unchanged, revisions stack, all audited), 95 unit tests, and 66 end-to-end
+  checks, including a Participation-into-Assignments merge through PostgREST 14.5.
+
+## Before step 10 goes live
+
+1. Apply `0008_tracker_syllabus_revision` to the live project with sign-off,
+   through the Supabase MCP `apply_migration`. It adds one function and no
+   tables. Until then, a drafted revision fails to save with a plain error.
+
 ## Before step 9 goes live
 
 1. ~~Apply `0007_tracker_intake` to the live project with sign-off.~~ Done
@@ -111,6 +126,6 @@ Each step is done only when lint, typecheck and tests pass.
 
 ## Not built (v0 scope or later)
 
-- Syllabus edits after publish (ADR 0018).
+- A syllabus version history screen, and a manual "new version" form as a backup to the request box (ADR 0030).
 - An audit history screen. The log is complete; nothing shows it yet.
 - An org-wide AI usage screen. Each student's page lists their drafts; nothing adds them up per org yet.

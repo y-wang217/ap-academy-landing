@@ -8,6 +8,10 @@ export function dbMessage(error: DbError): string {
     const got = message.match(/got ([\d.]+)/)?.[1];
     return got ? `Category weights must add up to 100. They add up to ${Number(got)}.` : "Category weights must add up to 100.";
   }
+  const stranded = message.match(/say where the work in (.+) goes/);
+  if (stranded) return `Say where the work in ${stranded[1]} goes. It has marks.`;
+  if (/only a confirmed syllabus gets a new version/.test(message)) return "This syllabus is not confirmed yet. Change its categories directly.";
+  if (/category to carry over|carried over twice/.test(message)) return "The new syllabus does not match the current one. Draft it again.";
   if (/confirmed syllabus version is read-only|categories of a confirmed/.test(message)) {
     return "This syllabus is confirmed and can't be changed.";
   }
@@ -20,6 +24,9 @@ export function dbMessage(error: DbError): string {
       return "That is still in use, so it can't be removed.";
     case "23514":
       return "One of the values is out of range.";
+    case "PGRST202":
+      // A database function the app calls is not deployed yet (a migration not applied).
+      return "This change needs a database update that is not live yet. Nothing was saved.";
     case "P0002":
     case "PGRST116":
       return "Not found. It may have been removed.";

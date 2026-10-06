@@ -13,12 +13,16 @@ import type { Bundle } from "./queries";
 // numeric(8, 3) in the schema.
 const MAX_POINTS = 99999;
 const uuid = z.guid();
-/** A row id, or `$k`: the row created by item k of the same set. */
-const rowRef = z.union([uuid, z.string().regex(/^\$\d+$/)]);
+/**
+ * A row id, `$k` (the row created by item k of the same set), or `$k.j`
+ * (category j of the new syllabus version item k writes, ADR 0030).
+ */
+const rowRef = z.union([uuid, z.string().regex(/^\$\d+(\.\d+)?$/)]);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date");
 const percent = z.number().min(0, "0 to 100").max(100, "0 to 100");
 const text = (max: number) => z.string().trim().min(1, "Required").max(max, `At most ${max} characters`);
 const optionalText = (max: number) => z.string().trim().max(max).transform((v) => (v === "" ? null : v)).nullable();
+const MAX_CATEGORIES = 20;
 const possible = z.number().gt(0, "Must be more than 0").max(MAX_POINTS);
 const earned = z.number().min(0, "Cannot be negative").max(MAX_POINTS).nullable();
 
@@ -133,12 +137,41 @@ export const UpdateTaskItem = z
 
 export const RemoveTaskItem = z.object({ op: z.literal("remove_task"), taskId: rowRef });
 
+/** One category of a new syllabus version. `from`: current categories whose work moves into it. */
+export const RevisedCategory = z.object({
+  name: text(60),
+  weight: percent,
+  aggregationMethod: AggregationMethod.default("mean_of_percentages"),
+  needsReview: z.boolean().default(false),
+  from: z.array(uuid).max(MAX_CATEGORIES).default([]),
+});
+export type RevisedCategory = z.output<typeof RevisedCategory>;
+
+/**
+ * A confirmed syllabus changed: the whole new version, written as version n+1
+ * with every assessment moved onto it, in one transaction (ADR 0030).
+ */
+export const ReviseSyllabusItem = z
+  .object({
+    op: z.literal("revise_syllabus"),
+    courseId: uuid,
+    categories: z.array(RevisedCategory).min(1, "A syllabus needs at least one category").max(MAX_CATEGORIES),
+    notes: optionalText(500).default(null),
+  })
+  .superRefine((item, ctx) => {
+    const total = item.categories.reduce((sum, c) => sum + c.weight, 0);
+    if (Math.abs(total - 100) > 0.001) {
+      ctx.addIssue({ code: "custom", message: `Category weights must add up to 100. They add up to ${Math.round(total * 1000) / 1000}.` });
+    }
+  });
+
 export const ChangeItem = z.discriminatedUnion("op", [
   SetGoalItem,
   AddCourseItem, UpdateCourseItem, RemoveCourseItem,
   AddCategoryItem, UpdateCategoryItem, RemoveCategoryItem,
   AddAssessmentItem, UpdateAssessmentItem, RemoveAssessmentItem,
   AddTaskItem, UpdateTaskItem, RemoveTaskItem,
+  ReviseSyllabusItem,
 ]);
 export type ChangeItem = z.output<typeof ChangeItem>;
 export type ChangeOp = ChangeItem["op"];
@@ -177,7 +210,12 @@ export function contextFromBundle(bundle: Bundle): StudentContext {
 // References --------------------------------------------------------------------
 
 export const isLocalRef = (ref: string) => ref.startsWith("$");
-export const localIndex = (ref: string) => Number(ref.slice(1));
+export const localIndex = (ref: string) => Number.parseInt(ref.slice(1), 10);
+/** j in `$k.j`, or null for `$k`. */
+export const localPart = (ref: string): number | null => {
+  const dot = ref.indexOf(".");
+  return dot === -1 ? null : Number(ref.slice(dot + 1));
+};
 
 type Kind = "course" | "category" | "assessment" | "task";
 const ADD_OF: Record<Kind, ChangeOp> = { course: "add_course", category: "add_category", assessment: "add_assessment", task: "add_task" };
@@ -209,6 +247,8 @@ export function itemRefs(item: ChangeItem): { ref: string; kind: Kind }[] {
       return [{ ref: item.taskId, kind: "task" }, ...(item.courseId ? [{ ref: item.courseId, kind: "course" as const }] : [])];
     case "remove_task":
       return [{ ref: item.taskId, kind: "task" }];
+    case "revise_syllabus":
+      return [{ ref: item.courseId, kind: "course" }];
   }
 }
 
@@ -221,10 +261,35 @@ export function dependencies(item: ChangeItem): number[] {
 function courseOfCategory(ref: string, index: number, items: readonly ChangeItem[], ctx: StudentContext): string | null {
   if (isLocalRef(ref)) {
     const k = localIndex(ref);
+    const j = localPart(ref);
     const earlier = k < index ? items[k] : undefined;
+    if (j !== null) return earlier?.op === "revise_syllabus" && j < earlier.categories.length ? earlier.courseId : null;
     return earlier?.op === "add_category" ? earlier.courseId : null;
   }
   return ctx.categories.find((c) => c.id === ref)?.courseId ?? null;
+}
+
+/** The new-version item for a course earlier in the set, if any. */
+function revisionBefore(courseId: string, index: number, items: readonly ChangeItem[]) {
+  for (let k = 0; k < index && k < items.length; k++) {
+    const item = items[k];
+    if (item.op === "revise_syllabus" && item.courseId === courseId) return item;
+  }
+  return null;
+}
+
+/** Why a new syllabus version can't be written, or null (ADR 0030). */
+function revisionProblem(item: z.output<typeof ReviseSyllabusItem>, ctx: StudentContext): string | null {
+  const course = ctx.courses.find((c) => c.id === item.courseId);
+  if (!course?.activeVersionId) return "This course has no syllabus version.";
+  if (!course.confirmed) return `${course.code}'s syllabus is not confirmed yet. Change its categories directly.`;
+  const current = ctx.categories.filter((c) => c.versionId === course.activeVersionId);
+  const moved = item.categories.flatMap((c) => c.from);
+  if (moved.some((id) => !current.some((c) => c.id === id))) return `A category to carry over is not on ${course.code}'s current syllabus.`;
+  if (new Set(moved).size !== moved.length) return "A current category is carried into two new ones.";
+  const stranded = current.filter((c) => !moved.includes(c.id) && ctx.assessments.some((a) => a.categoryId === c.id));
+  if (stranded.length > 0) return `Say where the work in ${stranded.map((c) => c.name).join(", ")} goes. It has marks.`;
+  return null;
 }
 
 function courseOf(kind: Kind, ref: string, index: number, items: readonly ChangeItem[], ctx: StudentContext): string | null {
@@ -235,7 +300,7 @@ function courseOf(kind: Kind, ref: string, index: number, items: readonly Change
 }
 
 export const CATEGORY_PROBLEM = "Pick a category from this course.";
-const CONFIRMED = (code: string) => `${code}'s syllabus was confirmed at publish and can't be changed yet.`;
+const CONFIRMED = (code: string) => `${code}'s syllabus is confirmed. Describe the change in the request box to save it as a new version.`;
 
 /**
  * Why item `index` can't be applied to this student, or null when it can.
@@ -245,7 +310,12 @@ export function itemProblem(item: ChangeItem, ctx: StudentContext, items: readon
   for (const { ref, kind } of itemRefs(item)) {
     if (isLocalRef(ref)) {
       const k = localIndex(ref);
-      if (k >= index || items[k]?.op !== ADD_OF[kind]) return `Change ${index + 1} refers to a ${kind} that is not added before it.`;
+      const j = localPart(ref);
+      const earlier = k < index ? items[k] : undefined;
+      const ok = j === null
+        ? earlier?.op === ADD_OF[kind]
+        : kind === "category" && earlier?.op === "revise_syllabus" && j < earlier.categories.length;
+      if (!ok) return `Change ${index + 1} refers to a ${kind} that is not added before it.`;
       continue;
     }
     const known =
@@ -266,6 +336,9 @@ export function itemProblem(item: ChangeItem, ctx: StudentContext, items: readon
     const course = category ? ctx.courses.find((c) => c.id === category.courseId) : undefined;
     if (!category || !course || category.versionId !== course.activeVersionId) return CATEGORY_PROBLEM;
     if (courseRef !== null && course.id !== courseRef) return CATEGORY_PROBLEM;
+    // A new version earlier in the set: only a carried-over category still exists.
+    const revised = revisionBefore(course.id, index, items);
+    if (revised && !revised.categories.some((c) => c.from.includes(category.id))) return CATEGORY_PROBLEM;
     return null;
   };
   const openSyllabus = (courseRef: string) => {
@@ -287,6 +360,8 @@ export function itemProblem(item: ChangeItem, ctx: StudentContext, items: readon
       return categoryCheck(item.categoryId, item.courseId);
     case "update_assessment":
       return item.categoryId ? categoryCheck(item.categoryId, courseOf("assessment", item.assessmentId, index, items, ctx)) : null;
+    case "revise_syllabus":
+      return revisionBefore(item.courseId, index, items) ? "One new syllabus version per course at a time." : revisionProblem(item, ctx);
     default:
       return null;
   }
@@ -310,7 +385,7 @@ export function validateChangeSet(items: readonly unknown[], ctx: StudentContext
  * dependencies are included whether or not they were selected, so a
  * partial confirmation never breaks a reference (ADR 0029).
  */
-export function subsetChangeSet(items: readonly ChangeItem[], selected: readonly number[]): ChangeItem[] {
+export function subsetChangeSet<T extends ChangeItem>(items: readonly T[], selected: readonly number[]): T[] {
   const keep = new Set<number>();
   const add = (i: number) => {
     if (keep.has(i) || items[i] === undefined) return;
@@ -320,30 +395,39 @@ export function subsetChangeSet(items: readonly ChangeItem[], selected: readonly
   selected.forEach(add);
   const order = [...keep].sort((a, b) => a - b);
   const position = new Map(order.map((old, i) => [old, i]));
-  const remap = (ref: string) => (isLocalRef(ref) ? `$${position.get(localIndex(ref)) ?? -1}` : ref);
-  return order.map((i) => {
-    const item = items[i];
-    switch (item.op) {
-      case "update_course": case "remove_course": case "add_category":
-        return { ...item, courseId: remap(item.courseId) };
-      case "update_category": case "remove_category":
-        return { ...item, categoryId: remap(item.categoryId) };
-      case "add_assessment":
-        return { ...item, courseId: remap(item.courseId), categoryId: remap(item.categoryId) };
-      case "update_assessment":
-        return { ...item, assessmentId: remap(item.assessmentId), ...(item.categoryId ? { categoryId: remap(item.categoryId) } : {}) };
-      case "remove_assessment":
-        return { ...item, assessmentId: remap(item.assessmentId) };
-      case "add_task":
-        return { ...item, courseId: item.courseId ? remap(item.courseId) : null };
-      case "update_task":
-        return { ...item, taskId: remap(item.taskId), ...(item.courseId ? { courseId: remap(item.courseId) } : {}) };
-      case "remove_task":
-        return { ...item, taskId: remap(item.taskId) };
-      default:
-        return item;
-    }
-  });
+  return order.map((i) =>
+    mapLocalRefs(items[i], (ref) => {
+      const at = position.get(localIndex(ref)) ?? -1;
+      const j = localPart(ref);
+      return j === null ? `$${at}` : `$${at}.${j}`;
+    }),
+  );
+}
+
+/** The item with every `$k` / `$k.j` ref passed through `fn`; other fields untouched. */
+export function mapLocalRefs<T extends ChangeItem>(item: T, fn: (ref: string) => string): T {
+  const m = (ref: string) => (isLocalRef(ref) ? fn(ref) : ref);
+  const it = item as ChangeItem;
+  switch (it.op) {
+    case "update_course": case "remove_course": case "add_category":
+      return { ...item, courseId: m(it.courseId) };
+    case "update_category": case "remove_category":
+      return { ...item, categoryId: m(it.categoryId) };
+    case "add_assessment":
+      return { ...item, courseId: m(it.courseId), categoryId: m(it.categoryId) };
+    case "update_assessment":
+      return { ...item, assessmentId: m(it.assessmentId), ...(it.categoryId ? { categoryId: m(it.categoryId) } : {}) };
+    case "remove_assessment":
+      return { ...item, assessmentId: m(it.assessmentId) };
+    case "add_task":
+      return { ...item, courseId: it.courseId ? m(it.courseId) : null };
+    case "update_task":
+      return { ...item, taskId: m(it.taskId), ...(it.courseId ? { courseId: m(it.courseId) } : {}) };
+    case "remove_task":
+      return { ...item, taskId: m(it.taskId) };
+    default:
+      return item;
+  }
 }
 
 // Apply ---------------------------------------------------------------------------
@@ -365,7 +449,15 @@ export async function applyChangeSet(db: Db, ctx: StudentContext, rawItems: read
   const t = db.tracker;
   const base = { org_id: ctx.orgId, student_id: ctx.studentId };
   const created: string[] = [];
-  const resolve = (ref: string) => (isLocalRef(ref) ? created[localIndex(ref)] : ref);
+  /** New category ids by the index of the item that wrote the new syllabus version. */
+  const revised = new Map<number, string[]>();
+  /** Current category id to its carried-over copy, once a new version is written. */
+  const carried = new Map<string, string>();
+  const resolve = (ref: string) => {
+    if (!isLocalRef(ref)) return carried.get(ref) ?? ref;
+    const j = localPart(ref);
+    return j === null ? created[localIndex(ref)] : (revised.get(localIndex(ref))?.[j] ?? "");
+  };
   const resolveOrNull = (ref: string | null | undefined) => (ref === null || ref === undefined ? ref : resolve(ref));
   /** Active syllabus version per course, including courses this set creates. */
   const versionOf = new Map(ctx.courses.filter((c) => c.activeVersionId).map((c) => [c.id, c.activeVersionId as string]));
@@ -374,7 +466,7 @@ export async function applyChangeSet(db: Db, ctx: StudentContext, rawItems: read
   for (const c of ctx.categories) categoryCount.set(c.versionId, (categoryCount.get(c.versionId) ?? 0) + 1);
   let taskRank = ctx.tasks.reduce((max, task) => Math.max(max, task.rank), -1) + 1;
 
-  const one = async (item: ChangeItem): Promise<Outcome> => {
+  const one = async (item: ChangeItem, index: number): Promise<Outcome> => {
     switch (item.op) {
       case "set_goal": {
         const { error } = await t.from("goals").upsert(
@@ -497,12 +589,25 @@ export async function applyChangeSet(db: Db, ctx: StudentContext, rawItems: read
         const { error } = await t.from("tasks").delete().eq("id", resolve(item.taskId));
         return { error };
       }
+      case "revise_syllabus": {
+        const { data, error } = await t.rpc("revise_syllabus", {
+          target_course: item.courseId,
+          new_categories: item.categories.map((c) => ({ name: c.name, weight: c.weight, aggregation_method: c.aggregationMethod, needs_review: c.needsReview, from: c.from })),
+          revision_notes: item.notes,
+        });
+        if (error) return { error };
+        const ids = z.array(uuid).length(item.categories.length).safeParse(data);
+        if (!ids.success) return { error: null, plain: "The new syllabus version was saved but could not be read back. Reload the page." };
+        revised.set(index, ids.data);
+        item.categories.forEach((c, i) => c.from.forEach((old) => carried.set(old, ids.data[i])));
+        return { error: null };
+      }
     }
   };
 
   let applied = 0;
-  for (const item of items) {
-    const outcome = await one(item);
+  for (const [index, item] of items.entries()) {
+    const outcome = await one(item, index);
     if (outcome.error || outcome.missing || outcome.plain) {
       const why = outcome.plain ?? (outcome.missing ? "That row was removed in the meantime." : dbMessage(outcome.error));
       return { applied, error: applied > 0 ? `Saved ${applied} of ${items.length}. Then: ${why}` : why };

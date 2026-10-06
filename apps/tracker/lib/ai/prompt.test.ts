@@ -13,6 +13,7 @@ const CAT_OLD = "50000000-0000-0000-0000-000000000009";
 const CAT_LOCKED = "50000000-0000-0000-0000-000000000003";
 const A_TEST = "60000000-0000-0000-0000-000000000001";
 const A_LAB = "60000000-0000-0000-0000-000000000002";
+const A_LOCKED = "60000000-0000-0000-0000-000000000003";
 const TASK = "70000000-0000-0000-0000-000000000001";
 
 const student: PromptStudent = {
@@ -32,6 +33,7 @@ const student: PromptStudent = {
   assessments: [
     { id: A_TEST, courseId: COURSE, categoryId: CAT_TESTS, title: "Unit 1 Test", dueDate: null, scoreEarned: null, scorePossible: 40, excused: false },
     { id: A_LAB, courseId: COURSE, categoryId: CAT_LABS, title: "Lab 1", dueDate: "2026-10-01", scoreEarned: 18, scorePossible: 20, excused: false },
+    { id: A_LOCKED, courseId: LOCKED, categoryId: CAT_LOCKED, title: "Quiz 1", dueDate: null, scoreEarned: 9, scorePossible: 10, excused: false },
   ],
   tasks: [
     { id: TASK, courseId: COURSE, title: "Review moles", kind: "school", reason: null, pinned: false, doneAt: null },
@@ -164,6 +166,63 @@ describe("toDraftItems", () => {
     expect(out.items[1]).not.toHaveProperty("check");
   });
 
+  describe("on a confirmed syllabus", () => {
+    // C2 is MHF4U, confirmed: K3 "Overall" 100%, with Quiz 1 (A3) in it.
+    it("gathers category changes into one new version, and later work names its categories", () => {
+      const out = draft([
+        row({ op: "update_category", ref: "K3", weight: 60, source: "overall drops to 60" }),
+        row({ op: "add_category", course: "C2", new_ref: "N1", name: "Labs", weight: 40, certain: false, check: "Labs or Assignments?", source: "labs are 40" }),
+        row({ op: "add_assessment", course: "C2", category: "N1", title: "Lab 1", score_earned: 18, score_possible: 20, source: "lab 1 18/20" }),
+      ]);
+      expect(out.notes).toEqual([]);
+      expect(out.items).toEqual([
+        {
+          op: "revise_syllabus", courseId: LOCKED, notes: "overall drops to 60; labs are 40",
+          categories: [
+            { name: "Overall", weight: 60, aggregationMethod: "mean_of_percentages", needsReview: false, from: [CAT_LOCKED] },
+            { name: "Labs", weight: 40, aggregationMethod: "mean_of_percentages", needsReview: false, from: [] },
+          ],
+          source: "overall drops to 60; labs are 40", certain: false, check: "Labs or Assignments?",
+        },
+        expect.objectContaining({ op: "add_assessment", courseId: LOCKED, categoryId: "$0.1", title: "Lab 1" }),
+      ]);
+    });
+
+    it("moves a removed category's marks into the one it names, and renumbers past it", () => {
+      const out = draft([
+        row({ op: "add_category", course: "C2", new_ref: "N1", name: "Tests", weight: 100, source: "everything is tests now" }),
+        row({ op: "remove_category", ref: "K3", category: "N1", source: "everything is tests now" }),
+        row({ op: "add_assessment", course: "C2", category: "N1", title: "Test 1", score_possible: 30, source: "test 1 out of 30" }),
+        row({ op: "add_assessment", course: "C2", category: "K3", title: "Quiz 2", score_possible: 10, source: "quiz 2" }),
+      ]);
+      expect(out.notes).toEqual([]);
+      expect(out.items[0]).toMatchObject({ op: "revise_syllabus", source: "everything is tests now", categories: [{ name: "Tests", weight: 100, from: [CAT_LOCKED] }] });
+      expect(out.items[1]).toMatchObject({ categoryId: "$0.0" });
+      expect(out.items[2]).toMatchObject({ categoryId: CAT_LOCKED });
+    });
+
+    it("drops a version that would strand marks, with everything that needed it, and keeps the rest numbered", () => {
+      const out = draft([
+        row({ op: "add_course", new_ref: "N5", code: "SPH4U", name: "Physics", source: "taking physics" }),
+        row({ op: "add_category", course: "C2", new_ref: "N1", name: "Tests", weight: 100, source: "tests are 100" }),
+        row({ op: "remove_category", ref: "K3", source: "no more overall" }),
+        row({ op: "add_assessment", course: "C2", category: "N1", title: "Test 1", score_possible: 30, source: "test 1" }),
+        row({ op: "add_category", course: "N5", name: "Labs", weight: 100, source: "physics labs" }),
+      ]);
+      expect(out.items.map((i) => i.op)).toEqual(["add_course", "add_category"]);
+      expect(out.items[1]).toMatchObject({ courseId: "$0" });
+      expect(out.notes).toEqual([
+        "tests are 100; no more overall (Say where the work in Overall goes. It has marks.)",
+        "test 1 (needs a syllabus change that could not be drafted)",
+      ]);
+    });
+
+    it("leaves out a version that changes nothing", () => {
+      const out = draft([row({ op: "update_category", ref: "K3", name: "Overall", weight: 100 })]);
+      expect(out).toEqual({ items: [], notes: [] });
+    });
+  });
+
   it("fills the goal from the current one when the model gives only what changed", () => {
     const out = draft([row({ op: "set_goal", target_six_avg: 93, source: "lowering the target to 93" })]);
     expect(out.items[0]).toMatchObject({ op: "set_goal", school: "University of Waterloo", program: "Software Engineering", applicationYear: 2027, targetSixAvg: 93 });
@@ -207,8 +266,8 @@ describe("toDraftItems", () => {
       "bad category (no category matched)",
       "no title (Required)",
       "zero possible (Must be more than 0)",
-      "locked syllabus (MHF4U's syllabus was confirmed at publish and can't be changed yet.)",
       "unknown new_ref (no category matched)",
+      "locked syllabus (Category weights must add up to 100. They add up to 110.)",
     ]);
   });
 
