@@ -96,6 +96,12 @@ function fakeStore() {
       byRequest.set(input.requestId, rec.id);
       return { ok: true, value: rec, created: true };
     },
+    // Summary storage arrives in REQ-4; these tests never adopt a student.
+    listSeriesForStudent: async () => ({ series: [], exceptions: [] }),
+    getSummary: async () => null,
+    listSummaries: async () => [],
+    adoptStudent: async () => ({ ok: false, status: 503, error: "unavailable" }),
+    markSummary: async () => false,
   };
   return { store, series, exceptions };
 }
@@ -308,7 +314,7 @@ describe("AC15: scheduler modules never talk to Notion or write lessons, payouts
       const src = readFileSync(file, "utf8");
       expect(src, file).not.toMatch(/api\.notion\.com|payout|lessons?_?(db|source)|from\(["']students["']\)/i);
       for (const m of src.matchAll(/from ["'](?:\.\.?\/)+notion\/([\w-]+)["']/g)) {
-        expect(["cached", "staff", "config"], `${file} imports notion/${m[1]}`).toContain(m[1]);
+        expect(["cached", "staff", "students", "config"], `${file} imports notion/${m[1]}`).toContain(m[1]);
       }
     }
   });

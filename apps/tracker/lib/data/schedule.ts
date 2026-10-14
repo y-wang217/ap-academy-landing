@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ClassException } from "../domain/schedule/recurrence";
 import type { Db } from "./client";
 import type {
-  AvailabilityExceptionRecord, ScheduleStore, SeriesRecord, StoreError, StoreResult, WindowRecord,
+  AvailabilityExceptionRecord, ScheduleStore, SeriesRecord, StoreError, StoreResult, SummaryRecord, WindowRecord,
 } from "../scheduler/schedule-store";
 
 /**
@@ -42,6 +42,15 @@ const ExceptionRow = z.object({
   new_date: z.string().nullable(), new_start_time: hhmm.nullable(),
 }).transform((r): ClassException => ({
   seriesId: r.series_id, originalDate: r.original_date, kind: r.kind, newDate: r.new_date, newStartTime: r.new_start_time,
+}));
+
+const SummaryRow = z.object({
+  id: uuid, notion_student_id: uuid, adopted_at: ts, adopted_from_text: z.string(), last_written_text: z.string().nullable(),
+  last_written_at: ts.nullable(), sync_state: z.enum(["pending", "synced", "failed"]), last_error: z.string().nullable(),
+  last_drift_text: z.string().nullable(),
+}).transform((r): SummaryRecord => ({
+  id: r.id, studentId: r.notion_student_id, adoptedAt: r.adopted_at, adoptedFromText: r.adopted_from_text, lastWrittenText: r.last_written_text,
+  lastWrittenAt: r.last_written_at, syncState: r.sync_state, lastError: r.last_error, lastDriftText: r.last_drift_text,
 }));
 
 const UNAVAILABLE: StoreError = { ok: false, status: 503, error: "unavailable" };
@@ -200,6 +209,62 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
       const created = await store.getSeries(z.guid().parse(data));
       return created ? { ok: true, value: created, created: true } : UNAVAILABLE;
     }),
+
+    // These three throw on any query error: an empty answer from a failed read would look like
+    // "no classes" or "not adopted", and the summary sync would blank a billing field (REQ-4 review).
+    async listSeriesForStudent(studentId) {
+      const { db } = await ctx();
+      const { data, error } = await db.tracker.from("class_series").select().eq("notion_student_id", studentId);
+      if (error) throw new Error("unavailable");
+      const series = z.array(SeriesRow).parse(data ?? []);
+      if (series.length === 0) return { series, exceptions: [] };
+      const exc = await db.tracker.from("class_exceptions").select().in("series_id", series.map((s) => s.id));
+      if (exc.error) throw new Error("unavailable");
+      return { series, exceptions: z.array(ExceptionRow).parse(exc.data ?? []) };
+    },
+    async getSummary(studentId) {
+      const { db } = await ctx();
+      const { data, error } = await db.tracker.from("schedule_summaries").select().eq("notion_student_id", studentId).maybeSingle();
+      if (error) throw new Error("unavailable");
+      return data ? SummaryRow.parse(data) : null;
+    },
+    async listSummaries() {
+      const { db } = await ctx();
+      const { data, error } = await db.tracker.from("schedule_summaries").select().order("adopted_at");
+      if (error) throw new Error("unavailable");
+      return z.array(SummaryRow).parse(data ?? []);
+    },
+    adoptStudent: (i) => guarded(async () => {
+      const { db } = await ctx();
+      const existing = await store.getSummary(i.studentId);
+      if (existing) return { ok: true, value: existing, created: false };
+      const { error } = await db.tracker.rpc("adopt_student_schedule", {
+        p_student_id: i.studentId,
+        p_source_text: i.sourceText,
+        p_series: i.series.map((s) => ({
+          request_id: s.requestId, staff_id: s.staffId, subject: s.subject, start_date: s.startDate, start_time: s.startTime, duration_minutes: s.durationMinutes,
+        })),
+      });
+      if (error) return UNAVAILABLE;
+      const made = await store.getSummary(i.studentId);
+      return made ? { ok: true, value: made, created: true } : UNAVAILABLE;
+    }),
+    async markSummary(studentId, patch) {
+      try {
+        const { db } = await ctx();
+        const fields: Record<string, unknown> = { sync_state: patch.syncState };
+        if (patch.lastWrittenText !== undefined) {
+          fields.last_written_text = patch.lastWrittenText;
+          fields.last_written_at = new Date().toISOString();
+        }
+        if (patch.lastError !== undefined) fields.last_error = patch.lastError;
+        if (patch.lastDriftText !== undefined) fields.last_drift_text = patch.lastDriftText;
+        const { data } = await db.tracker.from("schedule_summaries").update(fields).eq("notion_student_id", studentId).select("id");
+        return (data?.length ?? 0) > 0;
+      } catch {
+        return false;
+      }
+    },
   };
   return store;
 }

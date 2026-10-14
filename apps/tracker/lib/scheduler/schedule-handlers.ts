@@ -11,9 +11,15 @@ import {
   AvailabilityExceptionResponse, AvailabilityResponse, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WindowResponse,
 } from "./schemas";
 import type { ScheduleStore, SeriesRecord, StoreError } from "./schedule-store";
+import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
+import { normaliseScheduleText } from "../domain/schedule/legacy-line";
 
-/** Handler dependencies plus storage and "today" (America/Toronto) as injected inputs. */
-export type ScheduleDeps = HandlerDeps & { store: ScheduleStore; today: () => string };
+/**
+ * Handler dependencies plus storage and "today" (America/Toronto) as injected
+ * inputs. `students` is the Notion side of the Weekly Schedule summary (REQ-4);
+ * without it the class handlers write classes and touch nothing in Notion.
+ */
+export type ScheduleDeps = HandlerDeps & { store: ScheduleStore; today: () => string; students?: StudentsPort };
 
 const HEADERS = { "Cache-Control": "no-store" };
 const send = (status: number, body: unknown) => Response.json(body, { status, headers: HEADERS });
@@ -158,7 +164,8 @@ export async function handleDeleteAvailabilityException(deps: ScheduleDeps, id: 
 
 // Classes ------------------------------------------------------------------------
 
-const seriesBody = (s: SeriesRecord) => ({
+const seriesBody = (s: SeriesRecord, summarySync?: SyncResult) => ({
+  ...(summarySync ? { summarySync } : {}),
   series: {
     id: s.id, staffId: s.staffId, studentId: s.studentId, subject: s.subject, kind: s.kind, startDate: s.startDate,
     startTime: s.startTime, durationMinutes: s.durationMinutes, effectiveUntil: s.effectiveUntil, splitFrom: s.splitFrom, updatedAt: s.updatedAt,
@@ -196,8 +203,43 @@ export async function handleCreateClass(deps: ScheduleDeps, body: unknown): Prom
   if (!shape.ok) return send(shape.status, { error: shape.error });
   const notTeacher = await activeTeacher(deps, p.data.staffId);
   if (notTeacher) return notTeacher;
+  const ready = await prepareStudent(deps, p.data.studentId);
+  if (isRes(ready)) return ready;
   const r = await deps.store.createSeries(p.data);
-  return r.ok ? send(r.created ? 201 : 200, SeriesResponse.parse(seriesBody(r.value))) : fromStore(r);
+  if (!r.ok) return fromStore(r);
+  const summarySync = await syncStudents(deps, [p.data.studentId]);
+  return send(r.created ? 201 : 200, SeriesResponse.parse(seriesBody(r.value, summarySync)));
+}
+
+/**
+ * Once a student is adopted the scheduler owns their Weekly Schedule text.
+ * A student who is not adopted yet is adopted here only if their legacy text
+ * is empty; otherwise Charlie must run the import first, or the new class
+ * would sit beside a legacy text that billing still reads (AC16).
+ */
+async function prepareStudent(deps: ScheduleDeps, studentId: string): Promise<Response | null> {
+  if (!deps.students) return null;
+  let record;
+  try {
+    if (await deps.store.getSummary(studentId)) return null;
+    record = await deps.students.get(studentId);
+  } catch {
+    return send(503, { error: "scheduler_unavailable" });
+  }
+  if (!record) return send(422, { error: "invalid_student" });
+  if (normaliseScheduleText(record.weeklySchedule).length > 0) return send(409, { error: "legacy_schedule_pending" });
+  const adopted = await deps.store.adoptStudent({ studentId, sourceText: record.weeklySchedule, series: [] });
+  return adopted.ok ? null : fromStore(adopted);
+}
+
+/** Regenerates the summary of each student; one "failed" wins, then "synced". Undefined when Notion is not wired in. */
+async function syncStudents(deps: ScheduleDeps, studentIds: string[]): Promise<SyncResult | undefined> {
+  if (!deps.students) return undefined;
+  const results: SyncResult[] = [];
+  for (const id of new Set(studentIds)) {
+    results.push(await syncStudentSummary({ store: deps.store, students: deps.students, fetchStaff: deps.fetchStaff, today: deps.today }, id));
+  }
+  return results.includes("failed") ? "failed" : results.includes("synced") ? "synced" : "skipped";
 }
 
 async function loadOccurrence(deps: ScheduleDeps, seriesId: string, date: string) {
@@ -233,9 +275,15 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
       const notTeacher = await activeTeacher(deps, c.staffId);
       if (notTeacher) return notTeacher;
     }
+    if (c.studentId && c.studentId !== series.studentId) {
+      const ready = await prepareStudent(deps, c.studentId);
+      if (isRes(ready)) return ready;
+    }
     const rest = { ...c, date: undefined };
     const r = await deps.store.split({ seriesId, fromDate: date, expectedUpdatedAt: p.data.expectedUpdatedAt, requestId: p.data.requestId, changes: rest });
-    return r.ok ? send(200, SeriesResponse.parse(seriesBody(r.value))) : fromStore(r);
+    if (!r.ok) return fromStore(r);
+    const summarySync = await syncStudents(deps, [series.studentId, r.value.studentId]);
+    return send(200, SeriesResponse.parse(seriesBody(r.value, summarySync)));
   }
 
   if (series.updatedAt !== p.data.expectedUpdatedAt) return send(409, { error: "stale" });

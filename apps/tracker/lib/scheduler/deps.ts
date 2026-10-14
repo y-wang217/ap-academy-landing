@@ -3,7 +3,8 @@ import { getDb } from "../data/client";
 import { createScheduleStore } from "../data/schedule";
 import { todayIso } from "../time";
 import { getStaffList } from "../notion/cached";
-import { notionConfigured } from "../notion/config";
+import { notionConfigured, readStudentsConfig } from "../notion/config";
+import { fetchScheduledStudents, fetchStudentSchedule, writeWeeklySchedule } from "../notion/students";
 import type { HandlerDeps } from "./handlers";
 import { resolveSchedulerIdentity } from "./identity";
 import type { ScheduleDeps } from "./schedule-handlers";
@@ -52,5 +53,13 @@ export function realScheduleDeps(): ScheduleDeps {
     const user = (await db.supabase.auth.getUser()).data.user;
     return user ? { db, orgId: who.orgId, userId: user.id } : null;
   });
-  return { ...base, identity, store, today: () => todayIso() };
+  const config = readStudentsConfig();
+  const students = config
+    ? {
+        list: () => fetchScheduledStudents(config),
+        get: (pageId: string) => fetchStudentSchedule(config, pageId),
+        write: (pageId: string, text: string) => writeWeeklySchedule(config, pageId, text),
+      }
+    : undefined;
+  return { ...base, identity, store, today: () => todayIso(), students };
 }

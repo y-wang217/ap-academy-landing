@@ -39,3 +39,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0032](0032-story-line.md) | The story line is a fact chosen by rule, never a forecast | accepted |
 | [0033](0033-scheduler-staff-identity.md) | Scheduler teachers are linked to Notion Staff by approval, not given a membership | accepted |
 | [0034](0034-scheduler-recurrence-model.md) | Occurrences are computed from a series plus one exception row each | accepted |
+| [0035](0035-weekly-schedule-import-and-summary.md) | Weekly Schedule import is all or nothing per student, and the text field becomes a generated summary | accepted |
