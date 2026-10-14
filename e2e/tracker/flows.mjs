@@ -362,12 +362,12 @@ try {
   const dayOf = (page, name) => page.locator("li", { has: page.getByRole("heading", { name, exact: true }) });
   const monday = dayOf(ryan, "Monday");
   await monday.getByRole("button", { name: /Add hours/ }).click();
-  await monday.getByRole("button", { name: /^Save/ }).click();
+  await monday.getByRole("button", { name: "Save Monday new window" }).click();
   await monday.getByLabel("Monday new window start").waitFor({ state: "detached", timeout: 15000 });
   await monday.getByRole("button", { name: /Add hours/ }).click();
   await monday.getByLabel("Monday new window start").fill("13:00");
   await monday.getByLabel("Monday new window end").fill("17:00");
-  await monday.getByRole("button", { name: /^Save/ }).click();
+  await monday.getByRole("button", { name: "Save Monday new window" }).click();
   await monday.getByLabel("Monday new window start").waitFor({ state: "detached", timeout: 15000 });
   await monday.getByRole("button", { name: /Copy to/ }).click();
   await monday.getByLabel("Wednesday", { exact: true }).check();
@@ -393,10 +393,10 @@ try {
   const sunday = dayOf(ryan, "Sunday");
   await sunday.getByRole("button", { name: /Add hours/ }).focus();
   await ryan.keyboard.press("Enter");
-  await sunday.getByRole("button", { name: /^Save/ }).focus();
+  await sunday.getByRole("button", { name: "Save Sunday new window" }).focus();
   await ryan.keyboard.press("Space");
   await sunday.getByLabel("Sunday new window start").waitFor({ state: "detached", timeout: 15000 });
-  await sunday.getByRole("button", { name: /^Remove/ }).focus();
+  await sunday.getByRole("button", { name: "Remove Sunday window 1" }).focus();
   await ryan.keyboard.press("Enter");
   await ryan.waitForFunction(() => document.querySelectorAll("li input[type=time]").length === 12);
   check("a window can be added, saved and removed with the keyboard", (await hours("Sunday")).length === 0);
