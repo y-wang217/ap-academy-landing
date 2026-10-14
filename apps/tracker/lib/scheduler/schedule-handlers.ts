@@ -445,11 +445,13 @@ async function validateBooking(deps: ScheduleDeps, input: {
   window: { from: string; to: string } | null;
   checkAvailability: boolean;
   exclude?: (o: Occurrence) => boolean;
+  /** Narrows the candidates to the occurrence being changed: a series' other dates in the window are not part of the change. */
+  only?: (o: Occurrence) => boolean;
 }): Promise<Response | null> {
   const { series, window } = input;
   if (!window) return null;
   const today = deps.today();
-  const candidates = expandOccurrences([series], input.exceptions, window).filter((o) => o.status !== "cancelled" && o.date >= today);
+  const candidates = expandOccurrences([series], input.exceptions, window).filter((o) => o.status !== "cancelled" && o.date >= today && (input.only?.(o) ?? true));
   if (candidates.length === 0) return null;
   try {
     const [byTeacher, byStudent] = await Promise.all([deps.store.listSeries(window, series.staffId), deps.store.listSeriesForStudent(series.studentId)]);
@@ -501,7 +503,8 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
   // A retried split must find its first result before any check on the old
   // series, which now ends before this date (AC8).
   if (p.data.scope === "future" && Guid.safeParse(seriesId).success) {
-    const done = await deps.store.getSeriesByRequest(p.data.requestId);
+    const done = await deps.store.getSeriesByRequest(p.data.requestId).catch(() => "unavailable" as const);
+    if (done === "unavailable") return send(503, { error: "scheduler_unavailable" });
     if (done && done.splitFrom === seriesId) return send(200, SeriesResponse.parse(seriesBody(done)));
   }
   const series = await loadOccurrence(deps, seriesId, date);
@@ -582,6 +585,8 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
     // An already-moved class keeps its move when only its teacher or length changes, so it is checked where it now sits.
     series: asked, exceptions: moves || now.status === "moved" ? [exception] : [], window: { from: newDate, to: newDate },
     checkAvailability: retimed, exclude: (o) => o.seriesId === seriesId && o.originalDate === date,
+    // Moving 10-19 to Monday 10-26 must not also test the unmoved 10-26 occurrence against itself.
+    only: (o) => o.originalDate === date,
   });
   if (blocked) return blocked;
 

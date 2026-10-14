@@ -199,6 +199,17 @@ describe("AC7: a class never clashes with itself", () => {
     const f = await fixture();
     expect((await json(await handleEditOccurrence(f.deps(), f.s1.id, "2026-10-19", edit(f.s1, { changes: { startTime: "16:30" } })))).status).toBe(200);
   });
+  it("moving a weekly occurrence to the same weekday of another week does not clash with that week's own class", async () => {
+    const f = await fixture();
+    const move = (startTime: string, n: number) => handleEditOccurrence(f.deps(), f.s1.id, "2026-10-19", edit(f.s1, { requestId: REQ(n), changes: { date: "2026-10-26", startTime } }));
+    expect((await json(await move("18:00", 62))).status).toBe(200);
+    f.begin();
+    // The unmoved 2026-10-26 class (16:00-17:00) is a real class, so a real overlap with it is still refused.
+    const clash = await json(await move("16:30", 63));
+    expect(clash.status).toBe(422);
+    expect(clash.body.problems.map((p: { date: string; reason: string }) => [p.date, p.reason])).toEqual([["2026-10-26", "teacher_busy"], ["2026-10-26", "student_busy"]]);
+    expect(f.writes).toEqual([]);
+  });
   it("a future split ignores the old series' later occurrences", async () => {
     const f = await fixture();
     // 16:30 overlaps the old series' own 16:00 slots from 2026-11-09 on; they must be ignored.
@@ -238,6 +249,15 @@ describe("AC8 and AC9: drag Monday to Wednesday, stale positions", () => {
   it("the existing expectedUpdatedAt check is unchanged", async () => {
     const f = await fixture();
     expect((await json(await handleEditOccurrence(f.deps(), f.s1.id, "2026-10-26", { requestId: REQ(54), expectedUpdatedAt: "2020-01-01T00:00:00.000Z", changes: { startTime: "16:30" } }))).status).toBe(409);
+  });
+});
+
+describe("a store outage on a retried split", () => {
+  it("is 503 scheduler_unavailable, not a thrown error", async () => {
+    const f = await fixture();
+    const deps = f.deps();
+    deps.store = { ...f.store, getSeriesByRequest: async () => { throw new Error("down"); } } as never;
+    expect((await json(await handleEditOccurrence(deps, f.s1.id, "2026-11-09", edit(f.s1, { scope: "future", changes: { startTime: "17:00" } })))).status).toBe(503);
   });
 });
 
