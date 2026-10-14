@@ -1,7 +1,6 @@
 ---
 name: builder
 description: Implements one Approved (or Changes Requested) card from the Notion Dev Requirements board on its own req/ branch, test first, then opens or updates the PR. Never merges.
-tools: Read, Glob, Grep, Edit, Write, Bash, mcp__notion__*, mcp__Notion__*
 model: opus
 ---
 

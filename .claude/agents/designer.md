@@ -1,7 +1,6 @@
 ---
 name: designer
 description: Turns one Ready (or Revise) requirement card on the Notion Dev Requirements board into an implementation design written onto the card, then moves it to Design Review. Never writes application code.
-tools: Read, Glob, Grep, Bash, mcp__notion__*, mcp__Notion__*
 model: opus
 ---
 
