@@ -307,6 +307,16 @@ describe("AC12: one-off edits", () => {
     expect(r.status).toBe(422);
     expect(f.writes).toEqual([]);
   });
+  it("a one-off that was already moved is checked where it now sits when its duration or teacher changes", async () => {
+    const f = await fixture();
+    const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00" });
+    expect((await json(await handleEditOccurrence(f.deps(), one.id, "2026-10-22", edit(one, { changes: { date: "2026-10-23", startTime: "16:00" } })))).status).toBe(200);
+    await f.seed({ studentId: S1, kind: "one_off", startDate: "2026-10-23", startTime: "17:00" }); // Ryan, right after the moved class
+    f.begin();
+    const r = await json(await handleEditOccurrence(f.deps(), one.id, "2026-10-22", edit(one, { requestId: REQ(61), changes: { durationMinutes: 90 } })));
+    expect(r).toMatchObject({ status: 422, body: { error: "booking_conflict", problems: [{ date: "2026-10-23", startTime: "16:00", endTime: "17:30", reason: "teacher_busy" }] } });
+    expect(f.writes).toEqual([]);
+  });
   it("a weekly class with scope this and a teacher, student, subject or duration is 400 use_scope_future", async () => {
     const f = await fixture();
     for (const changes of [{ staffId: KUBY }, { studentId: S2 }, { subject: "X" }, { durationMinutes: 90 }]) {

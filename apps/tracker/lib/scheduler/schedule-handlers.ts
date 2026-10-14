@@ -579,7 +579,8 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
   const asked = oneOff ? { ...series, ...fields } : series;
   const retimed = moves || fields.staffId !== undefined || fields.durationMinutes !== undefined;
   const blocked = await validateBooking(deps, {
-    series: asked, exceptions: moves ? [exception] : [], window: { from: newDate, to: newDate },
+    // An already-moved class keeps its move when only its teacher or length changes, so it is checked where it now sits.
+    series: asked, exceptions: moves || now.status === "moved" ? [exception] : [], window: { from: newDate, to: newDate },
     checkAvailability: retimed, exclude: (o) => o.seriesId === seriesId && o.originalDate === date,
   });
   if (blocked) return blocked;
