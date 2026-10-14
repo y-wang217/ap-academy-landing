@@ -6,6 +6,7 @@ import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import {
   handleConflicts, handleCreateAvailabilityException, handleCreateClass, handleCreateWindow, handleDeleteWindow, loadConflicts, type ScheduleDeps,
 } from "../../../lib/scheduler/schedule-handlers";
+import { outsideAvailabilityCount } from "../../../lib/scheduler/home-badge";
 import type { AvailabilityExceptionRecord, ScheduleStore, SeriesRecord, WindowRecord } from "../../../lib/scheduler/schedule-store";
 
 const ORG = "10000000-0000-4000-8000-000000000001";
@@ -164,10 +165,22 @@ describe("conflicts follow availability and never touch classes (AC4, AC9)", () 
 });
 
 describe("owner home badge (AC10)", () => {
-  it("a failing store rejects loadConflicts, which the home page turns into no badge", async () => {
+  it("counts conflicts for the owner and shows no link to anyone else", async () => {
+    const { store } = await seed();
+    await handleCreateClass(deps(admin, store), cls(A, { startTime: "14:00" }));
+    expect(await outsideAvailabilityCount(deps(admin, store))).toBeGreaterThan(0);
+    expect(await outsideAvailabilityCount(deps(teacher, store))).toBeNull();
+    expect(await outsideAvailabilityCount(deps({ scope: "none" }, store))).toBeNull();
+  });
+  it("a failing conflicts load gives 0: the link stays, the badge goes, nothing throws", async () => {
     const { store } = await seed();
     const broken = { ...store, listWindows: async () => { throw new Error("db down"); } } as ScheduleStore;
-    await expect(loadConflicts(deps(admin, broken), admin as never, { from: "2026-10-14", to: "2026-11-10" })).rejects.toThrow("db down");
+    expect(await outsideAvailabilityCount(deps(admin, broken))).toBe(0);
+  });
+  it("an identity lookup that throws gives no link", async () => {
+    const { store } = await seed();
+    const d = { ...deps(admin, store), identity: async () => { throw new Error("boom"); } };
+    expect(await outsideAvailabilityCount(d)).toBeNull();
   });
 });
 
@@ -184,7 +197,7 @@ describe("source scan (AC9, AC13)", () => {
   for (const d of ["components/scheduler", "app/schedule"]) {
     try { walk(join(root, d)); } catch { /* not created yet */ }
   }
-  for (const f of ["lib/domain/schedule/conflicts.ts", "lib/domain/schedule/copy-day.ts", "lib/scheduler/api-client.ts", "lib/view/availability-text.ts"]) {
+  for (const f of ["lib/domain/schedule/conflicts.ts", "lib/domain/schedule/copy-day.ts", "lib/scheduler/api-client.ts", "lib/scheduler/home-badge.ts", "lib/view/availability-text.ts"]) {
     try { files.push(join(root, f)); statSync(join(root, f)); } catch { files.pop(); }
   }
   it("new files never write classes, students, Notion, lessons or payouts", () => {
@@ -195,9 +208,11 @@ describe("source scan (AC9, AC13)", () => {
       expect(src, f).not.toMatch(/api\.notion\.com|fetch\(["'`]https?:/);
     }
   });
-  it("the conflicts handler calls only reads", () => {
+  it("no availability handler calls a class write method (windows, exceptions and conflicts)", () => {
     const src = readFileSync(join(root, "lib/scheduler/schedule-handlers.ts"), "utf8");
-    const body = src.slice(src.indexOf("export async function loadConflicts"), src.indexOf("// Classes ---"));
-    expect(body).not.toMatch(/store\.(create|update|delete|upsert|split|adopt|mark)/);
+    const section = src.slice(src.indexOf("// Availability ---"), src.indexOf("// Classes ---"));
+    expect(section).toContain("handleCreateWindow");
+    expect(section).toContain("loadConflicts");
+    expect(section).not.toMatch(/store\.(createSeries|upsertException|split|adoptStudent|markSummary)/);
   });
 });

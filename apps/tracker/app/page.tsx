@@ -4,30 +4,17 @@ import { StudentDashboard } from "@/components/student-dashboard";
 import { TopBar } from "@/components/top-bar";
 import { getViewer, listStudents, loadBundle, openFlagCounts } from "@/lib/data/queries";
 import { studentName } from "@/lib/format";
-import { addDays } from "@/lib/domain/schedule/wallclock";
 import { realScheduleDeps } from "@/lib/scheduler/deps";
-import { loadConflicts } from "@/lib/scheduler/schedule-handlers";
+import { outsideAvailabilityCount } from "@/lib/scheduler/home-badge";
 import { todayIso } from "@/lib/time";
 import { buildStudentView } from "@/lib/view/student-view";
 
 // Per-user page: never prerender.
 export const dynamic = "force-dynamic";
 
-/**
- * Owner only: null hides the link, a number is the badge count (0 shows no
- * badge). Any failure means no badge; it must never break the student list.
- */
 async function outsideAvailability(): Promise<number | null> {
   try {
-    const deps = realScheduleDeps();
-    const who = await deps.identity();
-    if (who.scope !== "admin") return null;
-    const today = todayIso();
-    try {
-      return (await loadConflicts(deps, who, { from: today, to: addDays(today, 91) })).conflicts.length;
-    } catch {
-      return 0;
-    }
+    return await outsideAvailabilityCount(realScheduleDeps());
   } catch {
     return null;
   }
