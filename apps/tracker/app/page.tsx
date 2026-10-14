@@ -1,14 +1,37 @@
 import Link from "next/link";
-import { Card, Empty, Notice, Page, buttonClass } from "@/components/ui";
+import { Card, Empty, Notice, Page, buttonClass, secondaryButtonClass } from "@/components/ui";
 import { StudentDashboard } from "@/components/student-dashboard";
 import { TopBar } from "@/components/top-bar";
 import { getViewer, listStudents, loadBundle, openFlagCounts } from "@/lib/data/queries";
 import { studentName } from "@/lib/format";
+import { addDays } from "@/lib/domain/schedule/wallclock";
+import { realScheduleDeps } from "@/lib/scheduler/deps";
+import { loadConflicts } from "@/lib/scheduler/schedule-handlers";
 import { todayIso } from "@/lib/time";
 import { buildStudentView } from "@/lib/view/student-view";
 
 // Per-user page: never prerender.
 export const dynamic = "force-dynamic";
+
+/**
+ * Owner only: null hides the link, a number is the badge count (0 shows no
+ * badge). Any failure means no badge; it must never break the student list.
+ */
+async function outsideAvailability(): Promise<number | null> {
+  try {
+    const deps = realScheduleDeps();
+    const who = await deps.identity();
+    if (who.scope !== "admin") return null;
+    const today = todayIso();
+    try {
+      return (await loadConflicts(deps, who, { from: today, to: addDays(today, 91) })).conflicts.length;
+    } catch {
+      return 0;
+    }
+  } catch {
+    return null;
+  }
+}
 
 const STATUS_LABEL = { setup: "In setup", active: "Active", archived: "Archived" } as const;
 
@@ -34,6 +57,22 @@ export default async function TrackerHome() {
   }
 
   if (viewer.kind === "none") {
+    // A scheduler teacher has a staff link but no membership: send them to their availability.
+    const who = await realScheduleDeps().identity().catch(() => null);
+    if (who?.scope === "teacher") {
+      return (
+        <>
+          <TopBar email={viewer.email} />
+          <Page title={`Hi ${who.staff.name}`}>
+            <Card>
+              <Link href="/schedule/availability" className={buttonClass}>
+                Set your availability
+              </Link>
+            </Card>
+          </Page>
+        </>
+      );
+    }
     return (
       <>
         <TopBar email={viewer.email} />
@@ -74,16 +113,28 @@ export default async function TrackerHome() {
     );
   }
 
-  const [students, flags] = await Promise.all([listStudents(viewer.db, viewer.orgId), openFlagCounts(viewer.db, viewer.orgId)]);
+  const [students, flags, outside] = await Promise.all([listStudents(viewer.db, viewer.orgId), openFlagCounts(viewer.db, viewer.orgId), outsideAvailability()]);
   return (
     <>
       <TopBar email={viewer.email} />
       <Page
         title="Students"
         aside={
-          <Link href="/students/new" className={buttonClass}>
-            Add a student
-          </Link>
+          <span className="flex flex-wrap items-center gap-2">
+            {outside !== null && (
+              <Link href="/schedule/availability" className={secondaryButtonClass}>
+                Teacher availability
+                {outside > 0 && (
+                  <span className="ml-2 rounded-full bg-warn-bg px-2 py-0.5 text-xs font-medium text-warn">
+                    {outside} {outside === 1 ? "class" : "classes"} outside availability
+                  </span>
+                )}
+              </Link>
+            )}
+            <Link href="/students/new" className={buttonClass}>
+              Add a student
+            </Link>
+          </span>
         }
       >
         <Card>

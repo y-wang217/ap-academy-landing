@@ -163,6 +163,14 @@ describe("conflicts follow availability and never touch classes (AC4, AC9)", () 
   });
 });
 
+describe("owner home badge (AC10)", () => {
+  it("a failing store rejects loadConflicts, which the home page turns into no badge", async () => {
+    const { store } = await seed();
+    const broken = { ...store, listWindows: async () => { throw new Error("db down"); } } as ScheduleStore;
+    await expect(loadConflicts(deps(admin, broken), admin as never, { from: "2026-10-14", to: "2026-11-10" })).rejects.toThrow("db down");
+  });
+});
+
 describe("source scan (AC9, AC13)", () => {
   const root = resolve(__dirname, "../../..");
   const files: string[] = [];

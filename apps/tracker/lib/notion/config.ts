@@ -25,3 +25,12 @@ export function readStudentsConfig(): NotionConfig | null {
   if (!token) return null;
   return { token, dataSourceId: process.env.NOTION_STUDENTS_DATA_SOURCE_ID || DEFAULT_STUDENTS_DATA_SOURCE_ID };
 }
+
+/**
+ * Where Notion's API lives. Server env only. Unset means the real API; the e2e
+ * stack points it at a local mock so the scheduler runs without a token that
+ * can reach Notion. Never read from a request.
+ */
+export function notionApiBase(): string {
+  return (process.env.NOTION_API_BASE || "https://api.notion.com").replace(/\/$/, "");
+}
