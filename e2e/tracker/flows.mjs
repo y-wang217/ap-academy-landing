@@ -454,6 +454,17 @@ try {
     && (await teacher.getByText(/Scheduled 1 h/).count()) >= 2);
   check("a student with no class in the week never appears", (await teacher.getByText("Nobody Booked").count()) === 0);
 
+  // REQ-9: snapshot every tracker table the scheduler may not touch, after sign-in and before the first booking step.
+  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers"];
+  const psql = (sql) => execSync(`psql -X -A -t "${process.env.PG_URL}" -c "${sql}"`).toString().trim();
+  const otherTables = () =>
+    psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' order by 1")
+      .split("\n").filter((t) => t && !SCHEDULER_TABLES.includes(t));
+  const snapshot = () => Object.fromEntries(otherTables().map((t) => [t, psql(`select count(*) || ' ' || coalesce(md5(string_agg(x::text, '' order by x::text)), '') from tracker.${t} x`)]));
+  const tablesBefore = process.env.PG_URL ? snapshot() : null;
+  const lessonUrl = `${MOCK_NOTION}/v1/pages/cccccccc-cccc-4ccc-8ccc-cccccccc0001`;
+  const lessonBefore = await (await fetch(lessonUrl, { headers: { "x-e2e-probe": "1" } })).text();
+
   // Booking and drag-to-move (REQ-7) ---------------------------------------------------
   // Ryan's Wednesday hours (copied from Monday above) hold 10:00, so Monday 10:00 can move there.
   const RYAN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001";
@@ -573,6 +584,40 @@ try {
     signedOutPage.status >= 300 && signedOutPage.status < 400 && (signedOutPage.headers.get("location") ?? "").includes("/login"));
   const signedOutApi = await fetch(`${BASE}/api/scheduler/daily-task`, { method: "POST", redirect: "manual" });
   check("the admin daily-task endpoint is not exempt", signedOutApi.status >= 300 && signedOutApi.status < 400);
+
+  // REQ-9: edit (this and future) and cancel (this, then this and future) as the admin, on Kuby's weekly class.
+  const adminCall = (method, path, body) => teacher.evaluate(async ({ base, method, path, body }) => {
+    const res = await fetch(`${base}/api/scheduler/${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId: crypto.randomUUID(), ...body }) });
+    return res.status;
+  }, { base: BASE, method, path, body });
+  const kubyOccurrence = (date) => teacher.evaluate(async ({ base, date }) => {
+    const list = await (await fetch(`${base}/api/scheduler/classes/occurrences?from=${date}&to=${date}`)).json();
+    const o = list.occurrences.find((x) => x.subject === "SCH4U" && x.originalDate === date);
+    return o ? { seriesId: o.seriesId, stamp: o.seriesUpdatedAt } : null;
+  }, { base: BASE, date });
+  const edited = await kubyOccurrence(plus(classDay, 14));
+  const editStatus = edited && await adminCall("PATCH", `classes/${edited.seriesId}/occurrences/${plus(classDay, 14)}`, { expectedUpdatedAt: edited.stamp, scope: "future", changes: { startTime: "14:30" } });
+  const cancelledOne = await kubyOccurrence(plus(classDay, 7));
+  const cancelOne = cancelledOne && await adminCall("DELETE", `classes/${cancelledOne.seriesId}/occurrences/${plus(classDay, 7)}`, { expectedUpdatedAt: cancelledOne.stamp, scope: "this" });
+  const cancelledRest = await kubyOccurrence(plus(classDay, 21));
+  const cancelRest = cancelledRest && await adminCall("DELETE", `classes/${cancelledRest.seriesId}/occurrences/${plus(classDay, 21)}`, { expectedUpdatedAt: cancelledRest.stamp, scope: "future" });
+  check("the admin's edit (future), cancel (this) and cancel (future) all saved", editStatus === 200 && cancelOne === 200 && cancelRest === 200, `${editStatus}/${cancelOne}/${cancelRest}`);
+
+  // REQ-9: nothing above reached Lessons or a payout field, and no other tracker table changed.
+  const journal = await (await fetch(`${MOCK_NOTION}/__journal`)).json();
+  check("no Notion request, of any method, names the Lessons data source or the lesson page",
+    !journal.some((j) => /6300f58a|cccccccc-cccc-4ccc-8ccc-cccccccc0001/.test(j.path)) && journal.length > 0, `${journal.length} requests`);
+  const studentPatches = journal.filter((j) => j.method === "PATCH" && /\/v1\/pages\/bbbbbbbb-/.test(j.path));
+  check("every student-page PATCH carries exactly the property Weekly Schedule",
+    studentPatches.length > 0 && studentPatches.every((j) => JSON.stringify(Object.keys(j.body?.properties ?? {})) === '["Weekly Schedule"]'), `${studentPatches.length} patches`);
+  if (tablesBefore) {
+    const after = snapshot();
+    check("every tracker table outside scheduling is identical before and after the booking flow", JSON.stringify(after) === JSON.stringify(tablesBefore) && Object.keys(after).length > 0,
+      Object.keys(after).filter((t) => after[t] !== tablesBefore[t]).join(","));
+  } else {
+    check("every tracker table outside scheduling is identical before and after the booking flow (PG_URL missing)", false);
+  }
+  check("the seeded lesson reads back unchanged and was never requested by the tracker", (await (await fetch(lessonUrl, { headers: { "x-e2e-probe": "1" } })).text()) === lessonBefore && lessonBefore.includes('"Paid to Teacher"'));
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {
