@@ -538,15 +538,16 @@ try {
   await ryan.getByRole("button", { name: /Sam Student/ }).first().waitFor({ timeout: 15000 });
   check("a teacher's week has no Book a class button and its cards are not draggable",
     (await ryan.getByRole("button", { name: "Book a class" }).count()) === 0 && (await ryan.getByRole("button", { name: /Sam Student/ }).first().evaluate((el) => !el.className.includes("cursor-grab"))));
-  const teacherPatch = await ryan.evaluate(async ({ base, from }) => {
-    const list = await (await fetch(`${base}/api/scheduler/classes/occurrences?from=${from}&to=${from}`)).json();
-    const id = list.occurrences[0].seriesId;
-    const res = await fetch(`${base}/api/scheduler/classes/${id}/occurrences/${from}`, {
+  const teacherPatch = await ryan.evaluate(async ({ base, from, to }) => {
+    // Monday's class was dragged to Wednesday above, so look at the whole week and use the occurrence's own original date.
+    const list = await (await fetch(`${base}/api/scheduler/classes/occurrences?from=${from}&to=${to}`)).json();
+    const { seriesId: id, originalDate } = list.occurrences.find((o) => o.originalDate === from);
+    const res = await fetch(`${base}/api/scheduler/classes/${id}/occurrences/${originalDate}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ requestId: crypto.randomUUID(), expectedUpdatedAt: "2026-01-01T00:00:00.000Z", scope: "this", changes: { startTime: "11:00" } }),
     });
     return res.status;
-  }, { base: BASE, from: classDay });
+  }, { base: BASE, from: classDay, to: plus(classDay, 6) });
   check("a teacher's PATCH on a class is refused with 403", teacherPatch === 403);
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
