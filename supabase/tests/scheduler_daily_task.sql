@@ -74,6 +74,14 @@ begin
   values (task, '10000000-0000-0000-0000-000000000001', 'e0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001', 'abc', now());
   update tracker.daily_task_teachers set acknowledged_fingerprint = 'abc', labelled = true where task_id = task;
   assert (select labelled from tracker.daily_task_teachers where task_id = task), 'teachers: update lost';
+  -- An upsert would update the key columns too, which are not granted: the app updates, then inserts.
+  begin
+    insert into tracker.daily_task_teachers (task_id, org_id, notion_staff_id, block_id, written_fingerprint, written_at)
+    values (task, '10000000-0000-0000-0000-000000000001', 'e0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001', 'abc', now())
+    on conflict (task_id, notion_staff_id) do update set task_id = excluded.task_id, org_id = excluded.org_id, notion_staff_id = excluded.notion_staff_id, block_id = excluded.block_id;
+    raise exception 'teachers: key columns were updatable';
+  exception when insufficient_privilege then null;
+  end;
   begin
     insert into tracker.daily_task_teachers (task_id, org_id, notion_staff_id, block_id, written_fingerprint, written_at)
     values (task, '10000000-0000-0000-0000-000000000099', 'e0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000002', 'abc', now());

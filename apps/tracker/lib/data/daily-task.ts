@@ -57,11 +57,16 @@ export function createDailyTaskStore(tracker: Db["tracker"], orgId: string): Dai
       if (error) throw new Error("unavailable");
       return z.array(TeacherRow).parse(data ?? []);
     },
+    // Update, then insert if nothing matched. An upsert would also try to update the key columns, which are not granted (0012).
     async saveTeacher(taskId, t) {
-      const { error } = await tracker.from("daily_task_teachers").upsert({
-        task_id: taskId, org_id: orgId, notion_staff_id: t.staffId, block_id: t.blockId, written_fingerprint: t.writtenFingerprint,
-        written_at: t.writtenAt, acknowledged_fingerprint: t.acknowledgedFingerprint, labelled: t.labelled,
-      }, { onConflict: "task_id,notion_staff_id" });
+      const fields = {
+        block_id: t.blockId, written_fingerprint: t.writtenFingerprint, written_at: t.writtenAt,
+        acknowledged_fingerprint: t.acknowledgedFingerprint, labelled: t.labelled,
+      };
+      const updated = await tracker.from("daily_task_teachers").update(fields).eq("task_id", taskId).eq("notion_staff_id", t.staffId).select("task_id");
+      if (updated.error) throw new Error("unavailable");
+      if (updated.data && updated.data.length > 0) return;
+      const { error } = await tracker.from("daily_task_teachers").insert({ task_id: taskId, org_id: orgId, notion_staff_id: t.staffId, ...fields });
       if (error) throw new Error("unavailable");
     },
   };
