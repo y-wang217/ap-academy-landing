@@ -37,6 +37,12 @@ Server: `fetchStudentNames` in `lib/notion/students.ts` (names only), `getStuden
 UI: `app/schedule/page.tsx`, `components/scheduler/{week-controls,week-grid,class-card,all-teachers-week}.tsx`, home links in `app/page.tsx`.
 Docs: ADR 0037, `docs/PLAN.md`, this file.
 
+## Additions made while building (not in the card)
+- The week response carries `namesLoaded: boolean`, so the page can say "Student names could not be loaded." when the names lookup fails.
+- `Page` in `components/ui.tsx` takes an optional `wide` prop (1200 px instead of 720 px) so the seven-column grid fits.
+- An admin who asks for neither `staffId` nor `view=all` gets their own teaching record if they have one, else the first active teacher by name.
+- `lib/notion/students.ts` honours the existing `NOTION_API_BASE` override so the e2e stack can serve the Students schema and a names-only query from `mock-notion.mjs`.
+
 ## Open questions (from the card)
 1. The Notion link in the dialog is shown to everyone; Notion sharing decides access.
 2. Remaining = available minus booked minutes inside availability.

@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { NOTION_VERSION, type NotionConfig } from "./config";
+import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig } from "./config";
 import { NotionError } from "./staff";
 
 /**
@@ -13,7 +13,8 @@ import { NotionError } from "./staff";
  */
 export type StudentRecord = { id: string; name: string; stage: string; weeklySchedule: string };
 
-const BASE = "https://api.notion.com/v1";
+// The e2e stack points this at a local mock; production leaves the override unset.
+const BASE = `${notionApiBaseOverride() ?? "https://api.notion.com"}/v1`;
 const NAME = "Student Name";
 const STAGE = "Stage";
 const SCHEDULE = "Weekly Schedule";

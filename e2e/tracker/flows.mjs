@@ -413,6 +413,45 @@ try {
   check("the owner's home shows the conflict badge", /outside availability/.test(await badge.textContent()));
   await teacher.goto(`${BASE}/schedule/conflicts`);
   check("the conflicts page lists the class with teacher, time and reason", (await teacher.getByText("Ryan Test", { exact: false }).count()) >= 1 && await teacher.getByText("10:00-11:00", { exact: false }).first().isVisible() && await teacher.getByText("Outside available hours").first().isVisible());
+
+  // Weekly calendar (REQ-6) ----------------------------------------------------------
+  // The seeded classes start on a Monday 7 to 13 days from now; open the week that holds them.
+  const classDay = [7, 8, 9, 10, 11, 12, 13].map(isoIn).find((d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 1);
+  const KUBY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0002";
+  await ryan.goto(`${BASE}`);
+  await ryan.getByRole("link", { name: "Your week" }).click();
+  await ryan.waitForURL(/\/schedule$/);
+  check("a teacher's week has no teacher selector and no All teachers link", (await ryan.getByRole("combobox", { name: "Teacher" }).count()) === 0 && (await ryan.getByRole("link", { name: "All teachers" }).count()) === 0);
+  await ryan.goto(`${BASE}/schedule?date=${classDay}`);
+  const card = ryan.getByRole("button", { name: /Sam Student/ });
+  await card.waitFor({ timeout: 15000 });
+  check("the teacher's class shows student, subject and time", (await card.textContent()).includes("MHF4U") && (await card.textContent()).includes("10:00-11:00"));
+  check("a teacher sees no other teacher's student", (await ryan.getByText("Kim Kuby-Student").count()) === 0);
+  check("the class outside their hours is labelled in words", await ryan.getByText("Outside hours").first().isVisible());
+  check("Previous and Next week links keep the week moving", (await ryan.getByRole("link", { name: /Next week/ }).getAttribute("href")).includes("date="));
+  check("no horizontal scroll on the week at 375px", await ryan.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
+  await card.click();
+  const dialog = ryan.getByRole("dialog");
+  const studentHref = "https://www.notion.so/" + "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001".replaceAll("-", "");
+  check("clicking a class opens its details with a student record link", (await dialog.isVisible()) && (await dialog.getByRole("link", { name: "Open student record" }).getAttribute("href")) === studentHref);
+  await ryan.keyboard.press("Escape");
+  check("Escape closes the dialog and focus returns to the card", !(await dialog.isVisible()) && (await ryan.evaluate(() => document.activeElement?.textContent ?? "")).includes("Sam Student"));
+  await ryan.goto(`${BASE}/schedule?staffId=${KUBY}`);
+  check("a teacher asking for another teacher's week is refused", await ryan.getByText("This page is not available for your account.").isVisible());
+  await ryan.goto(`${BASE}/schedule?view=all`);
+  check("a teacher asking for All teachers is refused", await ryan.getByText("This page is not available for your account.").isVisible() && (await ryan.getByText("Kim Kuby-Student").count()) === 0);
+  const weekApi = await ryan.evaluate(async (base) => (await fetch(`${base}/api/scheduler/week?staffId=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0002`)).status, BASE);
+  check("the week endpoint refuses a teacher asking for another teacher", weekApi === 403);
+
+  await teacher.goto(`${BASE}`);
+  await teacher.getByRole("link", { name: "Teacher schedules" }).click();
+  await teacher.waitForURL(/view=all/);
+  await teacher.goto(`${BASE}/schedule?view=all&date=${classDay}`);
+  await teacher.getByRole("heading", { name: "Ryan Test" }).waitFor({ timeout: 15000 });
+  check("the owner's All teachers view lists both teachers with their students and hours",
+    await teacher.getByRole("heading", { name: "Kuby Test" }).isVisible() && await teacher.getByText("Sam Student").isVisible() && await teacher.getByText("Kim Kuby-Student").isVisible()
+    && (await teacher.getByText(/Scheduled 1 h/).count()) >= 2);
+  check("a student with no class in the week never appears", (await teacher.getByText("Nobody Booked").count()) === 0);
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {

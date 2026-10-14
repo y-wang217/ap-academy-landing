@@ -8,6 +8,7 @@ Scheduler 5/8 (REQ-6) adds a read-only week calendar. A class card is only usefu
 - **Filtered by the occurrences returned.** The names lookup runs after the caller's occurrences are chosen, and only for the student IDs in them. A teacher response is never built from the full name map. A strict output schema and a test with extra students enforce it.
 - **Cache holds names only.** `getStudentNames` is cached for five minutes as `[id, name][]`. A renamed student shows the old name for up to five minutes.
 - **Null on failure.** If the lookup fails, or a student is not in Active or Onboarding, `studentName` is `null`, cards say "Student", the response carries `namesLoaded: false` on a failure, and the week still returns 200.
+- **`namesLoaded`.** The week response says whether the lookup worked, so the page can show one notice instead of guessing from null names.
 - **Never stored or logged.** Names are not written to Postgres and not logged.
 - **Remaining hours** are available minutes minus the booked minutes that fall inside availability. A class outside hours does not reduce "left", and the result is never below 0. Class spans are unioned per day first, so overlapping classes subtract once.
 - **The student link** in the class dialog goes to the student's Notion page for everyone. Notion's own sharing decides whether it opens.
