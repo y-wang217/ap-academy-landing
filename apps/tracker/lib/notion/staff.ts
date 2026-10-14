@@ -1,3 +1,4 @@
+import "server-only";
 import { z } from "zod";
 import { NOTION_VERSION, type NotionConfig } from "./config";
 
