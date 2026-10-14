@@ -52,6 +52,12 @@ export const OccurrenceAdmin = OccurrenceTeacher.extend({ seriesUpdatedAt: z.str
 export const OccurrencesResponseTeacher = z.strictObject({ occurrences: z.array(OccurrenceTeacher) });
 export const OccurrencesResponseAdmin = z.strictObject({ occurrences: z.array(OccurrenceAdmin) });
 
+const ConflictReason = z.enum(["time_off", "outside_availability"]);
+export const ConflictTeacher = OccurrenceTeacher.extend({ reason: ConflictReason }).strict();
+export const ConflictAdmin = OccurrenceAdmin.extend({ reason: ConflictReason }).strict();
+export const ConflictsResponseTeacher = z.strictObject({ conflicts: z.array(ConflictTeacher) });
+export const ConflictsResponseAdmin = z.strictObject({ conflicts: z.array(ConflictAdmin), notEntered: z.array(z.guid()) });
+
 /** The result of regenerating a student's Weekly Schedule after a class write (REQ-4). */
 export const SummarySync = z.enum(["synced", "failed", "skipped"]);
 

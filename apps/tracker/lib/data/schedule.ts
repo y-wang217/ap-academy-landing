@@ -101,12 +101,14 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
   const store: ScheduleStore = {
     async listWindows(staffId) {
       const { db } = await ctx();
-      const { data } = await db.tracker.from("availability_windows").select().eq("notion_staff_id", staffId);
+      const q = db.tracker.from("availability_windows").select();
+      const { data } = await (staffId ? q.eq("notion_staff_id", staffId) : q);
       return z.array(WindowRow).parse(data ?? []);
     },
     async listAvailabilityExceptions(staffId, range) {
       const { db } = await ctx();
-      const { data } = await db.tracker.from("availability_exceptions").select().eq("notion_staff_id", staffId).gte("on_date", range.from).lte("on_date", range.to);
+      const q = db.tracker.from("availability_exceptions").select().gte("on_date", range.from).lte("on_date", range.to);
+      const { data } = await (staffId ? q.eq("notion_staff_id", staffId) : q);
       return z.array(AvailabilityExceptionRow).parse(data ?? []);
     },
     getWindow: (id) => getOne("availability_windows", id, (r) => WindowRow.parse(r)),

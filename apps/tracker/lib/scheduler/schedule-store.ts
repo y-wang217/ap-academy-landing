@@ -41,8 +41,9 @@ export type SummaryPatch = { syncState: SummaryState; lastWrittenText?: string; 
  * visible; reads that find nothing return null, which handlers report as 404.
  */
 export type ScheduleStore = {
-  listWindows(staffId: string): Promise<WindowRecord[]>;
-  listAvailabilityExceptions(staffId: string, range: { from: string; to: string }): Promise<AvailabilityExceptionRecord[]>;
+  /** `staffId` omitted: every row the caller's RLS allows. */
+  listWindows(staffId?: string): Promise<WindowRecord[]>;
+  listAvailabilityExceptions(staffId: string | undefined, range: { from: string; to: string }): Promise<AvailabilityExceptionRecord[]>;
   getWindow(id: string): Promise<WindowRecord | null>;
   createWindow(input: NewWindow): Promise<StoreResult<WindowRecord>>;
   updateWindow(id: string, expectedUpdatedAt: string, changes: Partial<Pick<AvailabilityWindow, "weekday" | "startTime" | "endTime" | "effectiveFrom" | "effectiveUntil">>): Promise<StoreResult<WindowRecord>>;
