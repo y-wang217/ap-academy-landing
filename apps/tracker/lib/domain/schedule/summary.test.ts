@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthlyReview, renderSummary } from "./summary";
+import { monthlyReview, renderSummary, type ReviewSummaryInput } from "./summary";
 import type { ClassException, ClassSeries } from "./recurrence";
 
 const T1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -61,7 +61,7 @@ describe("renderSummary", () => {
 
 describe("monthlyReview", () => {
   const base = series({ id: "50000000-0000-4000-8000-0000000000aa", startDate: "2026-09-01" });
-  const quiet = { studentId: S1, syncState: "synced" as const, lastWrittenText: "x", freshText: "x", adoptedOn: "2026-09-01" };
+  const quiet: ReviewSummaryInput = { studentId: S1, syncState: "synced", lastWrittenText: "x", freshText: "x", adoptedOn: "2026-09-01" };
   const review = (over: { series?: (ClassSeries & { splitFrom: string | null })[]; exceptions?: ClassException[]; summary?: Partial<typeof quiet> } = {}) =>
     monthlyReview({ month: "2026-11", series: over.series ?? [base], exceptions: over.exceptions ?? [], summaries: [{ ...quiet, ...over.summary }] })[0];
 
