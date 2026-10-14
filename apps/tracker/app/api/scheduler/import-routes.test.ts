@@ -194,6 +194,26 @@ describe("AC5, AC7, AC8: the import", () => {
   });
 });
 
+describe("review: a failing store read is a 503 and writes nothing", () => {
+  it("every import endpoint and the AC16 check", async () => {
+    const w = world({ [S1]: CLEAN });
+    const broken = (fn: keyof ScheduleStore): ScheduleDeps => ({ ...w.deps, store: { ...w.deps.store, [fn]: async () => { throw new Error("unavailable"); } } as ScheduleStore });
+    const noList = broken("listSummaries");
+    expect((await handleImportPreview(noList)).status).toBe(503);
+    expect((await handleImportRun(noList, {})).status).toBe(503);
+    expect((await handleMonthlyReview(noList, new URLSearchParams("month=2026-11"))).status).toBe(503);
+    await handleImportRun(w.deps, {});
+    w.calls.write.length = 0;
+    const d = broken("listSeriesForStudent");
+    expect((await handleMonthlyReview(d, new URLSearchParams("month=2026-11"))).status).toBe(503);
+    expect(await json(await handleSyncSummaries(d, {}))).toMatchObject({ body: { results: [{ studentId: S1, summarySync: "failed" }] } });
+    expect(w.calls.write).toEqual([]);
+    const gs = broken("getSummary");
+    const body = { requestId: REQ(7), staffId: T1, studentId: S1, subject: "M", kind: "weekly", startDate: "2026-10-21", startTime: "17:30", durationMinutes: 60, effectiveUntil: null };
+    expect((await handleCreateClass(gs, body)).status).toBe(503);
+  });
+});
+
 describe("AC14: a failed Notion write never fails the class write", () => {
   it("create returns 201 with summarySync failed, and the sync endpoint retries once", async () => {
     const w = world({ [S1]: "" });

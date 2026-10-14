@@ -23,15 +23,22 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : "sync failed
  * scheduler last wrote, it is overwritten and the replaced text is kept.
  */
 export async function syncStudentSummary(deps: SyncDeps, studentId: string): Promise<SyncResult> {
-  const summary = await deps.store.getSummary(studentId);
+  let summary;
+  try {
+    summary = await deps.store.getSummary(studentId);
+  } catch {
+    return "failed"; // Cannot tell whether the student is adopted, so write nothing.
+  }
   if (!summary) return "skipped";
   const fail = async (message: string, drift?: string): Promise<SyncResult> => {
     await deps.store.markSummary(studentId, { syncState: "failed", lastError: message.slice(0, MAX_ERROR), ...(drift !== undefined ? { lastDriftText: drift } : {}) });
     return "failed";
   };
   let text: string;
+  let seriesCount = 0;
   try {
     const [{ series }, staff] = await Promise.all([deps.store.listSeriesForStudent(studentId), deps.fetchStaff()]);
+    seriesCount = series.length;
     text = renderSummary(series, new Map(staff.map((s) => [s.id, s.name])), deps.today());
   } catch (e) {
     return fail(e instanceof Error && e.message === "unknown_staff" ? "A teacher on this schedule is not in Staff" : "Could not build the summary");
@@ -45,6 +52,8 @@ export async function syncStudentSummary(deps: SyncDeps, studentId: string): Pro
   if (!current) return fail("Student not found in Notion");
 
   const notionText = current.weeklySchedule.trim();
+  // An adopted student with no series at all is a read problem, not a schedule: never blank their text.
+  if (seriesCount === 0 && notionText !== "") return fail("No classes found for this student, so the Weekly Schedule was left as it is");
   const baseline = (summary.lastWrittenText ?? summary.adoptedFromText).trim();
   const drift = notionText !== baseline && notionText !== text ? current.weeklySchedule : undefined;
   if (notionText === text) {

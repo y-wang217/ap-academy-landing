@@ -46,7 +46,7 @@ const planBody = (plan: ImportPlan) => ImportPlanOut.parse({
 });
 
 /** GET: the dry-run plan, plus every adopted student with the state of their write-back. */
-export async function handleImportPreview(deps: ScheduleDeps): Promise<Response> {
+async function handleImportPreviewInner(deps: ScheduleDeps): Promise<Response> {
   const g = await gate(deps);
   if (isResponse(g)) return g;
   const data = await load(deps);
@@ -66,7 +66,7 @@ export async function handleImportPreview(deps: ScheduleDeps): Promise<Response>
 const RunBody = z.strictObject({ dryRun: z.boolean().default(false) });
 
 /** POST: plan, then adopt each clean student (one transaction each) and write their summary. */
-export async function handleImportRun(deps: ScheduleDeps, body: unknown): Promise<Response> {
+async function handleImportRunInner(deps: ScheduleDeps, body: unknown): Promise<Response> {
   const g = await gate(deps);
   if (isResponse(g)) return g;
   const parsed = RunBody.safeParse(body ?? {});
@@ -101,7 +101,7 @@ export async function handleImportRun(deps: ScheduleDeps, body: unknown): Promis
 const SyncBody = z.strictObject({ studentId: z.guid().optional() });
 
 /** POST: retry the Notion write-back for one adopted student, or all of them. */
-export async function handleSyncSummaries(deps: ScheduleDeps, body: unknown): Promise<Response> {
+async function handleSyncSummariesInner(deps: ScheduleDeps, body: unknown): Promise<Response> {
   const g = await gate(deps);
   if (isResponse(g)) return g;
   const parsed = SyncBody.safeParse(body ?? {});
@@ -118,7 +118,7 @@ export async function handleSyncSummaries(deps: ScheduleDeps, body: unknown): Pr
 const Month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 
 /** GET ?month=YYYY-MM: what Charlie should check before the monthly run. */
-export async function handleMonthlyReview(deps: ScheduleDeps, q: URLSearchParams): Promise<Response> {
+async function handleMonthlyReviewInner(deps: ScheduleDeps, q: URLSearchParams): Promise<Response> {
   const g = await gate(deps);
   if (isResponse(g)) return g;
   const month = Month.safeParse(q.get("month"));
@@ -155,3 +155,16 @@ export async function handleMonthlyReview(deps: ScheduleDeps, q: URLSearchParams
   });
   return send(200, MonthlyReviewResponse.parse({ month: month.data, students: review.map((r) => ({ ...r, name: names.get(r.studentId) ?? null })) }));
 }
+
+// A store read that fails throws (lib/data/schedule.ts); that is a 503, never an empty answer.
+async function guarded(fn: () => Promise<Response>): Promise<Response> {
+  try {
+    return await fn();
+  } catch {
+    return unavailable();
+  }
+}
+export const handleImportPreview = (...args: Parameters<typeof handleImportPreviewInner>) => guarded(() => handleImportPreviewInner(...args));
+export const handleImportRun = (...args: Parameters<typeof handleImportRunInner>) => guarded(() => handleImportRunInner(...args));
+export const handleSyncSummaries = (...args: Parameters<typeof handleSyncSummariesInner>) => guarded(() => handleSyncSummariesInner(...args));
+export const handleMonthlyReview = (...args: Parameters<typeof handleMonthlyReviewInner>) => guarded(() => handleMonthlyReviewInner(...args));

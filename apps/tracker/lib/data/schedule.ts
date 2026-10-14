@@ -210,22 +210,28 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
       return created ? { ok: true, value: created, created: true } : UNAVAILABLE;
     }),
 
+    // These three throw on any query error: an empty answer from a failed read would look like
+    // "no classes" or "not adopted", and the summary sync would blank a billing field (REQ-4 review).
     async listSeriesForStudent(studentId) {
       const { db } = await ctx();
-      const { data } = await db.tracker.from("class_series").select().eq("notion_student_id", studentId);
+      const { data, error } = await db.tracker.from("class_series").select().eq("notion_student_id", studentId);
+      if (error) throw new Error("unavailable");
       const series = z.array(SeriesRow).parse(data ?? []);
       if (series.length === 0) return { series, exceptions: [] };
       const exc = await db.tracker.from("class_exceptions").select().in("series_id", series.map((s) => s.id));
+      if (exc.error) throw new Error("unavailable");
       return { series, exceptions: z.array(ExceptionRow).parse(exc.data ?? []) };
     },
     async getSummary(studentId) {
       const { db } = await ctx();
-      const { data } = await db.tracker.from("schedule_summaries").select().eq("notion_student_id", studentId).maybeSingle();
+      const { data, error } = await db.tracker.from("schedule_summaries").select().eq("notion_student_id", studentId).maybeSingle();
+      if (error) throw new Error("unavailable");
       return data ? SummaryRow.parse(data) : null;
     },
     async listSummaries() {
       const { db } = await ctx();
-      const { data } = await db.tracker.from("schedule_summaries").select().order("adopted_at");
+      const { data, error } = await db.tracker.from("schedule_summaries").select().order("adopted_at");
+      if (error) throw new Error("unavailable");
       return z.array(SummaryRow).parse(data ?? []);
     },
     adoptStudent: (i) => guarded(async () => {

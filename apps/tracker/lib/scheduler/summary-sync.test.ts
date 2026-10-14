@@ -13,7 +13,7 @@ const series = (over: Partial<SeriesRecord> = {}): SeriesRecord => ({
   startTime: "17:30", durationMinutes: 60, effectiveUntil: null, splitFrom: null, updatedAt: "t", ...over,
 });
 
-function harness(opts: { summary?: Partial<SummaryRecord> | null; notion?: string | null; staffFails?: boolean; writeFails?: boolean; getFails?: boolean; list?: SeriesRecord[] } = {}) {
+function harness(opts: { listFails?: boolean; summaryFails?: boolean; summary?: Partial<SummaryRecord> | null; notion?: string | null; staffFails?: boolean; writeFails?: boolean; getFails?: boolean; list?: SeriesRecord[] } = {}) {
   const row: SummaryRecord | null = opts.summary === null ? null : {
     id: "s1", studentId: S1, adoptedAt: TODAY, adoptedFromText: LEGACY, lastWrittenText: null, lastWrittenAt: null, syncState: "pending",
     lastError: null, lastDriftText: null, ...opts.summary,
@@ -23,8 +23,14 @@ function harness(opts: { summary?: Partial<SummaryRecord> | null; notion?: strin
   const writes: string[] = [];
   let writeFails = opts.writeFails ?? false;
   const store = {
-    getSummary: async () => row,
-    listSeriesForStudent: async () => ({ series: opts.list ?? [series()], exceptions: [] }),
+    getSummary: async () => {
+      if (opts.summaryFails) throw new Error("unavailable");
+      return row;
+    },
+    listSeriesForStudent: async () => {
+      if (opts.listFails) throw new Error("unavailable");
+      return { series: opts.list ?? [series()], exceptions: [] };
+    },
     markSummary: async (_id: string, patch: SummaryPatch) => { marks.push(patch); return true; },
   } as unknown as ScheduleStore;
   const deps: SyncDeps = {
@@ -100,6 +106,34 @@ describe("syncStudentSummary", () => {
       expect(h.writes).toEqual([]);
       expect(h.marks.at(-1)?.syncState).toBe("failed");
     }
+  });
+
+  it("review: a failed series read never blanks Notion; the row ends failed", async () => {
+    const h = harness({ listFails: true, notion: LEGACY, summary: { lastWrittenText: LEGACY, syncState: "synced" } });
+    expect(await syncStudentSummary(h.deps, S1)).toBe("failed");
+    expect(h.writes).toEqual([]);
+    expect(h.marks.at(-1)).toMatchObject({ syncState: "failed" });
+  });
+
+  it("review: a failed summary read writes nothing and does not throw", async () => {
+    const h = harness({ summaryFails: true });
+    await expect(syncStudentSummary(h.deps, S1)).resolves.toBe("failed");
+    expect(h.writes).toEqual([]);
+  });
+
+  it("review: no series at all never replaces a non-empty Notion text with an empty one", async () => {
+    const h = harness({ list: [], notion: LEGACY });
+    expect(await syncStudentSummary(h.deps, S1)).toBe("failed");
+    expect(h.writes).toEqual([]);
+  });
+
+  it("review: all series genuinely ended does blank the text, and no series with an empty text is fine", async () => {
+    const ended = harness({ list: [series({ effectiveUntil: "2026-10-01" })], notion: LEGACY, summary: { lastWrittenText: LEGACY } });
+    expect(await syncStudentSummary(ended.deps, S1)).toBe("synced");
+    expect(ended.writes).toEqual([""]);
+    const empty = harness({ list: [], notion: "" });
+    expect(await syncStudentSummary(empty.deps, S1)).toBe("synced");
+    expect(empty.writes).toEqual([]);
   });
 
   it("never throws to the caller, and truncates the stored error", async () => {

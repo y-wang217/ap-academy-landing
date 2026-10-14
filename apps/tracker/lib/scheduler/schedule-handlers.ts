@@ -219,9 +219,9 @@ export async function handleCreateClass(deps: ScheduleDeps, body: unknown): Prom
  */
 async function prepareStudent(deps: ScheduleDeps, studentId: string): Promise<Response | null> {
   if (!deps.students) return null;
-  if (await deps.store.getSummary(studentId)) return null;
   let record;
   try {
+    if (await deps.store.getSummary(studentId)) return null;
     record = await deps.students.get(studentId);
   } catch {
     return send(503, { error: "scheduler_unavailable" });
