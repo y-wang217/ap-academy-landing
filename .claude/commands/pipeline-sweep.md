@@ -1,27 +1,40 @@
 ---
-description: Sync Notion card statuses with GitHub PR state and write Work Log entries for finished cards.
+description: Reconcile the Dev Requirements board with GitHub (GitHub is the truth), promote unblocked Backlog cards, release feature PRs whose migration is live, and write one Work Log entry per shipped card.
 ---
 
-Sync the Dev Requirements board with GitHub. Config is in `.claude/pipeline.json`.
+Sync the Dev Requirements board with GitHub. Config is in `.claude/pipeline.json`. GitHub is the truth for anything that has a PR: a card's status follows its PR whatever Notion says.
 
-For every card with Status **In Review** that has a PR link:
+## 1. Read both sides
+- PRs: `gh pr list --repo <repo> --label pipeline --state all --limit 50 --json number,url,state,headRefName,baseRefName,reviewDecision,mergedAt,labels,isDraft` (or the read-only GitHub MCP `list_pull_requests` when `gh` has no token). The card ID is the `req/<CARD-ID>-` prefix of `headRefName`. A branch ending in `migration_branch_suffix` is a migration PR: it never drives the card's status, only step 4.
+- Cards: query `notion.board_data_source` for every card whose Status is not Done.
 
-1. `gh pr view <url> --json state,reviewDecision,mergedAt,labels`
-2. If `state` is MERGED:
-   - Set Status to **Done**.
-   - Write one AP Academy Work Log entry to `notion.work_log_data_source`. Fetch that data source's schema first and fill its real property names:
-     - Summary: "<card-id> shipped: <card title>"
-     - Date: today
-     - Source: Claude
-     - Logged by: Session itself
-     - Session link: the PR URL (and this session's URL if you have one)
-     - Bet and Alignment: pick the closest existing option for a product or systems improvement to the tracker; leave blank if none fits
-     - Decisions: one line on what was built and anything notable from review
-     - New todos: follow-ups the PR or review mentioned, or blank
-3. If `state` is CLOSED without merge: set Status to **Blocked** and comment "PR closed without merge" on the card.
-4. If `reviewDecision` is CHANGES_REQUESTED: set Status to **Changes Requested**.
-5. Otherwise leave it.
+## 2. Card status follows the feature PR
+For every card that has a feature PR (matched by branch, or by the card's **PR** property):
+- `MERGED` → Status **Done**, then step 5.
+- `CLOSED` without merge → Status **Blocked** and comment "PR closed without merge".
+- `OPEN` with `reviewDecision` = `CHANGES_REQUESTED` → Status **Changes Requested**.
+- `OPEN` otherwise (including a draft) → Status **In Review**.
+- Set the card's **PR** property to the PR URL when it is empty.
+Change the status only when it differs; say which cards moved.
 
-Also: if any card has sat in **Designing** or **Building** for more than 3 hours (check its last edited time), a previous run died mid-way. Move it back to Ready or Approved respectively and comment "Recovered from a stalled run."
+## 3. Stalled runs
+A card in **Designing** or **Building** for more than 3 hours (last edited time) with no PR died mid-run: move it back to **Ready** or **Approved** respectively and comment "Recovered from a stalled run."
 
-Return a one-line summary, for example: "Sweep: 1 Done, 1 Changes Requested, 0 recovered."
+## 4. Migrations and dependencies
+- For every open PR labelled `awaiting-migration`: find its migration PR (same card ID, branch ending in `-migration`) and the migration file name it added (`gh pr view <migration-pr> --json files`). Call the Supabase MCP `list_migrations`; if a version named like that file (`NNNN_<slug>`) is live, `gh pr edit <n> --remove-label awaiting-migration` and comment on the card "Migration NNNN is live; the feature PR can merge." The label removal starts the auto-merge workflow.
+- For every card in **Backlog**: if its **Blocked by** relation is empty or every related card is **Done**, set Status **Ready** and comment "Unblocked by the sweep."
+- For every card in **Ready** whose **Blocked by** has a card that is not Done, set Status **Backlog** (it was filed early).
+
+## 5. Work Log, once per shipped card
+Only the sweep writes "shipped" rows, and only in the run that moved the card to Done. Before writing, query `notion.work_log_data_source` for a row whose Summary starts with `<card-id> shipped`; if one exists, skip. Otherwise write one entry (fetch the schema first and use its real property names):
+- Summary: "<card-id> shipped: <card title>"
+- Date: today
+- Source: Agent
+- Logged by: Session itself
+- Session link: the PR URL
+- Bet and Alignment: pick the closest existing option for a product or systems improvement to the tracker; leave blank if none fits
+- Decisions: one line on what was built and anything notable from review
+- New todos: follow-ups the PR or review mentioned, or blank
+
+## 6. Summary
+Return one line, for example: "Sweep: 1 Done, 1 In Review (was Building), 1 Changes Requested, 1 Ready (unblocked), 1 migration released, 0 recovered."
