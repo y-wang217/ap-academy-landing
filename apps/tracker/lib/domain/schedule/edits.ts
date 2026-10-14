@@ -15,3 +15,8 @@ export function checkClassShape(startTime: string, durationMinutes: number): Edi
   }
   return minutesOf(startTime) + durationMinutes > 1440 ? { ok: false, status: 400, error: "crosses_midnight" } : { ok: true };
 }
+
+/** A new class may not start before today (schedule zone). */
+export function checkNotPast(startDate: string, today: string): EditCheck {
+  return startDate < today ? { ok: false, status: 422, error: "past_occurrence" } : { ok: true };
+}

@@ -59,6 +59,10 @@ export type ScheduleStore = {
   createSeries(input: NewSeries): Promise<StoreResult<SeriesRecord>>;
   upsertException(input: ClassException & { requestId: string }): Promise<StoreResult<ClassException>>;
   split(input: SplitInput): Promise<StoreResult<SeriesRecord>>;
+  /** Ends a weekly series: its last occurrence date becomes `lastDate`. Stale-checked like every series write. */
+  endSeries(id: string, lastDate: string, expectedUpdatedAt: string): Promise<StoreResult<SeriesRecord>>;
+  /** One-off edits: teacher, subject and duration on the series row itself. Stale-checked. */
+  updateSeriesFields(id: string, expectedUpdatedAt: string, fields: { staffId?: string; subject?: string; durationMinutes?: number }): Promise<StoreResult<SeriesRecord>>;
 
   /** Every series of one student, ended ones included, with all their exceptions. */
   listSeriesForStudent(studentId: string): Promise<{ series: SeriesRecord[]; exceptions: ClassException[] }>;
