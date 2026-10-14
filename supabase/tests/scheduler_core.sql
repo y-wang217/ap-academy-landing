@@ -172,6 +172,11 @@ begin
   end;
   update tracker.class_series set subject = 'hacked'; get diagnostics n = row_count;
   assert n = 0, 'teacher edited a class series';
+  -- REQ-7: the columns the booking screen writes (ending a series, changing its teacher) are the owner's alone.
+  update tracker.class_series set effective_until = '2030-01-01'; get diagnostics n = row_count;
+  assert n = 0, 'teacher ended a class series';
+  update tracker.class_series set notion_staff_id = 'e0000000-0000-4000-8000-000000000002'; get diagnostics n = row_count;
+  assert n = 0, 'teacher reassigned a class series';
   update tracker.class_exceptions set kind = 'cancelled', new_date = null, new_start_time = null; get diagnostics n = row_count;
   assert n = 0, 'teacher edited a class exception';
   begin

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { StaffRecord } from "../../../lib/notion/staff";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import {
-  handleConflicts, handleCreateAvailabilityException, handleCreateClass, handleCreateWindow, handleDeleteWindow, loadConflicts, type ScheduleDeps,
+  handleConflicts, handleCreateAvailabilityException, handleCreateWindow, handleDeleteWindow, loadConflicts, type ScheduleDeps,
 } from "../../../lib/scheduler/schedule-handlers";
 import { outsideAvailabilityCount } from "../../../lib/scheduler/home-badge";
 import type { AvailabilityExceptionRecord, ScheduleStore, SeriesRecord, WindowRecord } from "../../../lib/scheduler/schedule-store";
@@ -76,18 +76,21 @@ const cls = (staffId: string, over: Record<string, unknown> = {}) => ({
   durationMinutes: 60, effectiveUntil: null, ...over,
 });
 
+/** Classes that are deliberately outside availability are seeded straight into the store: the handler now refuses them. */
+const seedClass = (store: ScheduleStore, body: ReturnType<typeof cls>) => store.createSeries(body as never);
+
 async function seed() {
   const f = fakeStore();
   await handleCreateWindow(deps(admin, f.store), win(A));
-  await handleCreateClass(deps(admin, f.store), cls(A));
-  await handleCreateClass(deps(admin, f.store), cls(B, { startTime: "15:00" }));
+  await seedClass(f.store, cls(A));
+  await seedClass(f.store, cls(B, { startTime: "15:00" }));
   return f;
 }
 
 describe("GET conflicts (AC8)", () => {
   it("admin sees every teacher; teacher B has nothing entered so is listed, not flagged", async () => {
     const { store } = await seed();
-    await handleCreateClass(deps(admin, store), cls(A, { startTime: "14:00" }));
+    await seedClass(store, cls(A, { startTime: "14:00" }));
     const res = await json(await handleConflicts(deps(admin, store), q(RANGE)));
     expect(res.status).toBe(200);
     expect(res.body.notEntered).toEqual([B]);
@@ -104,7 +107,7 @@ describe("GET conflicts (AC8)", () => {
   });
   it("a teacher gets only their own, in the teacher shape, with reason", async () => {
     const { store } = await seed();
-    await handleCreateClass(deps(admin, store), cls(A, { startTime: "14:00", startDate: "2026-10-20" }));
+    await seedClass(store, cls(A, { startTime: "14:00", startDate: "2026-10-20" }));
     const res = await json(await handleConflicts(deps(teacher, store), q(RANGE)));
     expect(res.status).toBe(200);
     expect(res.body.conflicts.length).toBeGreaterThan(0);
@@ -148,7 +151,7 @@ describe("conflicts follow availability and never touch classes (AC4, AC9)", () 
     const res = await json(await handleConflicts(deps(admin, store), q(`${RANGE}&staffId=${A}`)));
     expect(res.body.conflicts.map((c: { date: string; reason: string }) => [c.date, c.reason])).toEqual([["2026-10-19", "time_off"]]);
     // Time off wins over extra hours on the same date (engine rule), so test extra on its own date.
-    await handleCreateClass(deps(admin, store), cls(A, { startDate: "2026-10-21", startTime: "14:00" }));
+    await seedClass(store, cls(A, { startDate: "2026-10-21", startTime: "14:00" }));
     await handleCreateAvailabilityException(deps(teacher, store), {
       requestId: REQ(901), staffId: A, onDate: "2026-10-21", kind: "extra", startTime: "13:00", endTime: "15:00",
     });
@@ -167,7 +170,7 @@ describe("conflicts follow availability and never touch classes (AC4, AC9)", () 
 describe("owner home badge (AC10)", () => {
   it("counts conflicts for the owner and shows no link to anyone else", async () => {
     const { store } = await seed();
-    await handleCreateClass(deps(admin, store), cls(A, { startTime: "14:00" }));
+    await seedClass(store, cls(A, { startTime: "14:00" }));
     expect(await outsideAvailabilityCount(deps(admin, store))).toBeGreaterThan(0);
     expect(await outsideAvailabilityCount(deps(teacher, store))).toBeNull();
     expect(await outsideAvailabilityCount(deps({ scope: "none" }, store))).toBeNull();

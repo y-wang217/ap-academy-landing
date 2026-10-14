@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkClassShape, checkOccurrenceEditable } from "./edits";
+import { checkClassShape, checkNotPast, checkOccurrenceEditable } from "./edits";
 
 describe("checkOccurrenceEditable", () => {
   it("AC7: a past original date is rejected, today and future are fine", () => {
@@ -17,5 +17,12 @@ describe("checkClassShape", () => {
   it("AC14: may not cross local midnight, but may end at 24:00", () => {
     expect(checkClassShape("23:30", 60)).toEqual({ ok: false, status: 400, error: "crosses_midnight" });
     expect(checkClassShape("23:00", 60)).toEqual({ ok: true });
+  });
+});
+
+describe("checkNotPast (AC1)", () => {
+  it("rejects a start date before today only", () => {
+    expect(checkNotPast("2026-10-13", "2026-10-14")).toEqual({ ok: false, status: 422, error: "past_occurrence" });
+    expect(checkNotPast("2026-10-14", "2026-10-14")).toEqual({ ok: true });
   });
 });

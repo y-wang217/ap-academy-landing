@@ -452,6 +452,103 @@ try {
     await teacher.getByRole("heading", { name: "Kuby Test" }).isVisible() && await teacher.getByText("Sam Student").isVisible() && await teacher.getByText("Kim Kuby-Student").isVisible()
     && (await teacher.getByText(/Scheduled 1 h/).count()) >= 2);
   check("a student with no class in the week never appears", (await teacher.getByText("Nobody Booked").count()) === 0);
+
+  // Booking and drag-to-move (REQ-7) ---------------------------------------------------
+  // Ryan's Wednesday hours (copied from Monday above) hold 10:00, so Monday 10:00 can move there.
+  const RYAN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001";
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const heading = (iso) => { const d = new Date(`${iso}T00:00:00Z`); return `${DAYS[d.getUTCDay()]} ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`; };
+  const plus = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+  const wed = plus(classDay, 2);
+  await teacher.setViewportSize({ width: 1200, height: 900 });
+  await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${classDay}`);
+  const samCard = teacher.getByRole("button", { name: /Sam Student/ });
+  await samCard.waitFor({ timeout: 15000 });
+  const monBox = await samCard.boundingBox();
+  await teacher.mouse.move(monBox.x + monBox.width / 2, monBox.y + 8);
+  await teacher.mouse.down();
+  await teacher.mouse.move(monBox.x + monBox.width / 2 + monBox.width * 1.2, monBox.y + 8, { steps: 8 });
+  await teacher.mouse.move(monBox.x + monBox.width / 2 + monBox.width * 2, monBox.y + 8, { steps: 8 });
+  check("dragging shows a ghost with the day and time in words", await teacher.getByText(`${heading(wed)} 10:00-11:00`, { exact: true }).isVisible());
+  await teacher.mouse.up();
+  const ask = teacher.getByRole("dialog", { name: "Move this class?" });
+  await ask.waitFor({ timeout: 5000 });
+  check("a weekly class asks for the scope, with This class only preselected", await ask.getByLabel("This class only").isChecked());
+  await ask.getByRole("button", { name: "Move" }).click();
+  await teacher.getByText("Saving…").first().waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+  await teacher.reload();
+  const moved = teacher.getByRole("button", { name: /Sam Student/ });
+  await moved.waitFor({ timeout: 15000 });
+  await moved.click();
+  const details = teacher.getByRole("dialog").filter({ hasText: "Sam Student" });
+  check("after a reload the class is on Wednesday at the same time and length, marked moved",
+    (await details.textContent()).includes(heading(wed)) && (await details.textContent()).includes("10:00-11:00") && (await details.textContent()).includes("60 min") && /Moved/.test(await details.textContent()));
+  await teacher.keyboard.press("Escape");
+
+  // A refused save puts the card back and says why.
+  const atWed = await moved.boundingBox();
+  await teacher.route("**/api/scheduler/classes/**", (route) => (route.request().method() === "PATCH" ? route.fulfill({ status: 500, contentType: "application/json", body: "{}" }) : route.continue()));
+  await teacher.mouse.move(atWed.x + atWed.width / 2, atWed.y + 8);
+  await teacher.mouse.down();
+  await teacher.mouse.move(atWed.x + atWed.width / 2 + atWed.width, atWed.y + 8, { steps: 10 });
+  await teacher.mouse.up();
+  await teacher.getByText(/^Not saved/).waitFor({ timeout: 15000 });
+  const afterFail = await teacher.getByRole("button", { name: /Sam Student/ }).boundingBox();
+  // The error notice sits above the grid and pushes it down, so compare the column (x), then confirm the day in the details.
+  check("a failed save returns the card to its slot and shows an error", Math.abs(afterFail.x - atWed.x) < 2);
+  await teacher.unroute("**/api/scheduler/classes/**");
+
+  // Book a class on a phone, with the keyboard.
+  await teacher.setViewportSize({ width: 375, height: 800 });
+  await teacher.reload();
+  await teacher.getByRole("button", { name: "Book a class" }).focus();
+  await teacher.keyboard.press("Enter");
+  const form = teacher.getByRole("dialog", { name: "Book a class" });
+  await form.waitFor({ timeout: 5000 });
+  await form.getByLabel("Student").focus();
+  await teacher.keyboard.type("Nobody");
+  await form.getByLabel("Subject").fill("MPM2D");
+  await form.getByLabel("Date").fill(wed);
+  await form.getByLabel("Start time").fill("13:00");
+  check("the booking form fits a 375px screen", await teacher.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
+  await form.getByLabel("Duration in minutes").focus();
+  await teacher.keyboard.press("Enter");
+  const booked = await form.waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false);
+  check("the booking form closes after a keyboard submit", booked, booked ? "" : await form.getByRole("alert").textContent().catch(() => "no alert"));
+  // The desktop grid is in the DOM but hidden at 375px, so look only at what is visible.
+  await teacher.getByText("Nobody Booked").locator("visible=true").first().waitFor({ timeout: 15000 });
+  check("a booked class appears in the week after saving", await teacher.getByText("MPM2D").locator("visible=true").first().isVisible());
+
+  // A clash is refused with the slot in the message and nothing is booked.
+  await teacher.getByRole("button", { name: "Book a class" }).click();
+  const clash = teacher.getByRole("dialog", { name: "Book a class" });
+  await clash.getByLabel("Student").selectOption({ label: "Sam Student" });
+  await clash.getByLabel("Subject").fill("MHF4U");
+  await clash.getByLabel("Date").fill(wed);
+  await clash.getByLabel("Start time").fill("13:30");
+  await clash.getByRole("button", { name: "Book class" }).click();
+  await clash.getByRole("alert").waitFor({ timeout: 15000 });
+  check("a double-booked teacher is refused with a plain message", /already has a class/.test(await clash.getByRole("alert").textContent()));
+  await teacher.keyboard.press("Escape");
+
+  // Teachers cannot book or move: no controls, and the server says 403.
+  await ryan.setViewportSize({ width: 1200, height: 900 });
+  await ryan.goto(`${BASE}/schedule?date=${classDay}`);
+  await ryan.getByRole("button", { name: /Sam Student/ }).first().waitFor({ timeout: 15000 });
+  check("a teacher's week has no Book a class button and its cards are not draggable",
+    (await ryan.getByRole("button", { name: "Book a class" }).count()) === 0 && (await ryan.getByRole("button", { name: /Sam Student/ }).first().evaluate((el) => !el.className.includes("cursor-grab"))));
+  const teacherPatch = await ryan.evaluate(async ({ base, from, to }) => {
+    // Monday's class was dragged to Wednesday above, so look at the whole week and use the occurrence's own original date.
+    const list = await (await fetch(`${base}/api/scheduler/classes/occurrences?from=${from}&to=${to}`)).json();
+    const { seriesId: id, originalDate } = list.occurrences.find((o) => o.originalDate === from);
+    const res = await fetch(`${base}/api/scheduler/classes/${id}/occurrences/${originalDate}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId: crypto.randomUUID(), expectedUpdatedAt: "2026-01-01T00:00:00.000Z", scope: "this", changes: { startTime: "11:00" } }),
+    });
+    return res.status;
+  }, { base: BASE, from: classDay, to: plus(classDay, 6) });
+  check("a teacher's PATCH on a class is refused with 403", teacherPatch === 403);
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {

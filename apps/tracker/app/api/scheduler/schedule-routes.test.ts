@@ -10,6 +10,7 @@ import {
   handleOccurrences, handlePatchWindow, type ScheduleDeps,
 } from "../../../lib/scheduler/schedule-handlers";
 import type { ScheduleStore, SeriesRecord, StoreResult, WindowRecord } from "../../../lib/scheduler/schedule-store";
+import { seriesWrites } from "./series-writes.fake";
 
 const ORG = "10000000-0000-4000-8000-000000000001";
 const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -29,14 +30,18 @@ const teacher: SchedulerIdentity = { scope: "teacher", orgId: ORG, staff: ryan }
 const withoutRequestId = <T extends { requestId: string }>({ requestId, ...rest }: T) => (void requestId, rest);
 
 /** In-memory store with the semantics the database gives: request_id idempotency and updated_at tokens. */
-function fakeStore() {
+const openWeek = (staffId: string): WindowRecord[] =>
+  [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ id: REQ(900 + weekday), staffId, weekday, startTime: "00:00", endTime: "23:55", effectiveFrom: "2026-01-01", effectiveUntil: null, updatedAt: "2026-10-14T12:00:00.000Z" }));
+
+function fakeStore(opts: { open?: boolean } = {}) {
   const series = new Map<string, SeriesRecord>();
   const exceptions: (ClassException & { requestId: string })[] = [];
   const windows = new Map<string, WindowRecord>();
   const byRequest = new Map<string, string>();
   let n = 100;
   const store: ScheduleStore = {
-    listWindows: async (staffId) => [...windows.values()].filter((w) => w.staffId === staffId),
+    // REQ-7: classes are checked against availability, so created windows stay, and `open: true` makes Ryan and Kuby free all week.
+    listWindows: async (staffId) => [...windows.values(), ...(opts.open ? [A, B].flatMap(openWeek) : [])].filter((w) => w.staffId === staffId),
     listAvailabilityExceptions: async () => [],
     getWindow: async (id) => windows.get(id) ?? null,
     createWindow: async (input) => {
@@ -96,6 +101,7 @@ function fakeStore() {
       byRequest.set(input.requestId, rec.id);
       return { ok: true, value: rec, created: true };
     },
+    ...seriesWrites(series),
     // Summary storage arrives in REQ-4; these tests never adopt a student.
     listSeriesForStudent: async () => ({ series: [], exceptions: [] }),
     getSummary: async () => null,
@@ -120,7 +126,7 @@ const newClass = (over: Record<string, unknown> = {}) => ({
 
 describe("classes: create (AC8, AC12, AC14)", () => {
   it("admin creates (201), the retry returns the same record (200)", async () => {
-    const { store, series } = fakeStore();
+    const { store, series } = fakeStore({ open: true });
     const first = await json(await handleCreateClass(deps(admin, store), newClass()));
     expect(first.status).toBe(201);
     const again = await json(await handleCreateClass(deps(admin, store), newClass()));
@@ -130,18 +136,18 @@ describe("classes: create (AC8, AC12, AC14)", () => {
     expect(first.headers.get("cache-control")).toBe("no-store");
   });
   it("teachers cannot create classes (403)", async () => {
-    const { store, series } = fakeStore();
+    const { store, series } = fakeStore({ open: true });
     expect((await json(await handleCreateClass(deps(teacher, store), newClass()))).status).toBe(403);
     expect(series.size).toBe(0);
   });
   it("inactive or unknown staff is 422 invalid_staff", async () => {
-    const { store } = fakeStore();
+    const { store } = fakeStore({ open: true });
     for (const staffId of [inactive.id, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
       expect(await json(await handleCreateClass(deps(admin, store), newClass({ staffId })))).toMatchObject({ status: 422, body: { error: "invalid_staff" } });
     }
   });
   it("bad duration or midnight crossing is 400", async () => {
-    const { store } = fakeStore();
+    const { store } = fakeStore({ open: true });
     expect((await json(await handleCreateClass(deps(admin, store), newClass({ durationMinutes: 62 })))).status).toBe(400);
     expect((await json(await handleCreateClass(deps(admin, store), newClass({ startTime: "23:30" })))).status).toBe(400);
     expect((await json(await handleCreateClass(deps(admin, store), { subject: "x" }))).status).toBe(400);
@@ -151,7 +157,7 @@ describe("classes: create (AC8, AC12, AC14)", () => {
 
 describe("classes: occurrences (AC12, AC13, AC16)", () => {
   const seed = async () => {
-    const f = fakeStore();
+    const f = fakeStore({ open: true });
     await handleCreateClass(deps(admin, f.store), newClass());
     await handleCreateClass(deps(admin, f.store), newClass({ requestId: REQ(2), staffId: B, studentId: "ffffffff-ffff-4fff-8fff-ffffffffffff" }));
     return f;
@@ -195,7 +201,7 @@ describe("classes: occurrences (AC12, AC13, AC16)", () => {
 
 describe("classes: edits (AC3, AC4, AC5, AC7, AC9)", () => {
   const setup = async (over: Record<string, unknown> = {}) => {
-    const f = fakeStore();
+    const f = fakeStore({ open: true });
     const created = await json(await handleCreateClass(deps(admin, f.store), newClass(over)));
     return { ...f, id: created.body.series.id as string, stamp: created.body.series.updatedAt as string };
   };
@@ -235,7 +241,11 @@ describe("classes: edits (AC3, AC4, AC5, AC7, AC9)", () => {
     expect(series.size).toBe(2);
   });
   it("AC7: a past occurrence is 422 and writes nothing", async () => {
-    const { store, id, stamp, exceptions, series } = await setup({ startDate: "2026-10-05" });
+    // Classes can no longer be created in the past, so this one is seeded into the store.
+    const { store, series, exceptions } = fakeStore({ open: true });
+    const seeded = await store.createSeries({ ...newClass({ startDate: "2026-10-05" }), requestId: REQ(2) } as never);
+    if (!seeded.ok) throw new Error("seed failed");
+    const { id, updatedAt: stamp } = seeded.value;
     const r = await json(await handleCancelOccurrence(deps(admin, store), id, "2026-10-12", body(stamp)));
     expect(r).toMatchObject({ status: 422, body: { error: "past_occurrence" } });
     const f = await json(await handleEditOccurrence(deps(admin, store), id, "2026-10-12", body(stamp, { scope: "future", changes: {} })));
@@ -305,9 +315,13 @@ describe("AC15: scheduler modules never talk to Notion or write lessons, payouts
   const files = (dir: string): string[] =>
     readdirSync(dir).flatMap((f) => {
       const p = join(dir, f);
-      return statSync(p).isDirectory() ? files(p) : p.endsWith(".ts") && !p.endsWith(".test.ts") ? [p] : [];
+      return statSync(p).isDirectory() ? files(p) : /\.tsx?$/.test(p) && !p.endsWith(".test.ts") ? [p] : [];
     });
-  const targets = [...files(join(root, "lib/domain/schedule")), ...files(join(root, "lib/scheduler")), join(root, "lib/data/schedule.ts")];
+  // REQ-7 AC15: the booking UI and its view helpers are scanned too.
+  const targets = [
+    ...files(join(root, "lib/domain/schedule")), ...files(join(root, "lib/scheduler")), join(root, "lib/data/schedule.ts"),
+    ...files(join(root, "components/scheduler")).map((f) => f), join(root, "lib/view/drag.ts"), join(root, "lib/view/booking-text.ts"),
+  ];
   it("scans the new modules", () => {
     expect(targets.length).toBeGreaterThan(8);
     for (const file of targets) {

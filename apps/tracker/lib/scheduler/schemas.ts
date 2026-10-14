@@ -175,3 +175,16 @@ export const MonthlyReviewResponse = z.strictObject({
     sync: z.strictObject({ state: SyncState, stale: z.boolean() }),
   })),
 });
+
+// Booking (REQ-7) ---------------------------------------------------------------
+/** A rejected booking: where and why, never whose other class it hit. */
+export const BookingConflictResponse = z.strictObject({
+  error: z.literal("booking_conflict"),
+  problems: z.array(z.strictObject({
+    date: IsoDate,
+    startTime: Hhmm,
+    endTime: z.string(),
+    reason: z.enum(["teacher_busy", "student_busy", "outside_availability", "time_off", "availability_not_entered"]),
+  })).max(10),
+  more: z.number().int().min(0),
+});

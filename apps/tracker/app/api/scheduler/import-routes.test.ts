@@ -7,6 +7,7 @@ import type { StaffRecord } from "../../../lib/notion/staff";
 import type { StudentRecord } from "../../../lib/notion/students";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import { handleImportPreview, handleImportRun, handleMonthlyReview, handleSyncSummaries } from "../../../lib/scheduler/import-handlers";
+import { seriesWrites } from "./series-writes.fake";
 import { handleCancelOccurrence, handleCreateClass, handleEditOccurrence, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
 import type { ScheduleStore, SeriesRecord, StoreResult, SummaryPatch, SummaryRecord } from "../../../lib/scheduler/schedule-store";
 
@@ -30,7 +31,12 @@ function fakeStore() {
   const byRequest = new Map<string, string>();
   const log = { adopt: 0, markSummary: 0, createSeries: 0 };
   let n = 100;
+  // REQ-7: classes are checked against availability, so every teacher is open all week.
+  const openWeek = (staffId: string) => [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ id: REQ(900 + weekday), staffId, weekday, startTime: "00:00", endTime: "23:55", effectiveFrom: "2026-01-01", effectiveUntil: null, updatedAt: "2026-10-14T12:00:00.000Z" }));
   const store = {
+    listWindows: async (staffId?: string) => openWeek(staffId ?? T1),
+    listAvailabilityExceptions: async () => [],
+    ...seriesWrites(series),
     listSeries: async () => ({ series: [...series.values()], exceptions }),
     getSeries: async (id: string) => series.get(id) ?? null,
     getSeriesByRequest: async (r: string) => (byRequest.has(r) ? series.get(byRequest.get(r)!) ?? null : null),

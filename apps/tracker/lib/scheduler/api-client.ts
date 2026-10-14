@@ -6,7 +6,9 @@
  */
 export const SCHEDULER_API = "/tracker/api/scheduler";
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; message: string; stale: boolean };
+export type BookingProblemJson = { date: string; startTime: string; endTime: string; reason: string };
+export type ApiFailure = { ok: false; message: string; stale: boolean; status?: number; error?: string; problems?: BookingProblemJson[]; more?: number };
+export type ApiResult<T> = { ok: true; data: T } | ApiFailure;
 type FetchFn = typeof fetch;
 
 export function createApiClient(fetchFn: FetchFn = (...a) => fetch(...a)) {
@@ -19,7 +21,13 @@ export function createApiClient(fetchFn: FetchFn = (...a) => fetch(...a)) {
       const data = await res.json().catch(() => null);
       if (res.ok) return { ok: true, data: data as T };
       if (res.status === 409) return { ok: false, stale: true, message: "Someone else changed this. Showing the latest." };
-      return { ok: false, stale: false, message: "That did not save. Please try again." };
+      const failure: ApiFailure = { ok: false, stale: false, status: res.status, message: "That did not save. Please try again." };
+      if (data && typeof data === "object") {
+        if (typeof data.error === "string") failure.error = data.error;
+        if (Array.isArray(data.problems)) failure.problems = data.problems;
+        if (typeof data.more === "number") failure.more = data.more;
+      }
+      return failure;
     } catch {
       return { ok: false, stale: false, message: "Could not reach the server. Please try again." };
     }
@@ -31,7 +39,7 @@ export function createApiClient(fetchFn: FetchFn = (...a) => fetch(...a)) {
       const requestId = pending.get(key) ?? crypto.randomUUID();
       pending.set(key, requestId);
       const init: RequestInit = { method, headers: { "Content-Type": "application/json" } };
-      if (method !== "DELETE") init.body = JSON.stringify({ ...body, requestId });
+      init.body = JSON.stringify({ ...body, requestId });
       const r = await run<T>(path, init);
       if (r.ok || r.stale) pending.delete(key);
       return r;

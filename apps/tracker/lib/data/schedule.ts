@@ -98,6 +98,14 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
     return data ? parse(data) : null;
   }
 
+  // The same stale pattern as updateWindow: the version token is part of the WHERE, zero rows means 409 or 404.
+  const updateSeries = async (id: string, expected: string, patch: Record<string, unknown>): Promise<StoreResult<SeriesRecord>> => {
+    const { db } = await ctx();
+    const { data, error } = await db.tracker.from("class_series").update(patch).eq("id", id).eq("updated_at", expected).select();
+    if (error) return UNAVAILABLE;
+    if (data?.length) return { ok: true, value: SeriesRow.parse(data[0]), created: false };
+    return (await store.getSeries(id)) ? { ok: false, status: 409, error: "stale" } : { ok: false, status: 404, error: "not_found" };
+  };
   const store: ScheduleStore = {
     async listWindows(staffId) {
       const { db } = await ctx();
@@ -197,6 +205,14 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
         if (u.data) return { ok: true, value: ExceptionRow.parse(u.data), created: false };
       }
       return UNAVAILABLE;
+    }),
+    endSeries: (id, lastDate, expected) => guarded(async () => updateSeries(id, expected, { effective_until: lastDate })),
+    updateSeriesFields: (id, expected, f) => guarded(async () => {
+      const patch: Record<string, unknown> = {};
+      if (f.staffId !== undefined) patch.notion_staff_id = f.staffId;
+      if (f.subject !== undefined) patch.subject = f.subject;
+      if (f.durationMinutes !== undefined) patch.duration_minutes = f.durationMinutes;
+      return updateSeries(id, expected, patch);
     }),
     split: (i) => guarded(async () => {
       const { db } = await ctx();

@@ -18,11 +18,30 @@ export type CardData = {
   status: "scheduled" | "cancelled" | "moved";
   conflict: "outside_availability" | "time_off" | null;
   teacherName?: string;
+  /** Admin only: what an edit needs to name the class and its version. */
+  seriesId?: string;
+  staffId?: string;
+  seriesUpdatedAt?: string;
 };
 
+/** Pointer handlers the grid hands to a draggable card (admin, 768 px and up). */
+export type DragProps = Pick<React.HTMLAttributes<HTMLButtonElement>, "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onClick">;
+
 /** A class on the calendar: a button that opens a native dialog. Everything comes in as props; nothing is fetched here. */
-export function ClassCard({ card, className = "", style }: { card: CardData; className?: string; style?: React.CSSProperties }) {
+export function ClassCard({ card, className = "", style, drag, saving, today, onEdit, onCancel }: {
+  card: CardData;
+  className?: string;
+  style?: React.CSSProperties;
+  drag?: DragProps;
+  saving?: boolean;
+  /** Today in the schedule zone: past classes offer no Edit or Cancel. */
+  today?: string;
+  /** Admin only. Present: the dialog offers Edit and Cancel class. */
+  onEdit?: (card: CardData) => void;
+  onCancel?: (card: CardData) => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const { onClick: afterDrag, ...dragRest } = drag ?? {};
   const badges = cardStatus(card);
   const cancelled = card.status === "cancelled";
   const name = card.studentName ?? "Student";
@@ -31,13 +50,19 @@ export function ClassCard({ card, className = "", style }: { card: CardData; cla
     <>
       <button
         type="button"
-        onClick={() => dialog.current?.showModal()}
+        data-card={card.occurrenceKey}
+        onClick={(e) => {
+          afterDrag?.(e);
+          if (!e.defaultPrevented) dialog.current?.showModal();
+        }}
+        {...dragRest}
         style={style}
-        className={`overflow-hidden rounded-md border-2 bg-surface px-1.5 py-1 text-left text-xs leading-tight hover:bg-background focus:outline-2 focus:outline-accent ${border} ${className}`}
+        className={`overflow-hidden rounded-md border-2 bg-surface px-1.5 py-1 text-left text-xs leading-tight hover:bg-background focus:outline-2 focus:outline-accent ${border} ${drag ? "cursor-grab touch-none select-none" : ""} ${saving ? "opacity-70" : ""} ${className}`}
       >
         <span className={`block font-semibold ${cancelled ? "line-through" : ""}`}>{name}</span>
         <span className={`block ${cancelled ? "line-through" : ""}`}>{card.subject}</span>
         <span className={`block ${cancelled ? "line-through" : ""}`}>{card.startTime}-{card.endTime}</span>
+        {saving && <span className="block font-medium">Saving…</span>}
         {badges.filter((b) => b.label !== "Scheduled").map((b) => (
           <span key={b.label} className="block font-medium">
             <span aria-hidden="true">{b.icon} </span>{b.label}
@@ -65,6 +90,18 @@ export function ClassCard({ card, className = "", style }: { card: CardData; cla
             Close
           </button>
         </div>
+        {onEdit && onCancel && card.seriesId && card.originalDate >= (today ?? "") && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+            <button type="button" onClick={() => { dialog.current?.close(); onEdit(card); }} className="rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-background">
+              Edit
+            </button>
+            {card.status !== "cancelled" && (
+              <button type="button" onClick={() => { dialog.current?.close(); onCancel(card); }} className="rounded-full border border-border px-4 py-2 text-sm font-medium text-error hover:bg-background">
+                Cancel class
+              </button>
+            )}
+          </div>
+        )}
       </dialog>
     </>
   );
