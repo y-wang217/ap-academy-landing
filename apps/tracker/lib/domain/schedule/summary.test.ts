@@ -17,10 +17,10 @@ const series = (over: Partial<ClassSeries> & { splitFrom?: string | null } = {})
 describe("renderSummary", () => {
   it("AC10: one line per weekly series, Monday to Sunday, then time, then subject", () => {
     const text = renderSummary([
-      series({ startDate: "2026-10-16", startTime: "09:00", subject: "Z" }),
+      series({ startDate: "2026-10-09", startTime: "09:00", subject: "Z" }),
       series({ startDate: "2026-10-13", startTime: "17:30", subject: "B" }),
       series({ startDate: "2026-10-13", startTime: "17:30", subject: "A" }),
-      series({ startDate: "2026-10-18", startTime: "08:00", subject: "Sun" }),
+      series({ startDate: "2026-10-11", startTime: "08:00", subject: "Sun" }),
       series({ startDate: "2026-10-13", startTime: "08:15", durationMinutes: 45, subject: "Early" }),
     ], NAMES, TODAY);
     expect(text.split("\n")).toEqual([

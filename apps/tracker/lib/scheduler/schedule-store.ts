@@ -19,6 +19,22 @@ export type SplitInput = {
   changes: { staffId?: string; studentId?: string; subject?: string; startTime?: string; durationMinutes?: number; weekday?: number };
 };
 
+export type SummaryState = "pending" | "synced" | "failed";
+/** One row per adopted student: the scheduler owns their Weekly Schedule text from adoption on. */
+export type SummaryRecord = {
+  id: string;
+  studentId: string;
+  adoptedAt: string;
+  adoptedFromText: string;
+  lastWrittenText: string | null;
+  lastWrittenAt: string | null;
+  syncState: SummaryState;
+  lastError: string | null;
+  lastDriftText: string | null;
+};
+export type AdoptInput = { studentId: string; sourceText: string; series: NewSeries[] };
+export type SummaryPatch = { syncState: SummaryState; lastWrittenText?: string; lastError?: string | null; lastDriftText?: string };
+
 /**
  * Everything the scheduling handlers need from storage. The real one
  * (lib/data/schedule.ts) runs as the signed-in user, so RLS decides what is
@@ -42,4 +58,12 @@ export type ScheduleStore = {
   createSeries(input: NewSeries): Promise<StoreResult<SeriesRecord>>;
   upsertException(input: ClassException & { requestId: string }): Promise<StoreResult<ClassException>>;
   split(input: SplitInput): Promise<StoreResult<SeriesRecord>>;
+
+  /** Every series of one student, ended ones included, with all their exceptions. */
+  listSeriesForStudent(studentId: string): Promise<{ series: SeriesRecord[]; exceptions: ClassException[] }>;
+  getSummary(studentId: string): Promise<SummaryRecord | null>;
+  listSummaries(): Promise<SummaryRecord[]>;
+  /** One transaction: the student's series and the summary row, or nothing. A repeat returns the existing row. */
+  adoptStudent(input: AdoptInput): Promise<StoreResult<SummaryRecord>>;
+  markSummary(studentId: string, patch: SummaryPatch): Promise<boolean>;
 };
