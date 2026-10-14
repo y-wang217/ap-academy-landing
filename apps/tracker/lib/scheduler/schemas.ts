@@ -52,7 +52,11 @@ export const OccurrenceAdmin = OccurrenceTeacher.extend({ seriesUpdatedAt: z.str
 export const OccurrencesResponseTeacher = z.strictObject({ occurrences: z.array(OccurrenceTeacher) });
 export const OccurrencesResponseAdmin = z.strictObject({ occurrences: z.array(OccurrenceAdmin) });
 
+/** The result of regenerating a student's Weekly Schedule after a class write (REQ-4). */
+export const SummarySync = z.enum(["synced", "failed", "skipped"]);
+
 export const SeriesResponse = z.strictObject({
+  summarySync: SummarySync.optional(),
   series: z.strictObject({
     id: z.guid(),
     staffId: z.guid(),
@@ -87,5 +91,51 @@ export const AvailabilityResponse = z.strictObject({
     state: z.enum(["available", "unavailable", "not_entered"]),
     intervals: z.array(Interval),
     availableMinutes: z.number().int(),
+  })),
+});
+
+// Weekly Schedule import (REQ-4) ----------------------------------------------------
+// Admin only. Student names appear here and nowhere in Postgres.
+const RejectCode = z.enum([
+  "unparseable_day", "unparseable_time", "no_fixed_time", "invalid_duration", "missing_course", "missing_teacher",
+  "teacher_not_found", "teacher_ambiguous", "teacher_inactive", "extra_fields", "duplicate_line",
+]);
+const RepairLineOut = z.strictObject({ text: z.string(), status: z.union([z.literal("ok"), RejectCode]), hint: z.string().optional() });
+export const ImportPlanOut = z.strictObject({
+  ready: z.array(z.strictObject({ studentId: z.guid(), name: z.string(), lineCount: z.number().int() })),
+  repair: z.array(z.strictObject({ studentId: z.guid(), name: z.string(), lines: z.array(RepairLineOut) })),
+  skipped: z.array(z.strictObject({ studentId: z.guid() })),
+});
+const SyncState = z.enum(["pending", "synced", "failed"]);
+const AdoptedOut = z.strictObject({
+  studentId: z.guid(),
+  name: z.string().nullable(),
+  adoptedAt: z.string(),
+  syncState: SyncState,
+  lastError: z.string().nullable(),
+  lastWrittenAt: z.string().nullable(),
+  lastDriftText: z.string().nullable(),
+});
+export const ImportPreviewResponse = z.strictObject({ plan: ImportPlanOut, adopted: z.array(AdoptedOut) });
+export const ImportRunResponse = z.strictObject({
+  dryRun: z.boolean(),
+  plan: ImportPlanOut,
+  results: z.array(z.strictObject({ studentId: z.guid(), name: z.string(), status: z.enum(["adopted", "failed"]), summarySync: SummarySync })),
+});
+export const SyncSummariesResponse = z.strictObject({ results: z.array(z.strictObject({ studentId: z.guid(), summarySync: SummarySync })) });
+
+const ReviewItem = z.strictObject({ date: IsoDate, startTime: Hhmm, subject: z.string() });
+export const MonthlyReviewResponse = z.strictObject({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  students: z.array(z.strictObject({
+    studentId: z.guid(),
+    name: z.string().nullable(),
+    needsReview: z.boolean(),
+    cancelled: z.array(ReviewItem),
+    moved: z.array(z.strictObject({ originalDate: IsoDate, date: IsoDate, startTime: Hhmm, subject: z.string() })),
+    oneOff: z.array(ReviewItem),
+    from: z.array(ReviewItem),
+    until: z.array(ReviewItem),
+    sync: z.strictObject({ state: SyncState, stale: z.boolean() }),
   })),
 });

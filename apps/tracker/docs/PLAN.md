@@ -137,6 +137,7 @@ Each step is done only when lint, typecheck and tests pass.
 ## To do
 
 - Scheduler 2/8 (REQ-3): availability and class tables (migration 0010), recurrence engine and JSON endpoints are built. 0010 is not applied to the live database until Charlie signs off. No UI yet (ADR 0034).
+- Scheduler 3/8 (REQ-4): Weekly Schedule import, generated summary write-back and monthly review are built (migration 0011, ADR 0035, admin page `/scheduler/schedules`). Operator steps, in order: grant the Notion integration read and update on Students & Parents; Charlie signs off and 0011 is applied; add `| Teacher Name` to each live line (and a time to any `Tue 1h` line); press Check, then Import.
 
 Ideas with a go-ahead but no spec yet. Each becomes a step, with its prompt
 committed to `spec/` first, before any code.

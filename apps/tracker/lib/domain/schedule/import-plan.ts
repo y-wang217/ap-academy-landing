@@ -1,3 +1,4 @@
+import { isActiveTeachingStaff } from "../staff";
 import { normaliseScheduleText, parseScheduleLine, type RejectReason } from "./legacy-line";
 import { addDays, isoWeekday } from "./wallclock";
 
@@ -28,12 +29,9 @@ export type ImportPlan = {
 };
 
 const IN_SCOPE_STAGES = ["Active", "Onboarding"];
-const ACTIVE_STATUSES = ["Active", "Onboarding"];
-const TEACHING_FUNCTIONS = ["Teacher", "Trial Teacher"];
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-const isActiveTeaching = (s: StaffLike) =>
-  !!s.status && ACTIVE_STATUSES.includes(s.status) && s.functions.some((f) => TEACHING_FUNCTIONS.includes(f));
+const isActiveTeaching = (s: StaffLike) => isActiveTeachingStaff(s);
 
 function resolveTeacher(name: string, staff: StaffLike[]): { staffId: string } | { reason: RejectReason; hint?: string } {
   const key = norm(name);

@@ -340,7 +340,10 @@ describe("routes and source scans (AC18, AC4, AC21)", () => {
       .flatMap((t) => (statSync(t, { throwIfNoEntry: false })?.isDirectory() ? walk(t) : statSync(t, { throwIfNoEntry: false }) ? [t] : []));
     expect(targets.length).toBeGreaterThan(10);
     for (const file of targets) {
-      expect(readFileSync(file, "utf8"), file).not.toMatch(/\bOwner\b|Trial Teacher|6300f58a|payouts?\b/i);
+      const src = readFileSync(file, "utf8");
+      // The Notion property names, case sensitive: the org role "owner" is unrelated.
+      expect(src, file).not.toMatch(/\bOwner\b|Trial Teacher/);
+      expect(src, file).not.toMatch(/6300f58a|payouts?\b/i);
     }
   });
   it("only lib/notion/staff.ts and lib/notion/students.ts call Notion, and only students.ts writes", () => {
