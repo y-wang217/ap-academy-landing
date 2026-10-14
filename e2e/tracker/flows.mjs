@@ -588,7 +588,7 @@ try {
   // REQ-9: edit (this and future) and cancel (this, then this and future) as the admin, on Kuby's weekly class.
   const adminCall = (method, path, body) => teacher.evaluate(async ({ base, method, path, body }) => {
     const res = await fetch(`${base}/api/scheduler/${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId: crypto.randomUUID(), ...body }) });
-    return res.status;
+    return res.status === 200 || res.status === 201 ? res.status : `${res.status} ${(await res.text()).slice(0, 160)}`;
   }, { base: BASE, method, path, body });
   const kubyOccurrence = (date) => teacher.evaluate(async ({ base, date }) => {
     const list = await (await fetch(`${base}/api/scheduler/classes/occurrences?from=${date}&to=${date}`)).json();
@@ -596,12 +596,15 @@ try {
     return o ? { seriesId: o.seriesId, stamp: o.seriesUpdatedAt } : null;
   }, { base: BASE, date });
   const edited = await kubyOccurrence(plus(classDay, 14));
-  const editStatus = edited && await adminCall("PATCH", `classes/${edited.seriesId}/occurrences/${plus(classDay, 14)}`, { expectedUpdatedAt: edited.stamp, scope: "future", changes: { startTime: "14:30" } });
+  const editStatus = edited && await adminCall("PATCH", `classes/${edited.seriesId}/occurrences/${plus(classDay, 14)}`, { expectedUpdatedAt: edited.stamp, scope: "future", changes: { subject: "MPM2D" } });
   const cancelledOne = await kubyOccurrence(plus(classDay, 7));
   const cancelOne = cancelledOne && await adminCall("DELETE", `classes/${cancelledOne.seriesId}/occurrences/${plus(classDay, 7)}`, { expectedUpdatedAt: cancelledOne.stamp, scope: "this" });
   const cancelledRest = await kubyOccurrence(plus(classDay, 21));
   const cancelRest = cancelledRest && await adminCall("DELETE", `classes/${cancelledRest.seriesId}/occurrences/${plus(classDay, 21)}`, { expectedUpdatedAt: cancelledRest.stamp, scope: "future" });
-  check("the admin's edit (future), cancel (this) and cancel (future) all saved", editStatus === 200 && cancelOne === 200 && cancelRest === 200, `${editStatus}/${cancelOne}/${cancelRest}`);
+  // A weekly class for the student the booking flow already adopted, so a Weekly Schedule write really happens.
+  const weekly = await adminCall("POST", "classes", { staffId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0002", studentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003", subject: "MPM2D", kind: "weekly", startDate: plus(classDay, 3), startTime: "16:00", durationMinutes: 60, effectiveUntil: null });
+  check("the admin's edit (future), cancel (this), cancel (future) and a weekly booking all saved",
+    editStatus === 200 && cancelOne === 200 && cancelRest === 200 && (weekly === 201 || weekly === 200), `${editStatus}/${cancelOne}/${cancelRest}/${weekly}`);
 
   // REQ-9: nothing above reached Lessons or a payout field, and no other tracker table changed.
   const journal = await (await fetch(`${MOCK_NOTION}/__journal`)).json();

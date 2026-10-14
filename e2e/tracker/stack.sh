@@ -68,6 +68,7 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:54332
 ANTHROPIC_API_KEY=test-key-for-the-local-mock
 NOTION_TOKEN=test-token-for-the-local-mock
 NOTION_API_BASE=http://127.0.0.1:54333
+PG_URL=$PG_URL
 SCHEDULER_CRON_SECRET=e2e-cron-secret-not-for-production
 ENV
 cat "$state/env"
