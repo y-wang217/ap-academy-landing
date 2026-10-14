@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AllTeachersWeek } from "@/components/scheduler/all-teachers-week";
 import { WeekControls } from "@/components/scheduler/week-controls";
+import { WeekEditor } from "@/components/scheduler/week-editor";
 import { WeekGrid } from "@/components/scheduler/week-grid";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Notice, Page } from "@/components/ui";
@@ -46,6 +47,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   if (who.scope === "admin") {
     teachers = (await deps.fetchStaff().catch(() => [])).filter(isActiveTeachingStaff).map((s) => ({ id: s.id, name: s.name }));
   }
+  // Charlie's per-teacher week can book and move classes; his student picker is names only, loaded on the server.
+  let students: { id: string; name: string }[] | null = null;
+  if (who.scope === "admin" && !all) {
+    try {
+      const names = deps.studentNames ? await deps.studentNames() : null;
+      students = names ? [...names].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)) : null;
+    } catch {
+      students = null;
+    }
+  }
   const rows = body.teachers.map((t) => ({
     staff: { id: t.staff.id, name: t.staff.name },
     days: t.days,
@@ -72,7 +83,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             {shown.occurrences.some((o) => o.conflict) && <span className="font-medium"> · <span aria-hidden="true">⚠ </span>{shown.occurrences.filter((o) => o.conflict).length} outside hours</span>}
           </p>
           {shown.occurrences.length === 0 && <p className="text-sm text-text-muted">No classes this week.</p>}
-          <WeekGrid days={shown.days} occurrences={shown.occurrences} today={body.today} teacherName={who.scope === "admin" ? shown.staff.name : undefined} />
+          {who.scope === "admin" && teachers ? (
+            <WeekEditor days={shown.days} occurrences={shown.occurrences} today={body.today} teacher={shown.staff} teachers={teachers} students={students} />
+          ) : (
+            <WeekGrid days={shown.days} occurrences={shown.occurrences} today={body.today} />
+          )}
         </>
       )}
     </>,

@@ -1,3 +1,4 @@
+import type { ApiFailure } from "../scheduler/api-client";
 import { minutesOf, timeOf } from "../domain/schedule/wallclock";
 import { formatDayHeading } from "./availability-text";
 
@@ -20,4 +21,13 @@ export function bookingMessage(problems: Problem[], more: number, teacherName: s
   const rest = problems.length - 1 + more;
   const tail = rest > 0 ? ` ${rest} more ${rest === 1 ? "date has a problem" : "dates have problems"}.` : "";
   return `Not saved: ${text}${tail}`;
+}
+
+/** One sentence for any failed booking save, whatever the status. */
+export function saveErrorMessage(f: ApiFailure, teacherName: string): string {
+  if (f.stale) return f.message;
+  if (f.error === "booking_conflict") return bookingMessage(f.problems ?? [], f.more ?? 0, teacherName);
+  if (f.error === "past_occurrence") return "Not saved: that class has already started or passed.";
+  if (f.error === "moved_occurrence") return "Not saved: this class was already moved, so change only this class.";
+  return `Not saved. ${f.message}`;
 }

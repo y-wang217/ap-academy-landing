@@ -42,11 +42,24 @@ describe("api-client (AC11)", () => {
     expect(seen[3]).not.toBe(seen[2]);
     expect(fetchFn.mock.calls[0][0]).toBe(`${SCHEDULER_API}/windows`);
   });
-  it("DELETE sends no body; GET parses json", async () => {
+  it("DELETE sends its JSON body with the requestId (REQ-7 AC20: the cancel endpoint needs one); GET parses json", async () => {
     const fetchFn = vi.fn(async () => json(200, { ok: true }));
     const c = createApiClient(fetchFn as never);
-    await c.send("DELETE", "/windows/1", "k");
-    expect((fetchFn.mock.calls[0] as unknown as [string, RequestInit])[1].body).toBeUndefined();
+    await c.send("DELETE", "/classes/s/occurrences/2026-10-26", "k", { scope: "this" });
+    const body = JSON.parse((fetchFn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body).toMatchObject({ scope: "this" });
+    expect(body.requestId).toEqual(expect.any(String));
     expect(await c.get("/availability?x=1")).toEqual({ ok: true, data: { ok: true } });
+  });
+  it("a failure exposes status, error and the booking problems (REQ-7 AC20)", async () => {
+    const problems = [{ date: "2026-10-21", startTime: "16:00", endTime: "17:00", reason: "teacher_busy" }];
+    const c = createApiClient(vi.fn(async () => json(422, { error: "booking_conflict", problems, more: 2 })) as never);
+    expect(await c.send("PATCH", "/x", "k", {})).toMatchObject({ ok: false, stale: false, status: 422, error: "booking_conflict", problems, more: 2 });
+  });
+  it("a double-submit of the same action key sends one requestId", async () => {
+    const ids: string[] = [];
+    const c = createApiClient(vi.fn(async (_u: string, init: RequestInit) => { ids.push(JSON.parse(init.body as string).requestId); return json(503, {}); }) as never);
+    await Promise.all([c.send("DELETE", "/x", "cancel:1", {}), c.send("DELETE", "/x", "cancel:1", {})]);
+    expect(ids[0]).toBe(ids[1]);
   });
 });

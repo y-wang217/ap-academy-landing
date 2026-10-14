@@ -315,9 +315,13 @@ describe("AC15: scheduler modules never talk to Notion or write lessons, payouts
   const files = (dir: string): string[] =>
     readdirSync(dir).flatMap((f) => {
       const p = join(dir, f);
-      return statSync(p).isDirectory() ? files(p) : p.endsWith(".ts") && !p.endsWith(".test.ts") ? [p] : [];
+      return statSync(p).isDirectory() ? files(p) : /\.tsx?$/.test(p) && !p.endsWith(".test.ts") ? [p] : [];
     });
-  const targets = [...files(join(root, "lib/domain/schedule")), ...files(join(root, "lib/scheduler")), join(root, "lib/data/schedule.ts")];
+  // REQ-7 AC15: the booking UI and its view helpers are scanned too.
+  const targets = [
+    ...files(join(root, "lib/domain/schedule")), ...files(join(root, "lib/scheduler")), join(root, "lib/data/schedule.ts"),
+    ...files(join(root, "components/scheduler")).map((f) => f), join(root, "lib/view/drag.ts"), join(root, "lib/view/booking-text.ts"),
+  ];
   it("scans the new modules", () => {
     expect(targets.length).toBeGreaterThan(8);
     for (const file of targets) {
