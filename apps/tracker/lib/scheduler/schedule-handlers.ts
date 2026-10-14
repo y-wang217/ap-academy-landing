@@ -216,6 +216,12 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
   if (isResponse(g)) return g;
   const p = EditBody.safeParse(body);
   if (!p.success) return bad();
+  // A retried split must find its first result before any check on the old
+  // series, which now ends before this date (AC8).
+  if (p.data.scope === "future" && Guid.safeParse(seriesId).success) {
+    const done = await deps.store.getSeriesByRequest(p.data.requestId);
+    if (done && done.splitFrom === seriesId) return send(200, SeriesResponse.parse(seriesBody(done)));
+  }
   const series = await loadOccurrence(deps, seriesId, date);
   if (isRes(series)) return series;
   const c = p.data.changes;

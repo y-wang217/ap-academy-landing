@@ -157,6 +157,11 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
       return { series, exceptions: exceptions.filter((e) => ids.has(e.seriesId)) };
     },
     getSeries: (id) => getOne("class_series", id, (r) => SeriesRow.parse(r)),
+    async getSeriesByRequest(requestId) {
+      const { db, orgId } = await ctx();
+      const { data } = await db.tracker.from("class_series").select().eq("org_id", orgId).eq("request_id", requestId).maybeSingle();
+      return data ? SeriesRow.parse(data) : null;
+    },
     createSeries: (i) => guarded(() => insertOnce("class_series", {
       request_id: i.requestId, notion_staff_id: i.staffId, notion_student_id: i.studentId, subject: i.subject, kind: i.kind,
       start_date: i.startDate, start_time: i.startTime, duration_minutes: i.durationMinutes, effective_until: i.effectiveUntil,

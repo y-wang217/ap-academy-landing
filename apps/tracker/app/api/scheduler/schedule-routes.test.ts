@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ClassException } from "../../../lib/domain/schedule/recurrence";
+import { addDays } from "../../../lib/domain/schedule/wallclock";
 import type { StaffRecord } from "../../../lib/notion/staff";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import {
@@ -79,12 +80,20 @@ function fakeStore() {
       else exceptions.push(input);
       return { ok: true, value: input, created: i < 0 };
     },
+    getSeriesByRequest: async (requestId) => {
+      const id = byRequest.get(requestId);
+      return id ? series.get(id) ?? null : null;
+    },
     split: async (input): Promise<StoreResult<SeriesRecord>> => {
+      const done = byRequest.get(input.requestId);
+      if (done) return { ok: true, value: series.get(done)!, created: false };
       const old = series.get(input.seriesId);
       if (!old) return { ok: false, status: 404, error: "not_found" };
       if (old.updatedAt !== input.expectedUpdatedAt) return { ok: false, status: 409, error: "stale" };
       const rec: SeriesRecord = { ...old, ...input.changes, id: REQ(++n), startDate: input.fromDate, splitFrom: old.id, updatedAt: "2026-10-14T14:00:00.000Z" };
       series.set(rec.id, rec);
+      old.effectiveUntil = addDays(input.fromDate, -1);
+      byRequest.set(input.requestId, rec.id);
       return { ok: true, value: rec, created: true };
     },
   };
@@ -208,6 +217,16 @@ describe("classes: edits (AC3, AC4, AC5, AC7, AC9)", () => {
     expect(r.status).toBe(200);
     expect(series.size).toBe(2);
     expect(r.body.series.splitFrom).toBe(id);
+  });
+  it("AC8: a retried split returns the same new series, though the old series now ends before that date", async () => {
+    const { store, id, stamp, series } = await setup();
+    const send = () => handleEditOccurrence(deps(admin, store), id, "2026-11-02", body(stamp, { scope: "future", changes: { startTime: "16:00" } }));
+    const first = await json(await send());
+    const retry = await json(await send());
+    expect(first.status).toBe(200);
+    expect(retry.status).toBe(200);
+    expect(retry.body.series.id).toBe(first.body.series.id);
+    expect(series.size).toBe(2);
   });
   it("AC7: a past occurrence is 422 and writes nothing", async () => {
     const { store, id, stamp, exceptions, series } = await setup({ startDate: "2026-10-05" });

@@ -37,6 +37,8 @@ export type ScheduleStore = {
 
   listSeries(range: { from: string; to: string }, staffId?: string): Promise<{ series: SeriesRecord[]; exceptions: ClassException[] }>;
   getSeries(id: string): Promise<SeriesRecord | null>;
+  /** The series a create or split with this request ID produced, if any. */
+  getSeriesByRequest(requestId: string): Promise<SeriesRecord | null>;
   createSeries(input: NewSeries): Promise<StoreResult<SeriesRecord>>;
   upsertException(input: ClassException & { requestId: string }): Promise<StoreResult<ClassException>>;
   split(input: SplitInput): Promise<StoreResult<SeriesRecord>>;
