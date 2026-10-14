@@ -44,3 +44,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0037](0037-teachers-see-own-student-names.md) | Teachers see the names of their own scheduled students | accepted |
 | [0038](0038-booking-validation.md) | Bookings are checked on the server before any write | accepted |
 | [0039](0039-daily-teacher-texts-task.md) | The daily teacher-texts task is one Notion page per date, kept apart by a lease | accepted |
+| [0040](0040-lesson-link-extension-point.md) | A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet | accepted |

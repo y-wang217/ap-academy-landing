@@ -73,13 +73,28 @@ const dump = () => ({
     })),
   })),
 });
-function readBody(req) {
-  return new Promise((resolve) => {
+// The body is buffered once, up front, so the journal and the handlers can both read it.
+const readBody = async (req) => (req.rawBody ? JSON.parse(req.rawBody) : {});
+const bufferBody = (req) =>
+  new Promise((resolve) => {
     let raw = "";
     req.on("data", (c) => (raw += c));
-    req.on("end", () => resolve(raw ? JSON.parse(raw) : {}));
+    req.on("end", () => { req.rawBody = raw; resolve(); });
   });
-}
+
+// REQ-9: every request the tracker makes, in order, and one Lessons page that must never be requested or changed.
+const journal = [];
+const LESSONS_DS = "6300f58a-8b8c-4789-88c1-e44272079b0f";
+const LESSON_ID = "cccccccc-cccc-4ccc-8ccc-cccccccc0001";
+const LESSON = {
+  id: LESSON_ID,
+  properties: {
+    Lesson: { title: [{ plain_text: "Seeded lesson" }] },
+    "Paid to Teacher": { checkbox: true },
+    "Pay Period": { select: { name: "2026-10" } },
+    "Duration (hrs)": { number: 1 },
+  },
+};
 
 async function workApi(req, res) {
   const url = req.url ?? "";
@@ -138,6 +153,12 @@ async function workApi(req, res) {
 
 http.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
+  if (req.method === "GET" && req.url === "/__journal") return res.end(JSON.stringify(journal));
+  await bufferBody(req);
+  if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
+  // Read-only: the seeded lesson answers a GET and nothing else.
+  if (req.method === "GET" && req.url === `/v1/pages/${LESSON_ID}`) return res.end(JSON.stringify(LESSON));
+  if ((req.url ?? "").includes(LESSON_ID) || (req.url ?? "").includes(LESSONS_DS)) { res.statusCode = 405; return res.end(JSON.stringify({ object: "error", status: 405 })); }
   if (await workApi(req, res)) return;
   const pageId = /^\/v1\/pages\/([0-9a-f-]{36})(\?.*)?$/.exec(req.url ?? "")?.[1];
   if (pageId && schedule.has(pageId)) {
@@ -146,13 +167,9 @@ http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "PATCH") {
-      let raw = "";
-      req.on("data", (c) => (raw += c));
-      req.on("end", () => {
-        const text = JSON.parse(raw || "{}").properties?.["Weekly Schedule"]?.rich_text?.[0]?.text?.content ?? "";
-        schedule.set(pageId, text);
-        res.end(JSON.stringify(studentPage(pageId)));
-      });
+      const text = (await readBody(req)).properties?.["Weekly Schedule"]?.rich_text?.[0]?.text?.content ?? "";
+      schedule.set(pageId, text);
+      res.end(JSON.stringify(studentPage(pageId)));
       return;
     }
   }
