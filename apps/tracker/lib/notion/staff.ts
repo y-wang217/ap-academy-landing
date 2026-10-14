@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { NOTION_VERSION, type NotionConfig } from "./config";
+import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig } from "./config";
 
 /**
  * The Staff list from Notion, read with plain fetch (no SDK). Every property
@@ -61,7 +61,7 @@ export async function fetchStaff(config: NotionConfig, fetcher: typeof fetch = f
   for (let guard = 0; guard < 50; guard++) {
     let res: Response;
     try {
-      res = await fetcher(`https://api.notion.com/v1/data_sources/${config.dataSourceId}/query`, {
+      res = await fetcher(`${notionApiBaseOverride() ?? "https://api.notion.com"}/v1/data_sources/${config.dataSourceId}/query`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${config.token}`,

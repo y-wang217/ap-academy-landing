@@ -7,8 +7,9 @@ import { isActiveTeachingStaff } from "../domain/staff";
 import type { StaffRecord } from "../notion/staff";
 import { assertStaffAccess, requireScheduler, type Allowed, type Denial } from "./guard";
 import type { HandlerDeps } from "./handlers";
+import { findConflicts, type StaffAvailability } from "../domain/schedule/conflicts";
 import {
-  AvailabilityExceptionResponse, AvailabilityResponse, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WindowResponse,
+  AvailabilityExceptionResponse, AvailabilityResponse, ConflictsResponseAdmin, ConflictsResponseTeacher, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WindowResponse,
 } from "./schemas";
 import type { ScheduleStore, SeriesRecord, StoreError } from "./schedule-store";
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
@@ -160,6 +161,57 @@ export async function handleDeleteAvailabilityException(deps: ScheduleDeps, id: 
   const access = assertStaffAccess(g.identity, current.staffId);
   if (!access.ok) return deny(access);
   return (await deps.store.deleteAvailabilityException(id)) ? send(200, { ok: true }) : send(404, { error: "not_found" });
+}
+
+// Conflicts ----------------------------------------------------------------------
+
+/**
+ * Upcoming classes outside their teacher's availability, computed on read and
+ * never stored. Read-only: no class or availability write happens here. The
+ * conflicts page, the owner's home badge and the route all share this.
+ */
+export async function loadConflicts(
+  deps: ScheduleDeps,
+  identity: Allowed["identity"],
+  range: { from: string; to: string },
+  staffId?: string,
+) {
+  const scope = identity.scope === "teacher" ? identity.staff.id : staffId;
+  const { series, exceptions } = await deps.store.listSeries(range, scope);
+  const occurrences = expandOccurrences(series, exceptions, range);
+  const [windows, avExceptions] = await Promise.all([
+    deps.store.listWindows(scope),
+    deps.store.listAvailabilityExceptions(scope, range),
+  ]);
+  const availability = new Map<string, StaffAvailability>();
+  for (const id of new Set(series.map((s) => s.staffId))) {
+    const ex = avExceptions.filter((e) => e.staffId === id);
+    availability.set(id, { days: computeAvailability(windows.filter((w) => w.staffId === id), ex, range), exceptions: ex });
+  }
+  const { conflicts, notEntered } = findConflicts(occurrences, availability, deps.today());
+  const stamp = new Map(series.map((s) => [s.id, s.updatedAt]));
+  return {
+    conflicts: conflicts.map((c) => ({ ...c.occurrence, reason: c.reason, seriesUpdatedAt: stamp.get(c.occurrence.seriesId) })),
+    notEntered,
+  };
+}
+
+export async function handleConflicts(deps: ScheduleDeps, q: URLSearchParams): Promise<Response> {
+  const g = await gate(deps, ["admin", "teacher"]);
+  if (isResponse(g)) return g;
+  const range = parseRange(q);
+  if (!range) return bad();
+  const asked = q.get("staffId");
+  if (asked !== null && !Guid.safeParse(asked).success) return bad();
+  if (asked !== null) {
+    const access = assertStaffAccess(g.identity, asked);
+    if (!access.ok) return deny(access);
+  }
+  const { conflicts, notEntered } = await loadConflicts(deps, g.identity, range, asked ?? undefined);
+  if (g.identity.scope === "teacher") {
+    return send(200, ConflictsResponseTeacher.parse({ conflicts: conflicts.map(({ seriesUpdatedAt, ...rest }) => (void seriesUpdatedAt, rest)) }));
+  }
+  return send(200, ConflictsResponseAdmin.parse({ conflicts, notEntered }));
 }
 
 // Classes ------------------------------------------------------------------------

@@ -25,3 +25,14 @@ export function readStudentsConfig(): NotionConfig | null {
   if (!token) return null;
   return { token, dataSourceId: process.env.NOTION_STUDENTS_DATA_SOURCE_ID || DEFAULT_STUDENTS_DATA_SOURCE_ID };
 }
+
+/**
+ * Override for where Notion's API lives, or null for the real one (the default
+ * stays in staff.ts). Server env only. The e2e stack points it at a local mock
+ * so the scheduler runs without a token that can reach Notion. Never read from
+ * a request.
+ */
+export function notionApiBaseOverride(): string | null {
+  const v = process.env.NOTION_API_BASE;
+  return v ? v.replace(/\/$/, "") : null;
+}

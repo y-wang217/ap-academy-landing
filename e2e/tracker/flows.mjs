@@ -352,6 +352,67 @@ try {
   check("a change that changes nothing is left out of the draft", (await whole.getByText("Lab report", { exact: true }).count()) === 0);
   await whole.getByRole("button", { name: "Discard" }).click();
   await whole.getByRole("button", { name: "Draft changes" }).waitFor({ timeout: 15000 });
+
+  // Scheduler availability (REQ-5) ---------------------------------------------------
+  const ryan = await signedIn(browser, "ryan@example.com");
+  await ryan.goto(`${BASE}`);
+  await ryan.getByRole("link", { name: "Set your availability" }).click();
+  await ryan.waitForURL(/\/schedule\/availability$/);
+  check("a scheduler teacher gets a link and lands on their own availability", (await ryan.getByRole("combobox", { name: "Teacher" }).count()) === 0 && (await ryan.locator("h1").textContent()) === "Your availability");
+  const dayOf = (page, name) => page.locator("li", { has: page.getByRole("heading", { name, exact: true }) });
+  const monday = dayOf(ryan, "Monday");
+  await monday.getByRole("button", { name: /Add hours/ }).click();
+  await monday.getByRole("button", { name: "Save Monday new window" }).click();
+  await monday.getByLabel("Monday new window start").waitFor({ state: "detached", timeout: 15000 });
+  await monday.getByRole("button", { name: /Add hours/ }).click();
+  await monday.getByLabel("Monday new window start").fill("13:00");
+  await monday.getByLabel("Monday new window end").fill("17:00");
+  await monday.getByRole("button", { name: "Save Monday new window" }).click();
+  await monday.getByLabel("Monday new window start").waitFor({ state: "detached", timeout: 15000 });
+  await monday.getByRole("button", { name: /Copy to/ }).click();
+  await monday.getByLabel("Wednesday", { exact: true }).check();
+  await monday.getByLabel("Friday", { exact: true }).check();
+  await monday.getByRole("button", { name: "Copy", exact: true }).click();
+  await ryan.getByText("Copied", { exact: true }).waitFor({ timeout: 15000 });
+  const offDate = isoIn(5);
+  await ryan.getByLabel("Date").fill(offDate);
+  await ryan.getByRole("button", { name: "Add", exact: true }).click();
+  await ryan.getByText("(all day)", { exact: false }).first().waitFor({ timeout: 15000 });
+  await ryan.reload();
+  await ryan.getByRole("heading", { name: "Weekly hours" }).waitFor();
+  const hours = async (name) => dayOf(ryan, name).locator("input[type=time]").evaluateAll((els) => els.map((e) => e.value));
+  check("two Monday windows saved and copied to Wednesday and Friday, after a reload",
+    JSON.stringify(await hours("Monday")) === JSON.stringify(["09:00", "12:00", "13:00", "17:00"])
+    && JSON.stringify(await hours("Wednesday")) === JSON.stringify(["09:00", "12:00", "13:00", "17:00"])
+    && JSON.stringify(await hours("Friday")) === JSON.stringify(["09:00", "12:00", "13:00", "17:00"]));
+  const preview = section(ryan, "Next 14 days");
+  check("the day off shows as Time off in the 14-day preview", (await preview.locator("li", { hasText: "Time off" }).count()) >= 1);
+  check("preview states carry text, not colour alone", (await preview.getByText("Unavailable").count()) >= 1 && (await preview.getByText(/Available 09:00-12:00, 13:00-17:00/).count()) >= 1);
+  check("no horizontal scroll at 375px", await ryan.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
+  // Keyboard only: add, save and remove a Sunday window.
+  const sunday = dayOf(ryan, "Sunday");
+  await sunday.getByRole("button", { name: /Add hours/ }).focus();
+  await ryan.keyboard.press("Enter");
+  await sunday.getByRole("button", { name: "Save Sunday new window" }).focus();
+  await ryan.keyboard.press("Space");
+  await sunday.getByLabel("Sunday new window start").waitFor({ state: "detached", timeout: 15000 });
+  await sunday.getByRole("button", { name: "Remove Sunday window 1" }).focus();
+  await ryan.keyboard.press("Enter");
+  await ryan.waitForFunction(() => document.querySelectorAll("li input[type=time]").length === 12);
+  check("a window can be added, saved and removed with the keyboard", (await hours("Sunday")).length === 0);
+
+  // Removing the window under the seeded Monday 10:00 class flags it, and moves nothing.
+  await monday.getByRole("button", { name: "Remove Monday window 1" }).click();
+  await ryan.waitForFunction(() => document.querySelectorAll("li input[type=time]").length === 10);
+  await ryan.reload();
+  const outsideNotice = ryan.getByText(/of your classes (is|are) outside your hours/);
+  await outsideNotice.waitFor({ timeout: 15000 }).catch(() => {});
+  check("the teacher is told about classes outside their hours", await outsideNotice.isVisible());
+  await teacher.goto(`${BASE}`);
+  const badge = teacher.getByRole("link", { name: /Teacher availability/ });
+  check("the owner's home shows the conflict badge", /outside availability/.test(await badge.textContent()));
+  await teacher.goto(`${BASE}/schedule/conflicts`);
+  check("the conflicts page lists the class with teacher, time and reason", (await teacher.getByText("Ryan Test", { exact: false }).count()) >= 1 && await teacher.getByText("10:00-11:00", { exact: false }).first().isVisible() && await teacher.getByText("Outside available hours").first().isVisible());
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {
