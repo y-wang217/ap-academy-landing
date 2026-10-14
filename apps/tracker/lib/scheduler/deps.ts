@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getDb } from "../data/client";
 import { createScheduleStore } from "../data/schedule";
 import { todayIso } from "../time";
-import { getStaffList } from "../notion/cached";
+import { getStaffList, getStudentNames } from "../notion/cached";
 import { notionConfigured, readStudentsConfig } from "../notion/config";
 import { fetchScheduledStudents, fetchStudentSchedule, writeWeeklySchedule } from "../notion/students";
 import type { HandlerDeps } from "./handlers";
@@ -61,5 +61,6 @@ export function realScheduleDeps(): ScheduleDeps {
         write: (pageId: string, text: string) => writeWeeklySchedule(config, pageId, text),
       }
     : undefined;
-  return { ...base, identity, store, today: () => todayIso(), students };
+  const studentNames = config ? async () => new Map(await getStudentNames()) : undefined;
+  return { ...base, identity, store, today: () => todayIso(), students, studentNames };
 }

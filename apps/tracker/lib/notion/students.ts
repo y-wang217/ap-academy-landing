@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { NOTION_VERSION, type NotionConfig } from "./config";
+import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig } from "./config";
 import { NotionError } from "./staff";
 
 /**
@@ -13,7 +13,8 @@ import { NotionError } from "./staff";
  */
 export type StudentRecord = { id: string; name: string; stage: string; weeklySchedule: string };
 
-const BASE = "https://api.notion.com/v1";
+// The e2e stack points this at a local mock; production leaves the override unset.
+const BASE = `${notionApiBaseOverride() ?? "https://api.notion.com"}/v1`;
 const NAME = "Student Name";
 const STAGE = "Stage";
 const SCHEDULE = "Weekly Schedule";
@@ -57,12 +58,12 @@ async function call(fetcher: typeof fetch, url: string, init: RequestInit): Prom
 const Schema = z.object({ properties: z.record(z.string(), z.object({ id: z.string() })) });
 
 /** filter_properties takes property IDs, so look the three IDs up from the schema. */
-async function propertyIds(config: NotionConfig, fetcher: typeof fetch): Promise<string[]> {
+async function propertyIds(config: NotionConfig, fetcher: typeof fetch, names: string[] = [NAME, STAGE, SCHEDULE]): Promise<string[]> {
   const res = await call(fetcher, `${BASE}/data_sources/${config.dataSourceId}`, { method: "GET", headers: headers(config) });
   if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
   const parsed = Schema.safeParse(await res.json().catch(() => null));
   if (!parsed.success) throw new NotionError("Unexpected Notion response");
-  const ids = [NAME, STAGE, SCHEDULE].map((n) => parsed.data.properties[n]?.id);
+  const ids = names.map((n) => parsed.data.properties[n]?.id);
   if (ids.some((i) => !i)) throw new NotionError("Students database is missing a needed property");
   return ids as string[];
 }
@@ -92,6 +93,36 @@ export async function fetchScheduledStudents(config: NotionConfig, fetcher: type
     if (!parsed.success) throw new NotionError("Unexpected Notion response");
     for (const raw of parsed.data.results) {
       if (Page.safeParse(raw).success) out.push(parseStudentPage(raw));
+    }
+    if (!parsed.data.has_more || !parsed.data.next_cursor) return out;
+    cursor = parsed.data.next_cursor;
+  }
+  throw new NotionError("Too many Notion pages");
+}
+
+const NamePage = z.object({ id: z.guid(), properties: z.object({ [NAME]: z.object({ title: z.array(z.object({ plain_text: z.string() })) }) }) });
+
+/**
+ * Names only (REQ-6): Student Name for Active and Onboarding students. The
+ * Weekly Schedule text is never requested on this path. Used for the calendar.
+ */
+export async function fetchStudentNames(config: NotionConfig, fetcher: typeof fetch = fetch): Promise<Map<string, string>> {
+  const ids = await propertyIds(config, fetcher, [NAME]);
+  const filter = { or: ["Active", "Onboarding"].map((name) => ({ property: STAGE, select: { equals: name } })) };
+  const out = new Map<string, string>();
+  let cursor: string | undefined;
+  for (let guard = 0; guard < 50; guard++) {
+    const res = await call(fetcher, `${BASE}/data_sources/${config.dataSourceId}/query?${filterQuery(ids)}`, {
+      method: "POST",
+      headers: headers(config, true),
+      body: JSON.stringify({ page_size: 100, filter, ...(cursor ? { start_cursor: cursor } : {}) }),
+    });
+    if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+    const parsed = Response_.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new NotionError("Unexpected Notion response");
+    for (const raw of parsed.data.results) {
+      const page = NamePage.safeParse(raw);
+      if (page.success) out.set(page.data.id, plain(page.data.properties[NAME].title).trim());
     }
     if (!parsed.data.has_more || !parsed.data.next_cursor) return out;
     cursor = parsed.data.next_cursor;

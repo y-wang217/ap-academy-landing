@@ -13,3 +13,8 @@ insert into tracker.staff_links (org_id, notion_staff_id, email, approved_by) va
 insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values
   ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001', 'MHF4U', 'weekly',
    current_date + 7 + ((8 - extract(isodow from current_date)::int) % 7), '10:00', 60, '00000000-0000-0000-0000-00000000aaaa');
+
+-- REQ-6: a second teacher's class (Kuby, student 0002), Mondays 14:00, same start rule.
+insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values
+  ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0002', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002', 'SCH4U', 'weekly',
+   current_date + 7 + ((8 - extract(isodow from current_date)::int) % 7), '14:00', 60, '00000000-0000-0000-0000-00000000aaaa');

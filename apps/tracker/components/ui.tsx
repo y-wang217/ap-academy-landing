@@ -13,9 +13,9 @@ export const secondaryButtonClass =
   "inline-flex items-center justify-center rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium text-text-primary hover:bg-background disabled:opacity-50";
 export const linkClass = "text-accent underline underline-offset-2";
 
-export function Page({ title, back, children, aside }: { title: string; back?: { href: string; label: string }; children: ReactNode; aside?: ReactNode }) {
+export function Page({ title, back, children, aside, wide }: { title: string; back?: { href: string; label: string }; children: ReactNode; aside?: ReactNode; wide?: boolean }) {
   return (
-    <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-4 py-6">
+    <main className={`mx-auto flex w-full ${wide ? "max-w-[1200px]" : "max-w-[720px]"} flex-col gap-6 px-4 py-6`}>
       {back && (
         <Link href={back.href} className="text-sm text-text-muted underline underline-offset-2">
           {back.label}

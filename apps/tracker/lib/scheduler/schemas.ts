@@ -58,6 +58,36 @@ export const ConflictAdmin = OccurrenceAdmin.extend({ reason: ConflictReason }).
 export const ConflictsResponseTeacher = z.strictObject({ conflicts: z.array(ConflictTeacher) });
 export const ConflictsResponseAdmin = z.strictObject({ conflicts: z.array(ConflictAdmin), notEntered: z.array(z.guid()) });
 
+// Weekly calendar (REQ-6) -------------------------------------------------------------
+const WeekExtras = { studentName: z.string().nullable(), conflict: ConflictReason.nullable() };
+export const WeekOccurrenceTeacher = OccurrenceTeacher.extend(WeekExtras).strict();
+export const WeekOccurrenceAdmin = OccurrenceAdmin.extend(WeekExtras).strict();
+const WeekDay = z.strictObject({
+  date: IsoDate,
+  state: z.enum(["available", "unavailable", "not_entered"]),
+  intervals: z.array(Interval),
+  availableMinutes: z.number().int(),
+});
+export const WeekTotals = z.strictObject({
+  scheduledMinutes: z.number().int(),
+  availableMinutes: z.number().int().nullable(),
+  remainingMinutes: z.number().int().nullable(),
+});
+export const WeekResponseTeacher = z.strictObject({
+  weekStart: IsoDate,
+  today: IsoDate,
+  namesLoaded: z.boolean(),
+  teachers: z.array(z.strictObject({ staff: StaffPublicTeacher, days: z.array(WeekDay), occurrences: z.array(WeekOccurrenceTeacher), totals: WeekTotals })),
+});
+export const WeekResponseAdmin = z.strictObject({
+  weekStart: IsoDate,
+  today: IsoDate,
+  namesLoaded: z.boolean(),
+  teachers: z.array(z.strictObject({ staff: StaffPublicAdmin, days: z.array(WeekDay), occurrences: z.array(WeekOccurrenceAdmin), totals: WeekTotals })),
+});
+export type WeekResponseAdminT = z.infer<typeof WeekResponseAdmin>;
+export type WeekResponseTeacherT = z.infer<typeof WeekResponseTeacher>;
+
 /** The result of regenerating a student's Weekly Schedule after a class write (REQ-4). */
 export const SummarySync = z.enum(["synced", "failed", "skipped"]);
 
