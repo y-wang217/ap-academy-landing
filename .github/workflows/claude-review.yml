@@ -1,0 +1,52 @@
+name: Claude Reviewer
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, labeled]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Only pipeline PRs from req/ branches, never drafts.
+    if: >
+      startsWith(github.head_ref, 'req/') &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for CI to finish
+        env:
+          GH_TOKEN: ${{ secrets.REVIEWER_PAT }}
+        run: |
+          for i in $(seq 1 40); do
+            pending=$(gh pr checks ${{ github.event.pull_request.number }} --json name,bucket \
+              --jq '[.[] | select(.name != "review") | select(.bucket=="pending")] | length' || echo 1)
+            [ "$pending" = "0" ] && exit 0
+            sleep 30
+          done
+          echo "CI still pending after 20 min"; exit 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Post the review as the bot account so it counts as a second approver.
+          github_token: ${{ secrets.REVIEWER_PAT }}
+          prompt: |
+            You are the reviewer subagent. Follow .claude/agents/reviewer.md exactly.
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Finish by submitting exactly one review with gh pr review (approve or request-changes).
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr review:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+        env:
+          GH_TOKEN: ${{ secrets.REVIEWER_PAT }}

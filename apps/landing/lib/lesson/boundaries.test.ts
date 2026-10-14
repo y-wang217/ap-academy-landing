@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, posix, relative } from 'node:path';
+import { join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -89,7 +89,8 @@ test('lib/lesson imports only from lib/questions, node builtins and itself', () 
   const files = collectTsFiles(LESSON_ROOT);
   assert.ok(files.length > 0, 'found no TypeScript files to scan');
   const offences = files.flatMap((file) =>
-    offencesIn(relative(LESSON_ROOT, file), readFileSync(file, 'utf8')),
+    // offencesIn works in posix paths; on Windows `relative` returns `cli\x.ts`.
+    offencesIn(relative(LESSON_ROOT, file).split(sep).join('/'), readFileSync(file, 'utf8')),
   );
   assert.deepEqual(offences, [], `Forbidden imports in lib/lesson:\n${offences.join('\n')}`);
 });
