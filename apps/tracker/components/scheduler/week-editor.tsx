@@ -72,6 +72,7 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
     const r = await api.send("PATCH", `/classes/${card.seriesId}/occurrences/${card.originalDate}`, `move:${card.occurrenceKey}:${how}:${slot.date}:${slot.startTime}`, body);
     if (r.ok) {
       // The card stays at the new slot until the refreshed week replaces it.
+      if ((r.data as { dailyTask?: string } | null)?.dailyTask === "failed") setNotice({ tone: "warn", text: "Saved. Today's Notion task could not be updated." });
       router.refresh();
       return;
     }
@@ -122,9 +123,9 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
             setForm(null);
             refocus();
           }}
-          onSaved={() => {
+          onSaved={(dailyTask) => {
             setForm(null);
-            setNotice({ tone: "ok", text: "Saved." });
+            setNotice(dailyTask === "failed" ? { tone: "warn", text: "Saved. Today's Notion task could not be updated." } : { tone: "ok", text: "Saved." });
             router.refresh();
             refocus();
           }}

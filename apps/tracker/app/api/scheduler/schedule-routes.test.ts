@@ -319,7 +319,7 @@ describe("AC15: scheduler modules never talk to Notion or write lessons, payouts
     });
   // REQ-7 AC15: the booking UI and its view helpers are scanned too.
   const targets = [
-    ...files(join(root, "lib/domain/schedule")), ...files(join(root, "lib/scheduler")), join(root, "lib/data/schedule.ts"),
+    ...files(join(root, "lib/domain/schedule")), ...files(join(root, "lib/scheduler")), join(root, "lib/data/schedule.ts"), join(root, "lib/data/daily-task.ts"),
     ...files(join(root, "components/scheduler")).map((f) => f), join(root, "lib/view/drag.ts"), join(root, "lib/view/booking-text.ts"),
   ];
   it("scans the new modules", () => {
@@ -328,7 +328,7 @@ describe("AC15: scheduler modules never talk to Notion or write lessons, payouts
       const src = readFileSync(file, "utf8");
       expect(src, file).not.toMatch(/api\.notion\.com|payout|lessons?_?(db|source)|from\(["']students["']\)/i);
       for (const m of src.matchAll(/from ["'](?:\.\.?\/)+notion\/([\w-]+)["']/g)) {
-        expect(["cached", "staff", "students", "config"], `${file} imports notion/${m[1]}`).toContain(m[1]);
+        expect(["cached", "staff", "students", "config", "work"], `${file} imports notion/${m[1]}`).toContain(m[1]);
       }
     }
   });

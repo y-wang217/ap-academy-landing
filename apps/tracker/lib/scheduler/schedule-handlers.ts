@@ -15,6 +15,7 @@ import {
 } from "./schemas";
 import type { ScheduleStore, SeriesRecord, StoreError } from "./schedule-store";
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
+import { ensureDailyTask, type DailyTaskDeps } from "./daily-task";
 import { normaliseScheduleText } from "../domain/schedule/legacy-line";
 
 /**
@@ -28,6 +29,8 @@ export type ScheduleDeps = HandlerDeps & {
   students?: StudentsPort;
   /** Student names for the calendar (REQ-6). Names only. Absent when Notion is not wired in. */
   studentNames?: () => Promise<Map<string, string>>;
+  /** Today's "Text teachers their schedules" task (REQ-8). Absent when Notion's Work database is not wired in. */
+  dailyTask?: DailyTaskDeps;
 };
 
 const HEADERS = { "Cache-Control": "no-store" };
@@ -340,8 +343,9 @@ export async function handleWeek(deps: ScheduleDeps, q: URLSearchParams): Promis
 
 // Classes ------------------------------------------------------------------------
 
-const seriesBody = (s: SeriesRecord, summarySync?: SyncResult) => ({
+const seriesBody = (s: SeriesRecord, summarySync?: SyncResult, dailyTask?: DailyTaskOutcomeValue) => ({
   ...(summarySync ? { summarySync } : {}),
+  ...(dailyTask ? { dailyTask } : {}),
   series: {
     id: s.id, staffId: s.staffId, studentId: s.studentId, subject: s.subject, kind: s.kind, startDate: s.startDate,
     startTime: s.startTime, durationMinutes: s.durationMinutes, effectiveUntil: s.effectiveUntil, splitFrom: s.splitFrom, updatedAt: s.updatedAt,
@@ -383,7 +387,7 @@ export async function handleCreateClass(deps: ScheduleDeps, body: unknown): Prom
   if (notTeacher) return notTeacher;
   // A retry finds its first result before the clash check, which would otherwise see the class it already made.
   const done = await deps.store.getSeriesByRequest(p.data.requestId).catch(() => null);
-  if (done) return send(200, SeriesResponse.parse(seriesBody(done, await syncStudents(deps, [done.studentId]))));
+  if (done) return send(200, SeriesResponse.parse(seriesBody(done, await syncStudents(deps, [done.studentId]), await refreshToday(deps))));
   const { requestId, ...fields } = p.data;
   void requestId;
   const blocked = await validateBooking(deps, {
@@ -396,7 +400,7 @@ export async function handleCreateClass(deps: ScheduleDeps, body: unknown): Prom
   const r = await deps.store.createSeries(p.data);
   if (!r.ok) return fromStore(r);
   const summarySync = await syncStudents(deps, [p.data.studentId]);
-  return send(r.created ? 201 : 200, SeriesResponse.parse(seriesBody(r.value, summarySync)));
+  return send(r.created ? 201 : 200, SeriesResponse.parse(seriesBody(r.value, summarySync, await refreshToday(deps))));
 }
 
 /**
@@ -428,6 +432,24 @@ async function syncStudents(deps: ScheduleDeps, studentIds: string[]): Promise<S
     results.push(await syncStudentSummary({ store: deps.store, students: deps.students, fetchStaff: deps.fetchStaff, today: deps.today }, id));
   }
   return results.includes("failed") ? "failed" : results.includes("synced") ? "synced" : "skipped";
+}
+
+type DailyTaskOutcomeValue = "updated" | "unchanged" | "skipped" | "failed";
+
+/**
+ * After a class write: refresh today's task if it exists (never creates it).
+ * The class write has already succeeded, so a failure here only shows up as
+ * `dailyTask: "failed"`. A lease held by another run means this change was not
+ * applied, so it reads as failed too, and Retry or the hourly run catches up.
+ */
+async function refreshToday(deps: ScheduleDeps): Promise<DailyTaskOutcomeValue | undefined> {
+  if (!deps.dailyTask) return undefined;
+  try {
+    const r = await ensureDailyTask(deps.dailyTask, { date: deps.today(), mode: "refresh_only" });
+    return r === "updated" || r === "unchanged" || r === "skipped" ? r : "failed";
+  } catch {
+    return "failed";
+  }
 }
 
 const NEW_ID = "00000000-0000-4000-8000-000000000000";
@@ -554,7 +576,7 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
     const r = await deps.store.split({ seriesId, fromDate: date, expectedUpdatedAt: p.data.expectedUpdatedAt, requestId: p.data.requestId, changes: rest });
     if (!r.ok) return fromStore(r);
     const summarySync = await syncStudents(deps, [series.studentId, r.value.studentId]);
-    return send(200, SeriesResponse.parse(seriesBody(r.value, summarySync)));
+    return send(200, SeriesResponse.parse(seriesBody(r.value, summarySync, await refreshToday(deps))));
   }
 
   if (series.updatedAt !== p.data.expectedUpdatedAt) return send(409, { error: "stale" });
@@ -597,9 +619,9 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
   }
   if (oneOff && Object.keys(fields).length > 0) {
     const r = await deps.store.updateSeriesFields(seriesId, p.data.expectedUpdatedAt, fields);
-    return r.ok ? send(200, SeriesResponse.parse(seriesBody(r.value))) : fromStore(r);
+    return r.ok ? send(200, SeriesResponse.parse(seriesBody(r.value, undefined, await refreshToday(deps)))) : fromStore(r);
   }
-  return send(200, SeriesResponse.parse(seriesBody(series)));
+  return send(200, SeriesResponse.parse(seriesBody(series, undefined, await refreshToday(deps))));
 }
 
 type Seen = { expectedDate?: string; expectedStartTime?: string };
@@ -636,8 +658,8 @@ export async function handleCancelOccurrence(deps: ScheduleDeps, seriesId: strin
     const r = await deps.store.endSeries(seriesId, addDays(date, -1), p.data.expectedUpdatedAt);
     if (!r.ok) return fromStore(r);
     const summarySync = await syncStudents(deps, [series.studentId]);
-    return send(200, SeriesResponse.parse(seriesBody(r.value, summarySync)));
+    return send(200, SeriesResponse.parse(seriesBody(r.value, summarySync, await refreshToday(deps))));
   }
   const r = await deps.store.upsertException({ seriesId, originalDate: date, kind: "cancelled", newDate: null, newStartTime: null, requestId: p.data.requestId });
-  return r.ok ? send(200, SeriesResponse.parse(seriesBody(series))) : fromStore(r);
+  return r.ok ? send(200, SeriesResponse.parse(seriesBody(series, undefined, await refreshToday(deps)))) : fromStore(r);
 }

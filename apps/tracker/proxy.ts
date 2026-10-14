@@ -17,7 +17,9 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Relative to basePath. "/" is listed on its own because the second pattern
   // compiles to /tracker/<something> and misses the bare /tracker. Static
-  // assets don't need a session.
+  // assets don't need a session. The scheduled-run endpoint is the one API path
+  // with no session: it authenticates itself with a bearer secret (REQ-8,
+  // tracker ADR 0039), and every other path still redirects when signed out.
   //
   // Prefetches skip the proxy. Next 16 prefetches every link in view, and on
   // Vercel a dynamic page's segment prefetch 404s anyway, so each one cost a
@@ -34,7 +36,7 @@ export const config = {
       ],
     },
     {
-      source: "/((?!_next/static|_next/image|favicon.ico).*)",
+      source: "/((?!_next/static|_next/image|favicon.ico|api/scheduler/daily-task/run$).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },
