@@ -91,8 +91,12 @@ export type WeekResponseTeacherT = z.infer<typeof WeekResponseTeacher>;
 /** The result of regenerating a student's Weekly Schedule after a class write (REQ-4). */
 export const SummarySync = z.enum(["synced", "failed", "skipped"]);
 
+/** What a class write did to today's Notion task (REQ-8). */
+export const DailyTaskOutcome = z.enum(["updated", "unchanged", "skipped", "failed"]);
+
 export const SeriesResponse = z.strictObject({
   summarySync: SummarySync.optional(),
+  dailyTask: DailyTaskOutcome.optional(),
   series: z.strictObject({
     id: z.guid(),
     staffId: z.guid(),
@@ -187,4 +191,16 @@ export const BookingConflictResponse = z.strictObject({
     reason: z.enum(["teacher_busy", "student_busy", "outside_availability", "time_off", "availability_not_entered"]),
   })).max(10),
   more: z.number().int().min(0),
+});
+
+// Daily teacher-texts task (REQ-8) ------------------------------------------------
+export const DailyTaskStatusResponse = z.strictObject({
+  state: z.enum(["none", "pending", "ready", "failed"]),
+  pageUrl: z.string().nullable(),
+  lastError: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+export const DailyTaskRunResponse = z.strictObject({
+  result: z.enum(["created", "updated", "unchanged", "skipped", "busy", "failed"]),
+  status: DailyTaskStatusResponse,
 });

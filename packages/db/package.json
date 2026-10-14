@@ -9,6 +9,7 @@
     "./server": "./src/server.ts",
     "./middleware": "./src/middleware.ts",
     "./paths": "./src/paths.ts",
+    "./service": "./src/service.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {

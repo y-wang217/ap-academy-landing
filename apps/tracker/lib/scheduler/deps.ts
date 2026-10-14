@@ -3,10 +3,11 @@ import { getDb } from "../data/client";
 import { createScheduleStore } from "../data/schedule";
 import { todayIso } from "../time";
 import { getStaffList, getStudentNames } from "../notion/cached";
-import { notionConfigured, readStudentsConfig } from "../notion/config";
+import { notionConfigured, readStudentsConfig, readWorkConfig } from "../notion/config";
 import { fetchScheduledStudents, fetchStudentSchedule, writeWeeklySchedule } from "../notion/students";
 import type { HandlerDeps } from "./handlers";
 import { resolveSchedulerIdentity } from "./identity";
+import { buildDailyTaskDeps, lazyDailyTaskStore } from "./daily-task-wiring";
 import type { ScheduleDeps } from "./schedule-handlers";
 
 const LinkRow = z.object({ org_id: z.guid(), notion_staff_id: z.guid() });
@@ -62,5 +63,20 @@ export function realScheduleDeps(): ScheduleDeps {
       }
     : undefined;
   const studentNames = config ? async () => new Map(await getStudentNames()) : undefined;
-  return { ...base, identity, store, today: () => todayIso(), students, studentNames };
+  // Today's Notion task (REQ-8): wired only when both Work and Students & Parents are reachable.
+  const work = readWorkConfig();
+  const dailyTask =
+    work && studentNames
+      ? buildDailyTaskDeps({
+          store: lazyDailyTaskStore(async () => {
+            const [db, who] = await Promise.all([getDb(), identity()]);
+            return db && who.scope === "admin" ? { tracker: db.tracker, orgId: who.orgId } : null;
+          }),
+          schedule: store,
+          config: work,
+          fetchStaff: base.fetchStaff,
+          studentNames,
+        })
+      : undefined;
+  return { ...base, identity, store, today: () => todayIso(), students, studentNames, dailyTask };
 }
