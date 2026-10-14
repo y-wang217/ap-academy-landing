@@ -592,7 +592,7 @@ try {
   }, { base: BASE, method, path, body });
   const kubyOccurrence = (date) => teacher.evaluate(async ({ base, date }) => {
     const list = await (await fetch(`${base}/api/scheduler/classes/occurrences?from=${date}&to=${date}`)).json();
-    const o = list.occurrences.find((x) => x.subject === "SCH4U" && x.originalDate === date);
+    const o = list.occurrences.find((x) => x.studentId === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002" && x.originalDate === date);
     return o ? { seriesId: o.seriesId, stamp: o.seriesUpdatedAt } : null;
   }, { base: BASE, date });
   const edited = await kubyOccurrence(plus(classDay, 14));
@@ -602,7 +602,7 @@ try {
   const cancelledRest = await kubyOccurrence(plus(classDay, 21));
   const cancelRest = cancelledRest && await adminCall("DELETE", `classes/${cancelledRest.seriesId}/occurrences/${plus(classDay, 21)}`, { expectedUpdatedAt: cancelledRest.stamp, scope: "future" });
   // A weekly class for the student the booking flow already adopted, so a Weekly Schedule write really happens.
-  const weekly = await adminCall("POST", "classes", { staffId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0002", studentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003", subject: "MPM2D", kind: "weekly", startDate: plus(classDay, 3), startTime: "16:00", durationMinutes: 60, effectiveUntil: null });
+  const weekly = await adminCall("POST", "classes", { staffId: RYAN_ID, studentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003", subject: "MPM2D", kind: "weekly", startDate: plus(classDay, 9), startTime: "15:00", durationMinutes: 60, effectiveUntil: null });
   check("the admin's edit (future), cancel (this), cancel (future) and a weekly booking all saved",
     editStatus === 200 && cancelOne === 200 && cancelRest === 200 && (weekly === 201 || weekly === 200), `${editStatus}/${cancelOne}/${cancelRest}/${weekly}`);
 
