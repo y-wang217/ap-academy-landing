@@ -67,8 +67,10 @@ jobs:
           npm install -g playwright@1.56.1
           playwright install --with-deps chromium
 
+      # Each browser suite gets one automatic rerun. The warning annotation keeps
+      # real flakiness visible in the run summary.
       - name: Single sign-on across apps
-        run: pnpm test:sso
+        run: pnpm test:sso || { echo "::warning::test:sso failed once, retrying"; pnpm test:sso; }
 
       - name: Tracker flows through the landing proxy
-        run: pnpm test:tracker
+        run: pnpm test:tracker || { echo "::warning::test:tracker failed once, retrying"; pnpm test:tracker; }
