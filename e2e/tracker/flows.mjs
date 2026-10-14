@@ -405,7 +405,9 @@ try {
   await monday.getByRole("button", { name: "Remove Monday window 1" }).click();
   await ryan.waitForFunction(() => document.querySelectorAll("li input[type=time]").length === 10);
   await ryan.reload();
-  check("the teacher is told about classes outside their hours", await ryan.getByText(/of your classes (is|are) outside your hours/).isVisible());
+  const outsideNotice = ryan.getByText(/of your classes (is|are) outside your hours/);
+  await outsideNotice.waitFor({ timeout: 15000 }).catch(() => {});
+  check("the teacher is told about classes outside their hours", await outsideNotice.isVisible());
   await teacher.goto(`${BASE}`);
   const badge = teacher.getByRole("link", { name: /Teacher availability/ });
   check("the owner's home shows the conflict badge", /outside availability/.test(await badge.textContent()));
