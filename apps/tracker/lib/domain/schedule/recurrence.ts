@@ -125,8 +125,8 @@ export function planSplit(series: ClassSeries, exceptions: ClassException[], fro
   const weekday = changes.weekday ?? isoWeekday(fromDate);
   let start = addDays(isoWeekStart(fromDate), weekday - 1);
   if (start < fromDate) start = addDays(start, 7);
-  const { weekday: _w, ...rest } = changes;
-  const newSeries: ClassSeries = { ...series, ...rest, id: newId, kind: "weekly", startDate: start };
+  const newSeries: ClassSeries = { ...series, ...changes, id: newId, kind: "weekly", startDate: start };
+  delete (newSeries as ClassSeries & { weekday?: number }).weekday;
   const moved: ClassException[] = [];
   for (const e of exceptions) {
     if (e.originalDate < fromDate) continue;

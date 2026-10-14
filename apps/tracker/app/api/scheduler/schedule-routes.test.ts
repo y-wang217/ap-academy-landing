@@ -25,6 +25,8 @@ const inactive = mk("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "gone", { status: "I
 const admin: SchedulerIdentity = { scope: "admin", orgId: ORG, staff: null };
 const teacher: SchedulerIdentity = { scope: "teacher", orgId: ORG, staff: ryan };
 
+const withoutRequestId = <T extends { requestId: string }>({ requestId, ...rest }: T) => (void requestId, rest);
+
 /** In-memory store with the semantics the database gives: request_id idempotency and updated_at tokens. */
 function fakeStore() {
   const series = new Map<string, SeriesRecord>();
@@ -39,7 +41,8 @@ function fakeStore() {
     createWindow: async (input) => {
       const existing = byRequest.get(input.requestId);
       if (existing) return { ok: true, value: windows.get(existing)!, created: false };
-      const rec: WindowRecord = { ...input, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z" };
+      const fields = withoutRequestId(input);
+      const rec: WindowRecord = { ...fields, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z" };
       windows.set(rec.id, rec);
       byRequest.set(input.requestId, rec.id);
       return { ok: true, value: rec, created: true };
@@ -64,7 +67,8 @@ function fakeStore() {
     createSeries: async (input) => {
       const existing = byRequest.get(input.requestId);
       if (existing) return { ok: true, value: series.get(existing)!, created: false };
-      const rec: SeriesRecord = { ...input, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z", splitFrom: null };
+      const fields = withoutRequestId(input);
+      const rec: SeriesRecord = { ...fields, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z", splitFrom: null };
       series.set(rec.id, rec);
       byRequest.set(input.requestId, rec.id);
       return { ok: true, value: rec, created: true };
@@ -175,9 +179,9 @@ describe("classes: occurrences (AC12, AC13, AC16)", () => {
 });
 
 describe("classes: edits (AC3, AC4, AC5, AC7, AC9)", () => {
-  const setup = async () => {
+  const setup = async (over: Record<string, unknown> = {}) => {
     const f = fakeStore();
-    const created = await json(await handleCreateClass(deps(admin, f.store), newClass()));
+    const created = await json(await handleCreateClass(deps(admin, f.store), newClass(over)));
     return { ...f, id: created.body.series.id as string, stamp: created.body.series.updatedAt as string };
   };
   const body = (stamp: string, over: Record<string, unknown> = {}) => ({ requestId: REQ(50), expectedUpdatedAt: stamp, ...over });
@@ -206,7 +210,7 @@ describe("classes: edits (AC3, AC4, AC5, AC7, AC9)", () => {
     expect(r.body.series.splitFrom).toBe(id);
   });
   it("AC7: a past occurrence is 422 and writes nothing", async () => {
-    const { store, id, stamp, exceptions, series } = await setup();
+    const { store, id, stamp, exceptions, series } = await setup({ startDate: "2026-10-05" });
     const r = await json(await handleCancelOccurrence(deps(admin, store), id, "2026-10-12", body(stamp)));
     expect(r).toMatchObject({ status: 422, body: { error: "past_occurrence" } });
     const f = await json(await handleEditOccurrence(deps(admin, store), id, "2026-10-12", body(stamp, { scope: "future", changes: {} })));
