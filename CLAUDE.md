@@ -83,3 +83,20 @@ those builds when they finish.
 Each app's Vercel project sets its Root Directory to `apps/<name>`. For both
 apps on one origin locally, set `TRACKER_URL=http://localhost:3001` in
 `apps/landing/.env.local` and browse via `http://localhost:3000`.
+
+## Agent pipeline
+
+This repo is built by an agent pipeline driven from the Notion **Dev Requirements** board. Config: `.claude/pipeline.json`.
+
+Flow: Ready → Designing → Design Review (human approves) → Approved → Building → In Review → Done.
+Side paths: Revise (human sent the design back), Changes Requested (reviewer sent the PR back), Blocked (needs a human).
+
+- Stage commands: `/design-next`, `/build-next`, `/pipeline-sweep`.
+- Agent roles: `.claude/agents/designer.md`, `builder.md`, `reviewer.md`.
+- Every change ships on a `req/<card-id>-<slug>` branch through a PR. Nothing is pushed to `main` directly.
+- The Stop hook runs `gate_commands` and will not let a session finish with failing tests when code changed.
+- The guard hook blocks pushes to main, merges, remote database changes, production deploys, and edits to `.env`, hooks, settings and workflows.
+- Database migrations are written as files only. A human applies them. PRs with migrations get the `needs-human-merge` label.
+- Kill switch: tick **Paused** on the Pipeline Control page in Notion.
+
+When working by hand in this repo, follow the same conventions: tests first, card ID in commit messages, one card per branch.

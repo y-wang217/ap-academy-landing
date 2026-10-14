@@ -1,0 +1,54 @@
+{
+  "_comment": "Single source of truth for the agent pipeline. gate_commands are the fast local subset of CI; ci.yml also builds both apps and runs RLS, restore and e2e.",
+  "repo": "y-wang217/ap-academy-landing",
+  "default_branch": "main",
+  "notion": {
+    "board_data_source": "collection://a855407c-6899-4e31-882a-798ad13be3b6",
+    "board_url": "https://app.notion.com/p/a917f1561486420a884da2a330c19998?v=3f9d6ae73dd781e6a7be000c01b59002",
+    "control_page": "3f9d6ae7-3dd7-8101-87fa-fcafe0976bb3",
+    "work_log_data_source": "collection://03257601-dfe2-42dd-affb-49dcfe1d2dcf"
+  },
+  "statuses": {
+    "ready": "Ready",
+    "designing": "Designing",
+    "design_review": "Design Review",
+    "revise": "Revise",
+    "approved": "Approved",
+    "building": "Building",
+    "in_review": "In Review",
+    "changes_requested": "Changes Requested",
+    "done": "Done",
+    "blocked": "Blocked"
+  },
+  "wip_limit": 1,
+  "max_attempts": 2,
+  "branch_prefix": "req/",
+  "gate_commands": [
+    "pnpm --filter @ap-academy/db typecheck",
+    "pnpm --filter @ap-academy/db test",
+    "pnpm --filter landing test",
+    "pnpm --filter landing exec tsc --noEmit",
+    "pnpm --filter tracker lint",
+    "pnpm --filter tracker typecheck",
+    "pnpm --filter tracker test"
+  ],
+  "gate_ignore_paths": ["docs/", ".claude/", "README.md", "PIPELINE.md", "CLAUDE.md"],
+  "human_merge_paths": [
+    "supabase/",
+    ".env",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "packages/db/",
+    "apps/landing/middleware.ts",
+    "apps/landing/next.config.ts",
+    "apps/landing/app/login/",
+    "apps/landing/app/auth/",
+    "apps/landing/app/sat/login/",
+    "apps/landing/app/sat/supabase/",
+    "apps/tracker/proxy.ts",
+    "apps/tracker/next.config.ts",
+    "scripts/",
+    ".github/"
+  ]
+}

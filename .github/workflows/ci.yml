@@ -6,7 +6,10 @@ on:
   pull_request:
 
 jobs:
-  check:
+  # Branch protection requires this job by name. Its steps cover every
+  # gate_command in .claude/pipeline.json (the landing build typechecks landing);
+  # keep the two in step when either changes.
+  gate:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
