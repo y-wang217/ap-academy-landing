@@ -52,7 +52,6 @@ function harness(opts: { notionFails?: () => boolean; saveFails?: boolean; busy?
   const fail = () => {
     if (opts.notionFails?.()) throw new NotionError("Notion returned 500", 500);
   };
-  const stamp = () => new Date(++clock * 60_000).toISOString();
   const notion: DailyNotion = {
     find: async (title) => {
       calls.push("find"); fail();

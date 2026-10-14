@@ -15,6 +15,7 @@ const BASE = (process.env.TRACKER_BASE ?? "http://localhost:3001/tracker").repla
 const ORIGIN = new URL(BASE).origin;
 const MOCK = process.env.MOCK_URL ?? "http://127.0.0.1:54321";
 const MOCK_AI = process.env.MOCK_AI_URL ?? "http://127.0.0.1:54332";
+const MOCK_NOTION = process.env.MOCK_NOTION_URL ?? "http://127.0.0.1:54333";
 
 const results = [];
 function check(name, ok, detail = "") {
@@ -549,6 +550,29 @@ try {
     return res.status;
   }, { base: BASE, from: classDay, to: plus(classDay, 6) });
   check("a teacher's PATCH on a class is refused with 403", teacherPatch === 403);
+
+  // REQ-8: the daily "Text teachers their schedules" task. Create now makes one page in the mock's Work database
+  // with both seeded teachers, a second press adds nothing, and the run endpoint is reachable signed out but guarded.
+  const workPages = async () => (await (await fetch(`${MOCK_NOTION}/__work`)).json()).pages.filter((p) => p.ds === "3031b455-9be0-4f8d-b200-70fcfcf1a0b8");
+  await teacher.goto(`${BASE}/schedule`);
+  await teacher.getByRole("button", { name: "Create now" }).click();
+  await teacher.getByText("Today's Notion task is ready.").waitFor({ timeout: 15000 });
+  const made = await workPages();
+  check("Create now makes one Work page with a to-do per teacher",
+    made.length === 1 && made[0].todos.map((t) => t.text.split(":")[0]).join(",") === "Kuby Test,Ryan Test" && made[0].todos.every((t) => !t.checked));
+  await teacher.getByRole("button", { name: "Refresh now" }).click();
+  await teacher.getByText("Today's Notion task is ready.").waitFor({ timeout: 15000 });
+  check("a second press adds no page", (await workPages()).length === 1);
+
+  const runUrl = `${BASE}/api/scheduler/daily-task/run`;
+  const noBearer = await fetch(runUrl, { method: "POST", redirect: "manual" });
+  const wrongBearer = await fetch(runUrl, { method: "POST", redirect: "manual", headers: { Authorization: "Bearer wrong" } });
+  check("the run endpoint answers 401, not a login redirect, without the secret", noBearer.status === 401 && wrongBearer.status === 401);
+  const signedOutPage = await fetch(`${BASE}/schedule`, { redirect: "manual" });
+  check("every other tracker path still redirects to /login when signed out",
+    signedOutPage.status >= 300 && signedOutPage.status < 400 && (signedOutPage.headers.get("location") ?? "").includes("/login"));
+  const signedOutApi = await fetch(`${BASE}/api/scheduler/daily-task`, { method: "POST", redirect: "manual" });
+  check("the admin daily-task endpoint is not exempt", signedOutApi.status >= 300 && signedOutApi.status < 400);
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {

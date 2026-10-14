@@ -18,8 +18,8 @@ type Props = {
   defaultStaffId: string;
   today: string;
   onClose: () => void;
-  /** The server accepted the change. */
-  onSaved: () => void;
+  /** The server accepted the change. `dailyTask` is what it did to today's Notion task, if it reported one. */
+  onSaved: (dailyTask?: string) => void;
   /** The server said the class changed under us: reload what is shown. */
   onStale: () => void;
 };
@@ -108,7 +108,7 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
     setBusy(true);
     const r = await call;
     setBusy(false);
-    if (r.ok) return onSaved();
+    if (r.ok) return onSaved((r.data as { dailyTask?: string } | null)?.dailyTask);
     if (r.stale) onStale();
     setError(saveErrorMessage(r, teacherName(staffId)));
   }

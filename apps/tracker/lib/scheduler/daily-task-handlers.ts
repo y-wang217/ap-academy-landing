@@ -40,7 +40,7 @@ export async function handleDailyTaskStatus(deps: ScheduleDeps, q: URLSearchPara
 export async function handleDailyTaskCreate(deps: ScheduleDeps, body: unknown): Promise<Response> {
   const gate = requireScheduler(await deps.identity(), ["admin"]);
   if (!gate.ok) return deny(gate);
-  const parsed = z.strictObject({ date: IsoDate }).safeParse(body);
+  const parsed = z.strictObject({ date: IsoDate, requestId: z.guid().optional() }).safeParse(body);
   if (!parsed.success || parsed.data.date !== deps.today()) return send(400, { error: "invalid_request" });
   if (!deps.dailyTask) return send(503, { error: "scheduler_not_configured" });
   const result = await ensureDailyTask(deps.dailyTask, { date: parsed.data.date, mode: "create" });

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { AllTeachersWeek } from "@/components/scheduler/all-teachers-week";
+import { DailyTaskStatus, type DailyTaskView } from "@/components/scheduler/daily-task-status";
 import { WeekControls } from "@/components/scheduler/week-controls";
 import { WeekEditor } from "@/components/scheduler/week-editor";
 import { WeekGrid } from "@/components/scheduler/week-grid";
@@ -57,6 +58,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       students = null;
     }
   }
+  // Charlie's one-line status for today's Notion task (REQ-8). Nothing is shown when Work is not wired in.
+  let daily: DailyTaskView | null = null;
+  if (who.scope === "admin" && deps.dailyTask) {
+    try {
+      const row = await deps.dailyTask.store.get(body.today);
+      daily = row?.notionPageId ? { state: row.state, pageUrl: row.notionPageUrl } : { state: row?.state === "failed" ? "failed" : "none", pageUrl: null };
+    } catch {
+      daily = null;
+    }
+  }
   const rows = body.teachers.map((t) => ({
     staff: { id: t.staff.id, name: t.staff.name },
     days: t.days,
@@ -68,6 +79,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   return shell(
     <>
+      {daily && <DailyTaskStatus date={body.today} time={process.env.DAILY_TASK_TIME || "06:00"} initial={daily} />}
       <WeekControls weekStart={body.weekStart} today={body.today} staffId={shown?.staff.id} all={all} teachers={teachers} />
       <h2 className="text-lg font-medium">Week of {formatDayHeading(body.weekStart)}, {body.weekStart.slice(0, 4)}</h2>
       {!body.namesLoaded && <Notice tone="warn">Student names could not be loaded.</Notice>}

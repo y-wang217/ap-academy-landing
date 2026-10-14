@@ -4,7 +4,7 @@
 #   PostgREST 127.0.0.1:54331  (db-schemas public,tracker; test JWT secret)
 #   mock      127.0.0.1:54321  (Auth endpoints, /rest/v1 proxy, /__session)
 #   mock      127.0.0.1:54332  (Anthropic Messages API, fixed AI draft)
-#   mock      127.0.0.1:54333  (Notion Staff query: two teachers)
+#   mock      127.0.0.1:54333  (Notion: Staff query, Students, Work and Work Log pages in memory)
 # Prints the env the apps need. Stop with: e2e/tracker/stack.sh stop
 # Needs Postgres server binaries and a PostgREST binary (POSTGREST_BIN).
 set -euo pipefail
@@ -68,5 +68,6 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:54332
 ANTHROPIC_API_KEY=test-key-for-the-local-mock
 NOTION_TOKEN=test-token-for-the-local-mock
 NOTION_API_BASE=http://127.0.0.1:54333
+SCHEDULER_CRON_SECRET=e2e-cron-secret-not-for-production
 ENV
 cat "$state/env"
