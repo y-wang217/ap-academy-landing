@@ -37,3 +37,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0030](0030-assessment-kind-and-date.md) | An assessment is an assignment with a due date or a test with a held date | accepted |
 | [0031](0031-grade-history-and-trend-pills.md) | Grade history is replayed on the assessment date; the pill follows four rules | accepted |
 | [0032](0032-story-line.md) | The story line is a fact chosen by rule, never a forecast | accepted |
+| [0033](0033-scheduler-staff-identity.md) | Scheduler teachers are linked to Notion Staff by approval, not given a membership | accepted |
