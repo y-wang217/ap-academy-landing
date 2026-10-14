@@ -329,6 +329,11 @@ try {
   check("the AI request carries no student name or email", !/Sam|sam@example\.com/.test(sentText) && sentText.includes("the student"));
   check("the AI request uses refs, not row ids", !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(sentText));
   check("the AI request names the course the teacher is looking at", /looking at course C\d/.test(sentText));
+  // The preview rows render a beat after the notice (a main run failed only "an uncertain change starts
+  // unticked and says so"), so wait for them before reading anything.
+  await composer.getByText("Unmarked, out of 20 → 18 / 20").waitFor({ timeout: 15000 });
+  await composer.getByText("Check this one").waitFor({ timeout: 15000 });
+  await composer.getByRole("button", { name: "Save selected (2)" }).waitFor({ timeout: 15000 });
   check("the preview shows a score change against the current value", await composer.getByText("Unmarked, out of 20 → 18 / 20").isVisible());
   check("the preview shows new work", await composer.getByText("Quiz 2", { exact: true }).isVisible() && (await composer.getByText(/^New · MHF4U · Assignments/).isVisible()));
   check("an uncertain change starts unticked and says so", await composer.getByText("Check this one").isVisible() && (await composer.getByRole("button", { name: "Save selected (2)" }).isVisible()));

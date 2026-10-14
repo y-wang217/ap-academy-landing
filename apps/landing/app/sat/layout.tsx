@@ -1,20 +1,22 @@
 import Link from "next/link";
-import { Fraunces, Public_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { CONTACT } from "../config";
 import AuthStatus from "./auth-status";
 
-// Self-hosted at build time and scoped to /sat, so the main site's pages never
-// download them. Exposed as CSS variables the --font-sat-* tokens point at.
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
+// Self-hosted from ./fonts (latin subsets of the Google variable fonts, OFL
+// licences beside them), so a build needs no network. Scoped to /sat, so the
+// main site's pages never download them. Exposed as CSS variables the
+// --font-sat-* tokens point at.
+const fraunces = localFont({
+  src: "./fonts/fraunces-latin.woff2",
+  weight: "400 700",
   display: "swap",
   variable: "--font-sat-display-loaded",
 });
 
-const publicSans = Public_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const publicSans = localFont({
+  src: "./fonts/public-sans-latin.woff2",
+  weight: "400 600",
   display: "swap",
   variable: "--font-sat-sans-loaded",
 });
