@@ -39,19 +39,19 @@ describe("buildTeacherDays (AC1)", () => {
     expect(kuby.summary).toBe("No classes scheduled today");
   });
 
-  it("builds the exact WhatsApp text", () => {
+  it("builds the exact message text", () => {
     const [kuby, ryan] = build();
-    expect(ryan.whatsappText).toBe(
+    expect(ryan.copyText).toBe(
       ["Hi Ryan, your classes today (Mon Oct 19):", "16:00-17:00 Sam Student, MHF4U", "18:00-19:00 Kim, SPH3U", `Your schedule: ${link(RYAN, DATE)}`].join("\n"),
     );
-    expect(kuby.whatsappText).toBe("Hi Kuby, no classes scheduled for you today (Mon Oct 19).");
-    expect(ryan.whatsappText).not.toMatch(/—/);
+    expect(kuby.copyText).toBe("Hi Kuby, no classes scheduled for you today (Mon Oct 19).");
+    expect(ryan.copyText).not.toMatch(/—/);
   });
 
   it("shows a cancelled class with a Cancelled prefix, in the task and the text", () => {
     const ryan = build([occ({ status: "cancelled" })]).find((d) => d.staffId === RYAN)!;
     expect(ryan.lines[0].text).toBe("Cancelled: 16:00-17:00 Sam Student, MHF4U");
-    expect(ryan.whatsappText).toContain("Cancelled: 16:00-17:00 Sam Student, MHF4U");
+    expect(ryan.copyText).toContain("Cancelled: 16:00-17:00 Sam Student, MHF4U");
   });
 
   it("ignores occurrences on other dates", () => {
@@ -85,7 +85,7 @@ describe("buildTeacherDays (AC1)", () => {
     const moved = build([occ({ startTime: "17:30", endTime: "18:30" }), fixture[1]]).find((d) => d.staffId === RYAN)!;
     expect(same.fingerprint).toBe(a.fingerprint);
     expect(moved.fingerprint).not.toBe(a.fingerprint);
-    expect(moved.whatsappText).toContain("17:30-18:30");
+    expect(moved.copyText).toContain("17:30-18:30");
   });
 });
 

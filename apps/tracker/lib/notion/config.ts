@@ -36,3 +36,18 @@ export function notionApiBaseOverride(): string | null {
   const v = process.env.NOTION_API_BASE;
   return v ? v.replace(/\/$/, "") : null;
 }
+
+export const DEFAULT_WORK_DATA_SOURCE_ID = "3031b455-9be0-4f8d-b200-70fcfcf1a0b8";
+export const DEFAULT_WORK_LOG_DATA_SOURCE_ID = "03257601-dfe2-42dd-affb-49dcfe1d2dcf";
+export type WorkConfig = { token: string; workId: string; logId: string };
+
+/** Same token, pointed at Work and Work Log (REQ-8). The integration must be shared with both databases. */
+export function readWorkConfig(): WorkConfig | null {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) return null;
+  return {
+    token,
+    workId: process.env.NOTION_WORK_DATA_SOURCE_ID || DEFAULT_WORK_DATA_SOURCE_ID,
+    logId: process.env.NOTION_WORK_LOG_DATA_SOURCE_ID || DEFAULT_WORK_LOG_DATA_SOURCE_ID,
+  };
+}

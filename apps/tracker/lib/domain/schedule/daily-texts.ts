@@ -18,7 +18,7 @@ export type TeacherDay = {
   summary: string;
   lines: TeacherLine[];
   linkUrl: string;
-  whatsappText: string;
+  copyText: string;
   /** sha-256 hex of everything the block shows, so a change is a different string. */
   fingerprint: string;
 };
@@ -74,15 +74,15 @@ export function buildTeacherDays(input: {
     const live = lines.filter((l) => !l.cancelled).length;
     const linkUrl = input.scheduleUrl(staffId, date);
     const first = p.name.split(/\s+/)[0] || p.name;
-    const whatsappText =
+    const copyText =
       lines.length === 0
         ? `Hi ${first}, no classes scheduled for you today (${shortDate(date)}).`
         : [`Hi ${first}, your classes today (${shortDate(date)}):`, ...lines.map((l) => (l.meetingLink ? `${l.text} ${l.meetingLink}` : l.text)), `Your schedule: ${linkUrl}`].join("\n");
     const count = `${live} ${live === 1 ? "class" : "classes"}`;
     const summary = lines.length === 0 ? NO_CLASSES : count;
     const title = `${p.name}${p.notActive ? ` ${NOT_ACTIVE}` : ""}: ${lines.length === 0 ? NO_CLASSES : count}`;
-    const fingerprint = sha(JSON.stringify([title, lines, linkUrl, whatsappText]));
-    return { staffId, name: p.name, notActive: p.notActive, title, summary, lines, linkUrl, whatsappText, fingerprint };
+    const fingerprint = sha(JSON.stringify([title, lines, linkUrl, copyText]));
+    return { staffId, name: p.name, notActive: p.notActive, title, summary, lines, linkUrl, copyText, fingerprint };
   });
   return days.sort((a, b) => a.name.localeCompare(b.name) || a.staffId.localeCompare(b.staffId));
 }
