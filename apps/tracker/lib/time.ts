@@ -1,5 +1,6 @@
 /** "Today" for due dates, in the students' time zone. The domain takes it as input. */
-const TIME_ZONE = "America/Toronto";
+export const SCHEDULE_TIME_ZONE = "America/Toronto";
+const TIME_ZONE = SCHEDULE_TIME_ZONE;
 
 export function todayIso(now: Date = new Date()): string {
   // en-CA formats as YYYY-MM-DD.
