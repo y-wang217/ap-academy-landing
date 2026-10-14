@@ -45,7 +45,7 @@ Run 2026-10-14 on the REQ-9 branch. PASS means the command passed in that run. N
 
 ## Remaining setup
 Everything below is a human step from REQ-8 and is still open.
-- Apply migration `0012_scheduler_daily_task.sql` through the Supabase MCP `apply_migration`, with Charlie's sign-off.
+- Migration `0012_scheduler_daily_task` applied on 2026-10-14 through the Supabase MCP `apply_migration`, with Charlie's sign-off (tables, six policies and `claim_daily_task` verified on the live project).
 - Add the GitHub Actions workflow for the hourly run (YAML in `docs/designs/REQ-8.md`).
 - Set `SUPABASE_SERVICE_ROLE_KEY`, `SCHEDULER_CRON_SECRET`, `DAILY_TASK_ORG_ID` (and optionally `DAILY_TASK_TIME`) in the tracker Vercel project, and the secret in GitHub.
 - Share the Notion integration with the Work and Work Log databases.
