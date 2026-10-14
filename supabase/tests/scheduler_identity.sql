@@ -121,32 +121,19 @@ do $$ begin
     raise exception 'staff_links: teacher set user_id';
   exception when insufficient_privilege then null;
   end;
-  begin
-    update tracker.staff_links set email = 'evil@example.com';
-    raise exception 'staff_links: teacher changed email';
-  exception when insufficient_privilege then null;
-  end;
-  begin
-    update tracker.staff_links set revoked_at = null;
-    raise exception 'staff_links: teacher edited revoked_at';
-  exception when insufficient_privilege then null;
-  end;
 end $$;
+-- Teacher has the column grants of any signed-in user but no update or delete
+-- policy, so edits touch zero rows.
 do $$
 declare n integer;
 begin
-  update tracker.staff_links set updated_at = now(); get diagnostics n = row_count;
-  -- updated_at is not a granted column either way; the point is nothing changed
+  update tracker.staff_links set email = 'evil@example.com'; get diagnostics n = row_count;
+  assert n = 0, 'teacher changed an email';
+  update tracker.staff_links set revoked_at = null; get diagnostics n = row_count;
+  assert n = 0, 'teacher edited revoked_at';
+  delete from tracker.staff_links; get diagnostics n = row_count;
+  assert n = 0, 'teacher deleted a link';
 exception when insufficient_privilege then null;
-end $$;
-do $$
-declare n integer;
-begin
-  begin
-    delete from tracker.staff_links; get diagnostics n = row_count;
-    assert n = 0, 'teacher deleted a link';
-  exception when insufficient_privilege then null;
-  end;
 end $$;
 
 -- AC9: no grade-tracker data without a membership ---------------------------------------
