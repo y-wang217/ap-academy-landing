@@ -42,3 +42,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0035](0035-weekly-schedule-import-and-summary.md) | Weekly Schedule import is all or nothing per student, and the text field becomes a generated summary | accepted |
 | [0036](0036-availability-conflicts-computed.md) | Availability conflicts are computed on read, and a teacher with nothing entered is not flagged | accepted |
 | [0037](0037-teachers-see-own-student-names.md) | Teachers see the names of their own scheduled students | accepted |
+| [0038](0038-booking-validation.md) | Bookings are checked on the server before any write | accepted |
