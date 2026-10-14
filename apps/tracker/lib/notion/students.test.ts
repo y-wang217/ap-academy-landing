@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fetchScheduledStudents, fetchStudentSchedule, parseStudentPage, writeWeeklySchedule } from "./students";
+import { fetchScheduledStudents, fetchStudentNames, fetchStudentSchedule, parseStudentPage, writeWeeklySchedule } from "./students";
 import { NotionError } from "./staff";
 
 const S1 = "11111111-1111-4111-8111-111111111111";
@@ -87,6 +87,23 @@ describe("fetchScheduledStudents", () => {
   it("fails when a needed property is missing from the schema", async () => {
     const { fetcher } = recorder(() => json({ properties: { Stage: { id: "s", type: "select" } } }));
     await expect(fetchScheduledStudents(cfg, fetcher)).rejects.toBeInstanceOf(NotionError);
+  });
+});
+
+describe("fetchStudentNames (REQ-6 AC7, AC18)", () => {
+  it("asks Notion for the Student Name property only and returns a map", async () => {
+    const { calls, fetcher } = recorder((c) => (c.method === "GET" ? json(SCHEMA) : json({ results: [page(S1, "Sam Lee", "Active", "private text")], has_more: false })));
+    const names = await fetchStudentNames(cfg, fetcher);
+    expect([...names]).toEqual([[S1, "Sam Lee"]]);
+    const q = calls.find((c) => c.method === "POST")!;
+    expect(new URL(q.url).searchParams.getAll("filter_properties[]")).toEqual(["title"]);
+    expect(JSON.stringify(q.body)).toContain("Onboarding");
+  });
+  it("skips malformed pages and fails clearly when Notion errors", async () => {
+    const { fetcher } = recorder((c) => (c.method === "GET" ? json(SCHEMA) : json({ results: [{ id: "nope" }, page(S1, "Sam", "Active", "")], has_more: false })));
+    expect((await fetchStudentNames(cfg, fetcher)).size).toBe(1);
+    const bad = recorder(() => json({}, 500));
+    await expect(fetchStudentNames(cfg, bad.fetcher)).rejects.toBeInstanceOf(NotionError);
   });
 });
 
