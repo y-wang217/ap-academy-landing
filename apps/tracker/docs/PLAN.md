@@ -136,6 +136,8 @@ Each step is done only when lint, typecheck and tests pass.
 
 ## To do
 
+- Scheduler 2/8 (REQ-3): availability and class tables (migration 0010), recurrence engine and JSON endpoints are built. 0010 is not applied to the live database until Charlie signs off. No UI yet (ADR 0034).
+
 Ideas with a go-ahead but no spec yet. Each becomes a step, with its prompt
 committed to `spec/` first, before any code.
 
