@@ -160,3 +160,4 @@ committed to `spec/` first, before any code.
 - A photo of the marked test attached to its score. Deferred by the owner to its own spec: it needs file storage, a migration and a personal-data ADR.
 - A parent view (out of scope in `CLAUDE.md`). The dashboard is read-only enough that a parent can read it over the student's shoulder today.
 - Scheduler 4/8 (REQ-5): teacher availability editor at `/tracker/schedule/availability` (phone-first, copy a day, days off and extra hours, 14-day preview), computed conflicts list at `/tracker/schedule/conflicts` and a badge on the owner's home (ADR 0036). No migration.
+- Scheduler 5/8 (REQ-6): read-only week calendar at `/tracker/schedule` (teacher week, admin teacher picker, All teachers view with hours, class details dialog) and `GET /api/scheduler/week` (ADR 0037). No migration.

@@ -1,0 +1,71 @@
+"use client";
+
+import { useRef } from "react";
+import { cardStatus, notionStudentUrl } from "@/lib/view/week-text";
+import { formatDayHeading } from "@/lib/view/availability-text";
+
+export type CardData = {
+  occurrenceKey: string;
+  studentId: string;
+  studentName: string | null;
+  subject: string;
+  date: string;
+  originalDate: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  kind: "one_off" | "weekly";
+  status: "scheduled" | "cancelled" | "moved";
+  conflict: "outside_availability" | "time_off" | null;
+  teacherName?: string;
+};
+
+/** A class on the calendar: a button that opens a native dialog. Everything comes in as props; nothing is fetched here. */
+export function ClassCard({ card, className = "", style }: { card: CardData; className?: string; style?: React.CSSProperties }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const badges = cardStatus(card);
+  const cancelled = card.status === "cancelled";
+  const name = card.studentName ?? "Student";
+  const border = card.conflict ? "border-dashed border-warn" : "border-solid border-accent";
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => dialog.current?.showModal()}
+        style={style}
+        className={`overflow-hidden rounded-md border-2 bg-surface px-1.5 py-1 text-left text-xs leading-tight hover:bg-background focus:outline-2 focus:outline-accent ${border} ${className}`}
+      >
+        <span className={`block font-semibold ${cancelled ? "line-through" : ""}`}>{name}</span>
+        <span className={`block ${cancelled ? "line-through" : ""}`}>{card.subject}</span>
+        <span className={`block ${cancelled ? "line-through" : ""}`}>{card.startTime}-{card.endTime}</span>
+        {badges.filter((b) => b.label !== "Scheduled").map((b) => (
+          <span key={b.label} className="block font-medium">
+            <span aria-hidden="true">{b.icon} </span>{b.label}
+          </span>
+        ))}
+      </button>
+      <dialog ref={dialog} aria-labelledby={`${card.occurrenceKey}-t`} className="m-auto w-[min(92vw,26rem)] rounded-xl border border-border bg-surface p-5 text-text-primary backdrop:bg-black/40">
+        <h2 id={`${card.occurrenceKey}-t`} className="text-lg font-semibold">{name}</h2>
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-text-muted">Subject</dt><dd>{card.subject}</dd>
+          {card.teacherName && (<><dt className="text-text-muted">Teacher</dt><dd>{card.teacherName}</dd></>)}
+          <dt className="text-text-muted">Date</dt><dd>{formatDayHeading(card.date)}</dd>
+          <dt className="text-text-muted">Time</dt><dd>{card.startTime}-{card.endTime}</dd>
+          <dt className="text-text-muted">Duration</dt><dd>{card.durationMinutes} min</dd>
+          <dt className="text-text-muted">Type</dt><dd>{card.kind === "weekly" ? "Weekly" : "One-off"}</dd>
+          <dt className="text-text-muted">Status</dt>
+          <dd>{badges.map((b) => `${b.icon} ${b.label}`).join(" · ")}</dd>
+          {card.status === "moved" && (<><dt className="text-text-muted">Original date</dt><dd>{formatDayHeading(card.originalDate)}</dd></>)}
+        </dl>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <a href={notionStudentUrl(card.studentId)} target="_blank" rel="noopener" className="text-sm text-accent underline underline-offset-2">
+            Open student record
+          </a>
+          <button type="button" onClick={() => dialog.current?.close()} className="rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-background">
+            Close
+          </button>
+        </div>
+      </dialog>
+    </>
+  );
+}

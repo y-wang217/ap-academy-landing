@@ -52,9 +52,14 @@ export default async function TrackerHome() {
           <TopBar email={viewer.email} />
           <Page title={`Hi ${who.staff.name}`}>
             <Card>
-              <Link href="/schedule/availability" className={buttonClass}>
-                Set your availability
-              </Link>
+              <span className="flex flex-wrap gap-2">
+                <Link href="/schedule" className={buttonClass}>
+                  Your week
+                </Link>
+                <Link href="/schedule/availability" className={secondaryButtonClass}>
+                  Set your availability
+                </Link>
+              </span>
             </Card>
           </Page>
         </>
@@ -108,6 +113,9 @@ export default async function TrackerHome() {
         title="Students"
         aside={
           <span className="flex flex-wrap items-center gap-2">
+            <Link href="/schedule?view=all" className={secondaryButtonClass}>
+              Teacher schedules
+            </Link>
             {outside !== null && (
               <Link href="/schedule/availability" className={secondaryButtonClass}>
                 Teacher availability

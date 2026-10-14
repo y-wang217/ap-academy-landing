@@ -3,13 +3,14 @@ import { computeAvailability } from "../domain/schedule/availability";
 import { checkClassShape, checkOccurrenceEditable } from "../domain/schedule/edits";
 import { expandOccurrences, isPatternDate, type ClassException } from "../domain/schedule/recurrence";
 import { daysBetween, minutesOf } from "../domain/schedule/wallclock";
+import { weekOf, weekTotals } from "../domain/schedule/week";
 import { isActiveTeachingStaff } from "../domain/staff";
 import type { StaffRecord } from "../notion/staff";
-import { assertStaffAccess, requireScheduler, type Allowed, type Denial } from "./guard";
+import { assertStaffAccess, requireScheduler, toAdminStaff, toTeacherStaff, type Allowed, type Denial } from "./guard";
 import type { HandlerDeps } from "./handlers";
 import { findConflicts, type StaffAvailability } from "../domain/schedule/conflicts";
 import {
-  AvailabilityExceptionResponse, AvailabilityResponse, ConflictsResponseAdmin, ConflictsResponseTeacher, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WindowResponse,
+  AvailabilityExceptionResponse, AvailabilityResponse, ConflictsResponseAdmin, ConflictsResponseTeacher, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WeekResponseAdmin, WeekResponseTeacher, WindowResponse,
 } from "./schemas";
 import type { ScheduleStore, SeriesRecord, StoreError } from "./schedule-store";
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
@@ -20,7 +21,13 @@ import { normaliseScheduleText } from "../domain/schedule/legacy-line";
  * inputs. `students` is the Notion side of the Weekly Schedule summary (REQ-4);
  * without it the class handlers write classes and touch nothing in Notion.
  */
-export type ScheduleDeps = HandlerDeps & { store: ScheduleStore; today: () => string; students?: StudentsPort };
+export type ScheduleDeps = HandlerDeps & {
+  store: ScheduleStore;
+  today: () => string;
+  students?: StudentsPort;
+  /** Student names for the calendar (REQ-6). Names only. Absent when Notion is not wired in. */
+  studentNames?: () => Promise<Map<string, string>>;
+};
 
 const HEADERS = { "Cache-Control": "no-store" };
 const send = (status: number, body: unknown) => Response.json(body, { status, headers: HEADERS });
@@ -212,6 +219,119 @@ export async function handleConflicts(deps: ScheduleDeps, q: URLSearchParams): P
     return send(200, ConflictsResponseTeacher.parse({ conflicts: conflicts.map(({ seriesUpdatedAt, ...rest }) => (void seriesUpdatedAt, rest)) }));
   }
   return send(200, ConflictsResponseAdmin.parse({ conflicts, notEntered }));
+}
+
+// Week ----------------------------------------------------------------------------
+
+export type WeekQuery = { date?: string | null; staffId?: string | null; view?: string | null };
+export type WeekResult =
+  | { ok: true; body: z.infer<typeof WeekResponseAdmin> | z.infer<typeof WeekResponseTeacher> }
+  | { ok: false; status: number; error: string };
+const fail = (status: number, error: string): WeekResult => ({ ok: false, status, error });
+
+/**
+ * One week of classes, availability and totals, read-only. Teachers get their
+ * own week only; Charlie can pick a teacher or ask for all of them. Access is
+ * checked before the store is touched. Student names are looked up after the
+ * occurrences are chosen, and only for the students in them. The page and the
+ * route both call this, so the page's check is the server's check.
+ */
+export async function loadWeek(deps: ScheduleDeps, query: WeekQuery): Promise<WeekResult> {
+  const g = requireScheduler(await deps.identity(), ["admin", "teacher"]);
+  if (!g.ok) return fail(g.status, g.body.error);
+  const { identity } = g;
+
+  const today = deps.today();
+  const date = query.date ?? today;
+  if (!IsoDate.safeParse(date).success) return fail(400, "invalid_request");
+  const asked = query.staffId ?? null;
+  if (asked !== null && !Guid.safeParse(asked).success) return fail(400, "invalid_request");
+  if (query.view != null && query.view !== "all") return fail(400, "invalid_request");
+  const all = query.view === "all";
+
+  if (identity.scope === "teacher" && (all || (asked !== null && asked !== identity.staff.id))) return fail(403, "forbidden");
+
+  let staff: StaffRecord[];
+  if (identity.scope === "teacher") {
+    staff = [identity.staff];
+  } else {
+    const list = await loadStaff(deps);
+    if (!list) return fail(503, "scheduler_unavailable");
+    const teachers = list.filter(isActiveTeachingStaff).sort((a, b) => a.name.localeCompare(b.name));
+    if (all) staff = teachers;
+    else if (asked !== null) {
+      const found = teachers.find((t) => t.id === asked);
+      if (!found) return fail(422, "invalid_staff");
+      staff = [found];
+    } else {
+      const own = identity.staff && teachers.find((t) => t.id === identity.staff!.id);
+      staff = own ? [own] : teachers.slice(0, 1);
+    }
+  }
+
+  const range = weekOf(date);
+  const scope = all ? undefined : staff[0]?.id;
+  if (!all && scope === undefined) return { ok: true, body: WeekResponseAdmin.parse({ weekStart: range.from, today, namesLoaded: true, teachers: [] }) };
+  const [{ series, exceptions }, windows, avExceptions] = await Promise.all([
+    deps.store.listSeries(range, scope),
+    deps.store.listWindows(scope),
+    deps.store.listAvailabilityExceptions(scope, range),
+  ]);
+
+  const perTeacher = staff.map((member) => {
+    const mine = series.filter((s) => s.staffId === member.id);
+    const ids = new Set(mine.map((s) => s.id));
+    const ex = avExceptions.filter((e) => e.staffId === member.id);
+    const days = computeAvailability(windows.filter((w) => w.staffId === member.id), ex, range);
+    const occurrences = expandOccurrences(mine, exceptions.filter((e) => ids.has(e.seriesId)), range);
+    const { conflicts } = findConflicts(occurrences, new Map([[member.id, { days, exceptions: ex }]]), today);
+    return { member, mine, days, occurrences, conflictOf: new Map(conflicts.map((c) => [c.occurrence.occurrenceKey, c.reason])) };
+  });
+
+  let names: Map<string, string> | null = new Map();
+  const wanted = new Set(perTeacher.flatMap((t) => t.occurrences.map((o) => o.studentId)));
+  if (wanted.size > 0) {
+    try {
+      names = deps.studentNames ? await deps.studentNames() : null;
+    } catch {
+      names = null;
+    }
+  }
+
+  const rows = perTeacher.map((t) => {
+    const stamp = new Map(t.mine.map((s) => [s.id, s.updatedAt]));
+    return {
+      member: t.member,
+      days: t.days,
+      totals: weekTotals(t.occurrences, t.days),
+      occurrences: t.occurrences.map((o) => ({
+        ...o,
+        studentName: names?.get(o.studentId) ?? null,
+        conflict: t.conflictOf.get(o.occurrenceKey) ?? null,
+        seriesUpdatedAt: stamp.get(o.seriesId),
+      })),
+    };
+  });
+  const head = { weekStart: range.from, today, namesLoaded: names !== null };
+
+  if (identity.scope === "teacher") {
+    return {
+      ok: true,
+      body: WeekResponseTeacher.parse({
+        ...head,
+        teachers: rows.map((r) => ({
+          staff: toTeacherStaff(r.member), days: r.days, totals: r.totals,
+          occurrences: r.occurrences.map(({ seriesUpdatedAt, ...rest }) => (void seriesUpdatedAt, rest)),
+        })),
+      }),
+    };
+  }
+  return { ok: true, body: WeekResponseAdmin.parse({ ...head, teachers: rows.map((r) => ({ staff: toAdminStaff(r.member), days: r.days, totals: r.totals, occurrences: r.occurrences })) }) };
+}
+
+export async function handleWeek(deps: ScheduleDeps, q: URLSearchParams): Promise<Response> {
+  const r = await loadWeek(deps, { date: q.get("date"), staffId: q.get("staffId"), view: q.get("view") });
+  return r.ok ? send(200, r.body) : send(r.status, { error: r.error });
 }
 
 // Classes ------------------------------------------------------------------------
