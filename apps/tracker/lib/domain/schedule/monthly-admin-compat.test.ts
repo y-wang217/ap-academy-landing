@@ -6,31 +6,39 @@ import { renderSummary } from "./summary";
 import type { ClassSeries } from "./recurrence";
 
 /**
- * A TypeScript copy of `parse_slot` in the ap-academy-monthly-admin skill's
- * build_month.py (the skill lives outside this repo). It takes the part before
- * the first `|`, matches `^(Mon|...|Sun)\s+H:MM\s*-\s*H:MM` (or `Day Nh`), uses
- * the next field as the course, ignores every later field, and raises on any
- * non-empty line it cannot match. If the skill's parser changes, recheck this
- * copy: that is what keeps the generated summary from stopping a billing run.
+ * A line-for-line TypeScript port of `parse_slot` in the ap-academy-monthly-admin
+ * skill's build_month.py (the skill lives outside this repo; compared against
+ * its published source on 2026-10-14):
+ *
+ *   left, _, course = line.partition("|"); course = course.split("|")[0].strip() or "Tutoring"
+ *   re.match(r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})", left.strip())
+ *   re.match(r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+([\d.]+)\s*h", left.strip())   # "Tue 1h | ENG4U English"
+ *   otherwise: raise ValueError (which stops the whole monthly run)
+ *
+ * If the skill's parser changes, recheck this port: it is what keeps a
+ * generated summary from stopping a billing run.
  */
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function monthlyAdminParseSlot(text: string) {
   const out: { day: string; start: string | null; end: string | null; hours: number; course: string }[] = [];
-  for (const raw of text.split("\n")) {
+  for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    const parts = line.split("|").map((p) => p.trim());
-    const range = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/.exec(parts[0]);
-    const hours = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d+(?:\.\d+)?)h/.exec(parts[0]);
+    const bar = line.indexOf("|");
+    const left = (bar < 0 ? line : line.slice(0, bar)).trim();
+    const course = (bar < 0 ? "" : line.slice(bar + 1).split("|")[0].trim()) || "Tutoring";
+    const range = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/.exec(left);
     if (range) {
-      const s = Number(range[2]) * 60 + Number(range[3]);
-      const e = Number(range[4]) * 60 + Number(range[5]);
-      out.push({ day: range[1], start: `${range[2].padStart(2, "0")}:${range[3]}`, end: `${range[4].padStart(2, "0")}:${range[5]}`, hours: (e - s) / 60, course: parts[1] ?? "" });
-    } else if (hours) {
-      out.push({ day: hours[1], start: null, end: null, hours: Number(hours[2]), course: parts[1] ?? "" });
-    } else {
-      throw new Error(`unparseable slot: ${line}`);
+      const [, day, h1, m1, h2, m2] = range;
+      const hours = (Number(h2) * 60 + Number(m2) - (Number(h1) * 60 + Number(m1))) / 60;
+      out.push({ day, start: `${h1.padStart(2, "0")}:${m1}`, end: `${h2.padStart(2, "0")}:${m2}`, hours, course });
+      continue;
     }
+    const hoursOnly = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+([\d.]+)\s*h/.exec(left);
+    if (hoursOnly) {
+      out.push({ day: hoursOnly[1], start: null, end: null, hours: Number(hoursOnly[2]), course });
+      continue;
+    }
+    throw new Error(`Cannot parse schedule line: ${line}`);
   }
   return out;
 }
@@ -52,7 +60,7 @@ function seriesFor(text: string): ClassSeries[] {
 }
 
 describe("generated summary vs the monthly admin parser", () => {
-  const clean = SHAPE_FIXTURES.map((f) => withTeacher(f.text, "Jane Doe")).filter((t) => !t.includes("1h"));
+  const clean = SHAPE_FIXTURES.map((f) => withTeacher(f.text, "Jane Doe")).filter((t) => !t.includes(" 1h "));
 
   it("AC11: every rendered line parses and matches its source line", () => {
     for (const text of clean) {
@@ -77,8 +85,23 @@ describe("generated summary vs the monthly admin parser", () => {
     }
   });
 
+  it("the 'Day Nh' form: billing still reads it, the scheduler never generates it, and importing it is refused", () => {
+    // Billing accepts it, so a student whose legacy text uses it keeps billing correctly while unadopted.
+    expect(monthlyAdminParseSlot("Tue 1h | SBI4U Biology")).toEqual([{ day: "Tue", start: null, end: null, hours: 1, course: "SBI4U Biology" }]);
+    // The import rejects it (no_fixed_time), so such a student, and any student with such a line, is not
+    // adopted: their Weekly Schedule is never overwritten and billing keeps reading the legacy text.
+    const text = "Tue 1h | SBI4U Biology | Jane Doe\nFri 17:30-18:30 | SBI4U Biology | Jane Doe";
+    const plan = planImport({
+      students: [{ id: "11111111-1111-4111-8111-111111111111", name: "S", stage: "Active", weeklySchedule: text }],
+      staff, today: TODAY, adoptedStudentIds: new Set(),
+    });
+    expect(plan.adopt).toEqual([]);
+    expect(plan.repair[0].lines.map((l) => l.status)).toEqual(["no_fixed_time", "ok"]);
+    // Every rendered summary is fixed-time only, so it never contains the form.
+    for (const t of clean) expect(renderSummary(seriesFor(t), NAMES, TODAY)).not.toMatch(/^\w{3} [\d.]+h\b/m);
+  });
+
   it("the copy raises on a header line, which is why the summary has none", () => {
     expect(() => monthlyAdminParseSlot("Generated by the scheduler\nTue 17:30-18:30 | A | B")).toThrow();
-    expect(DAYS).toHaveLength(7);
   });
 });
