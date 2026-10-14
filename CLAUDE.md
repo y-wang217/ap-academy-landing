@@ -95,6 +95,7 @@ Side paths: Revise (human sent the design back), Changes Requested (reviewer sen
 - Agent roles: `.claude/agents/designer.md`, `builder.md`, `reviewer.md`.
 - Every change ships on a `req/<card-id>-<slug>` branch through a PR. Nothing is pushed to `main` directly.
 - The Stop hook runs `gate_commands` and will not let a session finish with failing tests when code changed.
+- The SessionStart hook runs `pnpm install --frozen-lockfile` in cloud sessions so the gate has dependencies. Local sessions skip it.
 - The guard hook blocks pushes to main, merges, remote database changes, production deploys, and edits to `.env`, hooks, settings and workflows.
 - Database migrations are written as files only. A human applies them. PRs with migrations get the `needs-human-merge` label.
 - Kill switch: tick **Paused** on the Pipeline Control page in Notion.
