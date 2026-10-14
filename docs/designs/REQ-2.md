@@ -22,7 +22,7 @@ https://app.notion.com/p/3f9d6ae73dd781cfbda2f0a3a2da746c
 
 ## Approach
 - Migration `supabase/migrations/0009_scheduler_staff_links.sql`: `tracker.staff_links` (partial unique indexes on live rows), `tracker.is_org_owner`, `tracker.claim_staff_link`, `tracker.my_staff_id`, RLS and column grants, `set_updated_at` and `write_audit` triggers. Teachers get no membership.
-- Server only Notion read by raw `fetch` + Zod in `apps/tracker/lib/notion/` (`config.ts`, `staff.ts`), cached 5 minutes. Drops every property except id, name, email, functions, status, subjects. No new dependency.
+- Server only Notion read by raw `fetch` + Zod in `apps/tracker/lib/notion/` (`config.ts`, `staff.ts`), cached 5 minutes. Drops every property except id, name, email, functions, status, subjects. One dependency, `server-only`, approved by Charlie on 2026-10-14 so the module cannot be imported from a client component (reviewer finding on PR 17).
 - `lib/domain/staff.ts` (`isActiveTeachingStaff`), `lib/scheduler/identity.ts`, `guard.ts`, `schemas.ts`.
 - Routes `app/api/scheduler/me`, `staff`, `staff/[staffId]`; `force-dynamic`, `no-store`.
 - ADR `0033-scheduler-staff-identity.md`, seed script `supabase/seed/scheduler-staff-link.sql`.
