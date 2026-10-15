@@ -632,17 +632,26 @@ try {
   await teacher.goto(`${BASE}`);
   check("the owner's list shows who claimed Sam", await teacher.getByText("Signed in as sam@example.com").first().isVisible());
   await teacher.goto(`${BASE}${studentPath}`);
+  // An earlier step archived Sam, and an archived student cannot be claimed again.
+  const restore = teacher.getByRole("button", { name: "Restore student" });
+  if (await restore.count()) {
+    await restore.click();
+    await teacher.getByRole("button", { name: "Archive student" }).waitFor({ timeout: 15000 });
+  }
   const invite = section(teacher, "Invite");
   check("the Invite card names the login", await invite.getByText("Signed in as sam@example.com").isVisible());
   teacher.once("dialog", (d) => d.accept());
   await invite.getByLabel("Correct email").fill("sam.real@example.com");
-  await submitAndWait(invite, "Unlink", "Unlinked");
+  await invite.getByRole("button", { name: "Unlink", exact: true }).click();
+  // On success the card re-renders as unclaimed, so the form (and its "Unlinked" note) goes away.
+  await invite.getByText(/has not signed in yet/).waitFor({ timeout: 15000 });
   const sam = await signedIn(browser, "sam@example.com");
   await sam.goto(`${BASE}`);
   check("the old login no longer reaches Sam's dashboard", (await sam.getByRole("heading", { name: "Hi Sam" }).count()) === 0);
   const samReal = await signedIn(browser, "sam.real@example.com");
   await samReal.goto(`${BASE}`);
-  check("the corrected address now sees Hi Sam", (await samReal.locator("h1").textContent()) === "Hi Sam");
+  const realH1 = await samReal.locator("h1").first().textContent();
+  check("the corrected address now sees Hi Sam", realH1 === "Hi Sam", `${realH1} | ${(await samReal.locator("body").innerText()).slice(0, 200)}`);
   await teacher.goto(`${BASE}`);
   check("the list now shows the corrected login", await teacher.getByText("Signed in as sam.real@example.com").first().isVisible());
 } catch (error) {
