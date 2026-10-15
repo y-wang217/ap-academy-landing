@@ -41,8 +41,8 @@ insert into tracker.assessments (id, org_id, student_id, course_id, category_id,
   ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', 'Unit 1 test', 40, 31);
 insert into tracker.tasks (org_id, student_id, course_id, title) values
   ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'Review');
-insert into tracker.goals (org_id, student_id, kind, title) values
-  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'general', 'Get a 90');
+insert into tracker.goals (org_id, student_id, school, program, target_six_avg) values
+  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'UofT', 'Engineering', 90);
 update tracker.students set published_at = now(), status = 'active';
 reset role;
 
