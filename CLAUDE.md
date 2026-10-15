@@ -88,17 +88,20 @@ apps on one origin locally, set `TRACKER_URL=http://localhost:3001` in
 
 This repo is built by an agent pipeline driven from the Notion **Dev Requirements** board. Config: `.claude/pipeline.json`.
 
-Flow: Ready → Designing → Design Review (human approves) → Approved → Building → In Review → Done.
+Flow: Backlog (waiting on **Blocked by** cards) → Ready → Designing → Design Review (human approves) → Approved → Building → In Review → Done.
 Side paths: Revise (human sent the design back), Changes Requested (reviewer sent the PR back), Blocked (needs a human).
 
 - Stage commands: `/design-next`, `/build-next`, `/pipeline-sweep`.
 - Agent roles: `.claude/agents/designer.md`, `builder.md`, `reviewer.md`.
 - Every change ships on a `req/<card-id>-<slug>` branch through a PR. Nothing is pushed to `main` directly.
+- GitHub is the truth for card status: the sweep sets In Review, Changes Requested, Done or Blocked from the PR state, promotes Backlog cards whose blockers are Done, and is the only writer of "shipped" Work Log rows.
+- The bot reviewer runs only after CI finishes green (`workflow_run` on CI) and reports a `review` commit status. The builder watches `gh pr checks` and fixes red CI before setting In Review.
 - Dependabot (`.github/dependabot.yml`) opens weekly npm and GitHub Actions PRs on `dependabot/` branches. They are not `req/` branches, so the Claude reviewer and auto-merge skip them; a human merges each one after the CI gate passes.
 - The Stop hook runs `gate_commands` and will not let a session finish with failing tests when code changed.
-- The SessionStart hook runs `pnpm install --frozen-lockfile` in cloud sessions so the gate has dependencies. Local sessions skip it.
+- The SessionStart hook runs `pnpm install --frozen-lockfile` in cloud sessions, installs PostgREST and smoke-starts the local tracker stack, so `pnpm test:tracker` and `pnpm test:sso` run there. The builder runs them before any PR touching `e2e_paths`. Local sessions skip the hook.
 - The guard hook blocks pushes to main, merges, remote database changes, production deploys, and edits to `.env`, hooks, settings and workflows.
-- Database migrations are written as files only. A human applies them. PRs with migrations get the `needs-human-merge` label.
+- Database migrations are written as files only and ship in their own `req/<card-id>-migration` PR (`needs-human-merge`); a human merges and applies it. The feature PR is based on that branch, carries `awaiting-migration`, and auto-merges once the sweep sees the migration live.
+- Risk High is reserved for auth, permissions or RLS changes, payments, personal data to a new destination, deleting or rewriting rows, and irreversible work. A migration alone is not High.
 - Kill switch: tick **Paused** on the Pipeline Control page in Notion.
 
 When working by hand in this repo, follow the same conventions: tests first, card ID in commit messages, one card per branch.

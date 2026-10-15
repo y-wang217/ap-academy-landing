@@ -1,21 +1,37 @@
 name: Auto-merge approved pipeline PRs
 
+# Queues the merge once the bot has approved and no label holds the PR back.
+# Runs on the approval itself and on a label removal: the sweep removes
+# awaiting-migration once the card's migration is live, which lands here.
 on:
   pull_request_review:
     types: [submitted]
+  pull_request:
+    types: [unlabeled]
 
 jobs:
   enable-auto-merge:
     if: >
-      github.event.review.state == 'approved' &&
       startsWith(github.event.pull_request.head.ref, 'req/') &&
-      !contains(github.event.pull_request.labels.*.name, 'needs-human-merge')
+      github.event.pull_request.base.ref == 'main' &&
+      !contains(github.event.pull_request.labels.*.name, 'needs-human-merge') &&
+      !contains(github.event.pull_request.labels.*.name, 'awaiting-migration') &&
+      (github.event_name == 'pull_request' || github.event.review.state == 'approved')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     steps:
-      # Branch protection still requires green CI + 1 approval; this only queues the merge.
+      # Branch protection still requires green CI, the review status and 1 approval; this only queues the merge.
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --auto --squash --delete-branch
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            decision=$(gh pr view "$NUMBER" --repo "$REPO" --json reviewDecision --jq '.reviewDecision')
+            [ "$decision" = "APPROVED" ] || { echo "Not approved yet ($decision); nothing to queue."; exit 0; }
+          fi
+          gh pr merge "$NUMBER" --repo "$REPO" --auto --squash --delete-branch

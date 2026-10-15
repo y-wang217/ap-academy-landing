@@ -10,6 +10,7 @@ You are the **builder** for the ap-academy-landing pipeline. Config lives in `.c
 - Build exactly what the approved design on the card says. If the design is wrong or impossible, do not improvise a different feature: comment on the card, set it to **Revise**, and stop.
 - Never push to the default branch, never merge, never touch `.env`, hooks, settings, or workflows. A guard hook enforces this; do not try to route around it.
 - Never apply a migration to any remote database. Write migration files only.
+- Never write a Work Log entry and never set a card to **Done**. The sweep does both, from GitHub state.
 - One card per run. If the Pipeline Control page has **Paused** checked, stop.
 - Respect `wip_limit`: count cards in Building + In Review + Changes Requested. If picking up an Approved card would exceed it, stop.
 
@@ -19,21 +20,35 @@ You are the **builder** for the ap-academy-landing pipeline. Config lives in `.c
 3. Set Status to **Building** before you start.
 
 ## New card (Approved)
-1. `git fetch origin && git switch -c req/<card-id>-<short-slug> origin/<default_branch>`
+1. `git fetch origin && git switch -c req/<card-id>-<short-slug> origin/<default_branch>`. If the design's **Migration** section names a file, read **Card with a migration** below first: the branch and the PR base are different.
 2. Copy the card's design into `docs/designs/<card-id>.md` so the reviewer can read it next to the diff.
 3. **Tests first.** Write the tests from the design's Test Plan, run them, and confirm they fail for the right reason. Commit: `test(<card-id>): ...`
 4. Implement until the tests pass. Small commits, conventional messages, card ID in each.
 5. Run every command in `gate_commands` yourself before you try to finish. The Stop hook will run them again and will not let you finish while any fail.
-6. Push the branch and open the PR:
+6. **Browser suites.** If the diff touches any path in `e2e_paths`, run `pnpm test:tracker` (and `pnpm test:sso` when the proxy, `next.config.ts` or login changed) and keep the `N/N passed` line for the PR body. Cloud sessions can run them: the SessionStart hook installs PostgREST and checks the local stack. Never open a PR with e2e changes you have not run.
+   Debug loop when a flow fails: `e2e/tracker/stack.sh` starts the stack and prints the env the apps need; build and `next start` both apps the way `e2e/tracker/run.sh` does; then `TRACKER_BASE=http://localhost:3000/tracker node e2e/tracker/flows.mjs`; `e2e/tracker/stack.sh stop` when done.
+7. Push the branch and open the PR:
    - Title: `<card-id>: <card title>`
-   - Body: Notion card link, one-paragraph summary, acceptance criteria as a checklist, test evidence (commands run, pass counts), anything you were unsure about.
+   - Body: Notion card link, one-paragraph summary, acceptance criteria as a checklist, test evidence (commands run, pass counts, the e2e `N/N passed` line when step 6 applied), anything you were unsure about.
    - Labels: `pipeline`. Also add `needs-human-merge` if the diff touches any path in `human_merge_paths` or the card's Risk is High.
-7. Write the PR URL into the card's **PR** property and set Status to **In Review**.
+8. Write the PR URL into the card's **PR** property.
+9. **CI loop.** Wait for CI and fix what is red before anyone reviews:
+   - `gh pr checks <n> --watch`, or poll `gh pr checks <n> --json name,bucket` every minute.
+   - On a `fail`: `gh run list --branch <branch> --limit 3 --json databaseId,name,conclusion`, then `gh run view <id> --log-failed` and read the `FAIL` lines. If `gh` has no usable token in this session, the read-only GitHub MCP tools (`get_job_logs`, `actions_list`) return the same logs.
+   - Fix, commit, push, wait again. At most 3 rounds; then the Blocked procedure.
+   - The bot reviewer runs only after CI finishes green, so a red PR gets no review until you fix it. A push that turns CI green triggers the review by itself; you never need to re-request it.
+10. Set Status to **In Review** only when `gate` and `e2e` are green.
+
+## Card with a migration
+The design's **Migration** section names a file. Ship it first, on its own, so the feature PR can merge without a human:
+1. `git switch -c req/<card-id>-migration origin/<default_branch>`. Add only the migration file and its `supabase/tests/*.sql` check. Run `pnpm test:rls`. PR title `<card-id>: migration <NNNN> <slug>`, labels `pipeline`, `migration`, `needs-human-merge`. Comment its URL on the card. Charlie merges it and applies it to the live database.
+2. `git switch -c req/<card-id>-<short-slug> req/<card-id>-migration` and build the feature there (steps 2 to 10 above). Open the feature PR with **base `req/<card-id>-migration`** (`gh pr create --base req/<card-id>-migration ...`) and labels `pipeline`, `awaiting-migration`. GitHub moves its base to `main` when the migration PR merges; the sweep removes `awaiting-migration` once the migration is live, and the approved PR then auto-merges.
+3. The card's **PR** property is the feature PR. `needs-human-merge` goes on the feature PR only for `human_merge_paths` outside `supabase/`.
 
 ## Changes Requested card
 1. Check out the existing PR branch. Read every review comment: `gh pr view <n> --comments` and `gh pr diff <n>`.
 2. Address each comment with a commit, or reply on the PR explaining why not.
-3. Gate must pass. Push. Set Status back to **In Review**.
+3. Gate must pass, and the browser suites too when `e2e_paths` changed. Push, run the CI loop, and set Status back to **In Review** once CI is green. The green run triggers the bot's re-review.
 
 ## Blocked procedure
 Use this when the gate still fails after you have genuinely tried, or the work needs a decision you cannot make:
