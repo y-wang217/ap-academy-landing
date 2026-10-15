@@ -97,6 +97,13 @@ const prefetch = { RSC: "1", "Next-Router-Prefetch": "1" };
 r = await fetch(BASE + "/tracker/students/new", { redirect: "manual" });
 check("7 a signed-out navigation is redirected by the proxy", r.status === 307, String(r.status));
 r = await fetch(BASE + "/tracker/students/new", { redirect: "manual", headers: prefetch });
+// Next 16.3 307s an RSC request without a valid `_rsc` cache-busting param to
+// the same path with one (real clients always send it). Follow only that hop,
+// so a proxy redirect to /login still fails the check.
+const rscHop = r.status === 307 && new URL(r.headers.get("location") ?? "", BASE);
+if (rscHop && rscHop.pathname === "/tracker/students/new" && rscHop.searchParams.has("_rsc")) {
+  r = await fetch(rscHop, { redirect: "manual", headers: prefetch });
+}
 check("7b a prefetch is not seen by the proxy", r.status < 300 || r.status >= 400, String(r.status));
 
 await browser.close();
