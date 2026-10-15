@@ -70,7 +70,9 @@ do $$ begin
 end $$;
 
 -- Helper: expect SQLSTATE (and optional message) from unlink_student as caller.
-create function pg_temp.expect_unlink(sid uuid, want_state text, want_msg text)
+create schema unlink_helpers;
+grant usage on schema unlink_helpers to public;
+create function unlink_helpers.expect_unlink(sid uuid, want_state text, want_msg text)
 returns void language plpgsql as $$
 begin
   perform tracker.unlink_student(sid);
@@ -84,13 +86,12 @@ exception when others then
     raise exception 'expected message %, got %', want_msg, sqlerrm;
   end if;
 end $$;
-grant execute on function pg_temp.expect_unlink(uuid, text, text) to public;
-grant usage on schema pg_temp to public;
+grant execute on function unlink_helpers.expect_unlink(uuid, text, text) to public;
 
 -- AC2: teacher refused ---------------------------------------------------------
 set role authenticated;
 set request.jwt.claims = '{"sub": "00000000-0000-0000-0000-0000000000a2", "email": "t1@example.com"}';
-select pg_temp.expect_unlink('20000000-0000-0000-0000-000000000001', '42501', null);
+select unlink_helpers.expect_unlink('20000000-0000-0000-0000-000000000001', '42501', null);
 reset role;
 do $$ begin
   if (select user_id from tracker.students where id = '20000000-0000-0000-0000-000000000001') is distinct from '00000000-0000-0000-0000-0000000000b1'::uuid then
@@ -102,8 +103,8 @@ end $$;
 -- AC3: other-org owner and unknown id refused ----------------------------------
 set role authenticated;
 set request.jwt.claims = '{"sub": "00000000-0000-0000-0000-0000000000a3", "email": "o2@example.com"}';
-select pg_temp.expect_unlink('20000000-0000-0000-0000-000000000001', '42501', null);
-select pg_temp.expect_unlink('99999999-9999-9999-9999-999999999999', '42501', null);
+select unlink_helpers.expect_unlink('20000000-0000-0000-0000-000000000001', '42501', null);
+select unlink_helpers.expect_unlink('99999999-9999-9999-9999-999999999999', '42501', null);
 reset role;
 
 -- AC10 (negatives): other-org owner and teacher see no logins ------------------
@@ -133,10 +134,10 @@ do $$ begin
 end $$;
 
 -- AC4: unclaimed student -------------------------------------------------------
-select pg_temp.expect_unlink('20000000-0000-0000-0000-000000000002', 'P0002', 'student is not linked to a login');
+select unlink_helpers.expect_unlink('20000000-0000-0000-0000-000000000002', 'P0002', 'student is not linked to a login');
 
 -- AC5: email unchanged -> 23514, nothing changes -------------------------------
-select pg_temp.expect_unlink('20000000-0000-0000-0000-000000000001', '23514', 'change the student email before unlinking');
+select unlink_helpers.expect_unlink('20000000-0000-0000-0000-000000000001', '23514', 'change the student email before unlinking');
 reset role;
 do $$ begin
   if (select user_id from tracker.students where id = '20000000-0000-0000-0000-000000000001') is null
