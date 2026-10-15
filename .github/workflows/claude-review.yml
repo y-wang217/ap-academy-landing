@@ -2,7 +2,7 @@ name: Claude Reviewer
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, labeled, review_requested]
+    types: [opened, synchronize, ready_for_review, review_requested]
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
