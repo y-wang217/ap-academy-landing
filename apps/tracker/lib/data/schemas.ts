@@ -150,6 +150,8 @@ export const StudentInput = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
 });
 
+export const UnlinkInput = z.object({ email: StudentInput.shape.email });
+
 export const GoalInput = z.object({
   school: text(120),
   program: text(120),

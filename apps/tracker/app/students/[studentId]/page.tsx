@@ -18,7 +18,7 @@ export const maxDuration = 120;
 /** Teacher overview of one student: courses, priorities, invite, status. */
 export default async function StudentPage({ params }: { params: Promise<{ studentId: string }> }) {
   const { studentId } = await params;
-  const { viewer, view, orgName } = await staffStudent(studentId);
+  const { viewer, view, orgName, loginEmail } = await staffStudent(studentId);
   const s = view.student;
   const drafts = await listDrafts(viewer.db, studentId);
   const courseCode = (courseId: string) => view.courses.find((c) => c.course.id === courseId)?.course.code ?? null;
@@ -84,7 +84,7 @@ export default async function StudentPage({ params }: { params: Promise<{ studen
           <TaskManager view={view} />
         </Card>
 
-        <InvitePanel view={view} orgName={orgName} />
+        <InvitePanel view={view} orgName={orgName} loginEmail={loginEmail} canUnlink={viewer.role === "owner"} />
 
         <DraftHistory drafts={drafts} viewerId={viewer.userId} courseCode={courseCode} />
 

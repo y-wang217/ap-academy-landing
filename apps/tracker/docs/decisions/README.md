@@ -45,3 +45,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0038](0038-booking-validation.md) | Bookings are checked on the server before any write | accepted |
 | [0039](0039-daily-teacher-texts-task.md) | The daily teacher-texts task is one Notion page per date, kept apart by a lease | accepted |
 | [0040](0040-lesson-link-extension-point.md) | A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet | accepted |
+| [0041](0041-owner-unlinks-claimed-student.md) | An owner can unlink a claimed student, through a function only | accepted |

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getViewer, loadBundle, type Bundle } from "./data/queries";
+import { getViewer, listLoginEmails, loadBundle, type Bundle } from "./data/queries";
 import { todayIso } from "./time";
 import { buildStudentView, type StudentView } from "./view/student-view";
 
@@ -9,6 +9,8 @@ export async function staffStudent(studentId: string): Promise<{
   bundle: Bundle;
   view: StudentView;
   orgName: string;
+  /** Owners only: the login that claimed this student. */
+  loginEmail: string | null;
   /** The ISO date the view was built for; the charts take the same one. */
   today: string;
 }> {
@@ -17,6 +19,9 @@ export async function staffStudent(studentId: string): Promise<{
   const bundle = await loadBundle(viewer.db, studentId).catch(() => null);
   if (!bundle || bundle.student.orgId !== viewer.orgId) notFound();
   const { data: org } = await viewer.db.tracker.from("orgs").select("name").eq("id", viewer.orgId).maybeSingle();
+  const loginEmail = viewer.role === "owner" && bundle.student.userId
+    ? ((await listLoginEmails(viewer.db, viewer.orgId).catch(() => new Map<string, string>())).get(studentId) ?? null)
+    : null;
   const today = todayIso();
-  return { viewer, bundle, view: buildStudentView(bundle, today), orgName: org?.name ?? "Your tutor", today };
+  return { viewer, bundle, view: buildStudentView(bundle, today), orgName: org?.name ?? "Your tutor", loginEmail, today };
 }

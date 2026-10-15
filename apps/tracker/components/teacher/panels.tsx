@@ -6,6 +6,8 @@ import {
 import { assessmentDate } from "@/lib/domain/assessment-date";
 import { STATE_LABEL } from "@/lib/domain/assessment-state";
 import { percent, points, stamp, whenText } from "@/lib/format";
+import { unlinkStudent } from "@/app/actions/teacher";
+import { claimLabel } from "@/lib/view/claim-text";
 import { FLAG_LABEL } from "@/lib/view/flags";
 import type { CourseView, StudentView } from "@/lib/view/student-view";
 import { TRACKER_URL } from "@/lib/config";
@@ -251,13 +253,37 @@ export function FlagList({ view }: { view: StudentView }) {
 }
 
 /** The invite (ADR 0016): a prefilled email from the teacher, plus the text to copy. */
-export function InvitePanel({ view, orgName }: { view: StudentView; orgName: string }) {
+export function InvitePanel({
+  view,
+  orgName,
+  loginEmail = null,
+  canUnlink = false,
+}: {
+  view: StudentView;
+  orgName: string;
+  loginEmail?: string | null;
+  canUnlink?: boolean;
+}) {
   const s = view.student;
   if (!s.publishedAt) return null;
   if (s.userId) {
     return (
       <Card title="Invite">
-        <Notice tone="ok">{s.firstName} has signed in.</Notice>
+        <Notice tone="ok">{claimLabel(s, loginEmail)}</Notice>
+        {canUnlink && (
+          <ActionForm
+            action={unlinkStudent.bind(null, s.id)}
+            labels={{ email: "Correct email" }}
+            secondary
+            submitLabel="Unlink"
+            pendingLabel="Unlinking..."
+            confirm={`Unlink ${s.firstName}? Whoever is signed in as ${loginEmail ?? "this login"} loses access now, and only the corrected address can sign in after this.`}
+          >
+            <Field label="Correct email" name="email">
+              <input id="email" name="email" type="email" required autoComplete="off" className={inputClass} />
+            </Field>
+          </ActionForm>
+        )}
       </Card>
     );
   }
