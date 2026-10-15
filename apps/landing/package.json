@@ -20,7 +20,7 @@
     "@ap-academy/db": "workspace:*",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
-    "lucide-react": "^0.575.0",
+    "lucide-react": "^1.55.0",
     "next": "16.3.8",
     "react": "19.2.3",
     "react-dom": "19.2.3"
