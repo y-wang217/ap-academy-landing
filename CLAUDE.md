@@ -88,7 +88,7 @@ apps on one origin locally, set `TRACKER_URL=http://localhost:3001` in
 
 This repo is built by an agent pipeline driven from the Notion **Dev Requirements** board. Config: `.claude/pipeline.json`.
 
-Flow: Backlog (waiting on **Blocked by** cards) → Ready → Designing → Design Review (human approves) → Approved → Building → In Review → Done.
+Flow: Backlog (waiting on **Blocked by** cards) → Ready → Designing → Needs Approval (human approves) → Approved → Building → In Review → Done.
 Side paths: Revise (human sent the design back), Changes Requested (reviewer sent the PR back), Blocked (needs a human).
 
 - Stage commands: `/design-next`, `/build-next`, `/pipeline-sweep`.
