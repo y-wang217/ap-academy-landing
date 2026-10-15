@@ -2,8 +2,9 @@ import Link from "next/link";
 import { Card, Empty, Notice, Page, buttonClass, secondaryButtonClass } from "@/components/ui";
 import { StudentDashboard } from "@/components/student-dashboard";
 import { TopBar } from "@/components/top-bar";
-import { getViewer, listStudents, loadBundle, openFlagCounts } from "@/lib/data/queries";
+import { getViewer, listLoginEmails, listStudents, loadBundle, openFlagCounts } from "@/lib/data/queries";
 import { studentName } from "@/lib/format";
+import { claimLabel } from "@/lib/view/claim-text";
 import { realScheduleDeps } from "@/lib/scheduler/deps";
 import { outsideAvailabilityCount } from "@/lib/scheduler/home-badge";
 import { todayIso } from "@/lib/time";
@@ -105,7 +106,12 @@ export default async function TrackerHome() {
     );
   }
 
-  const [students, flags, outside] = await Promise.all([listStudents(viewer.db, viewer.orgId), openFlagCounts(viewer.db, viewer.orgId), outsideAvailability()]);
+  const [students, flags, outside, logins] = await Promise.all([
+    listStudents(viewer.db, viewer.orgId),
+    openFlagCounts(viewer.db, viewer.orgId),
+    outsideAvailability(),
+    viewer.role === "owner" ? listLoginEmails(viewer.db, viewer.orgId).catch(() => new Map<string, string>()) : Promise.resolve(new Map<string, string>()),
+  ]);
   return (
     <>
       <TopBar email={viewer.email} />
@@ -146,7 +152,7 @@ export default async function TrackerHome() {
                     </span>
                     <span className="text-sm text-text-muted">
                       {STATUS_LABEL[s.status]}
-                      {s.status !== "setup" && !s.userId ? " · Not signed in yet" : ""}
+                      {claimLabel(s, logins.get(s.id) ?? null) ? ` · ${claimLabel(s, logins.get(s.id) ?? null)}` : ""}
                       {flags.get(s.id) ? <span className="block text-right font-medium text-warn">{flags.get(s.id) === 1 ? "1 flag" : `${flags.get(s.id)} flags`}</span> : null}
                     </span>
                   </Link>

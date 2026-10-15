@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CategoryInput, CourseInput, ScoreInput, TaskInput, formObject } from "./schemas";
+import { CategoryInput, CourseInput, ScoreInput, TaskInput, UnlinkInput, formObject } from "./schemas";
 
 /** A browser leaves an unchecked checkbox out of the form entirely. */
 function form(fields: Record<string, string>): Record<string, string> {
@@ -32,5 +32,14 @@ describe("checkbox fields", () => {
 
   it("refuses a value that is not a checkbox value", () => {
     expect(CategoryInput.safeParse(form({ name: "Tests", weight: "50", aggregationMethod: "mean_of_percentages", needsReview: "nope" })).success).toBe(false);
+  });
+});
+
+describe("UnlinkInput (AC13)", () => {
+  it("rejects an invalid email", () => {
+    expect(UnlinkInput.safeParse({ email: "nope" }).success).toBe(false);
+  });
+  it("trims and lowercases a valid one", () => {
+    expect(UnlinkInput.parse({ email: "  Sam.Real@Example.com " })).toEqual({ email: "sam.real@example.com" });
   });
 });

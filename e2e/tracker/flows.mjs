@@ -171,6 +171,7 @@ try {
   await teacher.goto(`${BASE}${studentPath}/setup/review`);
   check("review shows ready to publish", await teacher.getByText("Ready to publish.").isVisible());
   check("review previews the student dashboard", await teacher.getByRole("heading", { name: "What Sam will see" }).isVisible());
+  check("review shows the student email and who will see the grades", await teacher.getByText("The first person to sign in with this address will see this student's grades.").isVisible() && await teacher.locator("strong", { hasText: "sam@example.com" }).first().isVisible());
   await teacher.getByRole("button", { name: "Publish" }).click();
   await teacher.getByRole("heading", { name: "Published" }).waitFor({ timeout: 15000 });
   check("publishing shows the invite", await teacher.getByRole("link", { name: "Open invite email" }).isVisible());
@@ -626,6 +627,33 @@ try {
     check("every tracker table outside scheduling is identical before and after the booking flow (PG_URL missing)", false);
   }
   check("the seeded lesson reads back unchanged and was never requested by the tracker", (await (await fetch(lessonUrl, { headers: { "x-e2e-probe": "1" } })).text()) === lessonBefore && lessonBefore.includes('"Paid to Teacher"'));
+
+  // REQ-15: the owner sees who claimed Sam, unlinks with a corrected address, and the right person takes over.
+  await teacher.goto(`${BASE}`);
+  check("the owner's list shows who claimed Sam", await teacher.getByText("Signed in as sam@example.com").first().isVisible());
+  await teacher.goto(`${BASE}${studentPath}`);
+  // An earlier step archived Sam, and an archived student cannot be claimed again.
+  const restore = teacher.getByRole("button", { name: "Restore student" });
+  if (await restore.count()) {
+    await restore.click();
+    await teacher.getByRole("button", { name: "Archive student" }).waitFor({ timeout: 15000 });
+  }
+  const invite = section(teacher, "Invite");
+  check("the Invite card names the login", await invite.getByText("Signed in as sam@example.com").isVisible());
+  teacher.once("dialog", (d) => d.accept());
+  await invite.getByLabel("Correct email").fill("sam.real@example.com");
+  await invite.getByRole("button", { name: "Unlink", exact: true }).click();
+  // On success the card re-renders as unclaimed, so the form (and its "Unlinked" note) goes away.
+  await invite.getByText(/has not signed in yet/).waitFor({ timeout: 15000 });
+  const sam = await signedIn(browser, "sam@example.com");
+  await sam.goto(`${BASE}`);
+  check("the old login no longer reaches Sam's dashboard", (await sam.getByRole("heading", { name: "Hi Sam" }).count()) === 0);
+  const samReal = await signedIn(browser, "sam.real@example.com");
+  await samReal.goto(`${BASE}`);
+  const realH1 = await samReal.locator("h1").first().textContent();
+  check("the corrected address now sees Hi Sam", realH1 === "Hi Sam", `${realH1} | ${(await samReal.locator("body").innerText()).slice(0, 200)}`);
+  await teacher.goto(`${BASE}`);
+  check("the list now shows the corrected login", await teacher.getByText("Signed in as sam.real@example.com").first().isVisible());
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {

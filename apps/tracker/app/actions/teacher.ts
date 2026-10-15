@@ -6,9 +6,10 @@ import { validateSyllabus } from "@/lib/domain/grades";
 import { orderTasks } from "@/lib/domain/priorities";
 import { CATEGORY_PROBLEM, applyChangeSet, contextFromBundle, type ChangeItem, type StudentContext } from "@/lib/data/change-set";
 import { dbMessage } from "@/lib/data/errors";
-import { getViewer, loadBundle } from "@/lib/data/queries";
+import { getViewer, listLoginEmails, loadBundle } from "@/lib/data/queries";
+import { checkUnlink } from "@/lib/data/unlink";
 import {
-  AssessmentInput, CategoryInput, CourseInput, GoalInput, ScoreInput, StudentInput, TargetInput, TaskInput,
+  AssessmentInput, CategoryInput, CourseInput, GoalInput, ScoreInput, StudentInput, TargetInput, TaskInput, UnlinkInput,
   fieldErrors, formObject,
 } from "@/lib/data/schemas";
 import { failed, type Result } from "@/lib/result";
@@ -101,6 +102,40 @@ export async function updateStudent(studentId: string, form: FormData): Promise<
     .update({ email: input.data.email, first_name: input.data.firstName, last_initial: input.data.lastInitial, grade_level: input.data.gradeLevel })
     .eq("id", studentId);
   return error ? failed(dbMessage(error)) : done();
+}
+
+/**
+ * Owner-only. The email is corrected first (existing update grant), then the
+ * database function clears the claim; it refuses while the email still matches
+ * the login, so the same person cannot be linked straight back. The role check
+ * here is for plain messages; the function enforces it.
+ */
+export async function unlinkStudent(studentId: string, form: FormData): Promise<Result> {
+  const v = await staff();
+  if (!v) return NO_ACCESS;
+  if (v.role !== "owner") return NO_ACCESS;
+  const input = parse(UnlinkInput, form);
+  if (!input.ok) return input.result;
+  if (!z.guid().safeParse(studentId).success) return NO_ACCESS;
+  const { data: row } = await v.db.tracker.from("students").select("email, user_id").eq("id", studentId).maybeSingle();
+  if (!row) return NO_ACCESS;
+  const logins = await listLoginEmails(v.db, v.orgId).catch(() => null);
+  if (!logins) return failed("Could not check who is signed in. Try again.");
+  const check = checkUnlink({
+    role: v.role,
+    student: { email: String(row.email), userId: (row.user_id as string | null) ?? null },
+    newEmail: input.data.email,
+    loginEmail: logins.get(studentId) ?? null,
+  });
+  if (!check.ok) return check;
+  if (check.updateEmail) {
+    const { error } = await v.db.tracker.from("students").update({ email: input.data.email }).eq("id", studentId);
+    if (error) {
+      return error.code === "23505" ? failed("A student with that email already exists.", { email: "Already used" }) : failed(dbMessage(error));
+    }
+  }
+  const { error } = await v.db.tracker.rpc("unlink_student", { student_id: studentId });
+  return error ? failed(dbMessage(error)) : done("Unlinked");
 }
 
 export async function saveGoal(studentId: string, form: FormData): Promise<Result> {
