@@ -18,11 +18,15 @@ concurrency:
 
 jobs:
   review:
+    # Same-repository req/ branches only. A workflow_run job carries secrets, so
+    # a fork branch named req/... must never reach the checkout below.
     if: >
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
        startsWith(github.event.workflow_run.head_branch, 'req/')) ||
       (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
        startsWith(github.head_ref, 'req/') &&
        !github.event.pull_request.draft)
     runs-on: ubuntu-latest
