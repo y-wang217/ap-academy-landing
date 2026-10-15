@@ -581,6 +581,15 @@ try {
   await teacher.getByText("Today's Notion task is ready.").waitFor({ timeout: 15000 });
   check("a second press adds no page", (await workPages()).length === 1);
 
+  // REQ-16: a cross-origin write to a scheduler route is refused before the session is read.
+  const dailyTask = `${BASE}/api/scheduler/daily-task`;
+  const evil = await teacher.context().request.post(dailyTask, { data: { date: isoIn(0) }, headers: { Origin: "https://evil.example" } });
+  check("a signed-in POST with a foreign Origin is refused with 403 forbidden",
+    evil.status() === 403 && JSON.stringify(await evil.json()) === '{"error":"forbidden"}');
+  const plain = await teacher.context().request.post(dailyTask, { data: { date: isoIn(0) } });
+  check("the same POST without that header still succeeds", plain.status() === 200);
+  check("the refused request changed nothing", (await workPages()).length === 1);
+
   const runUrl = `${BASE}/api/scheduler/daily-task/run`;
   const noBearer = await fetch(runUrl, { method: "POST", redirect: "manual" });
   const wrongBearer = await fetch(runUrl, { method: "POST", redirect: "manual", headers: { Authorization: "Bearer wrong" } });
