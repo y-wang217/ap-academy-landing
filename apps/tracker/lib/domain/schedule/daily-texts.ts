@@ -43,6 +43,15 @@ export const isDue = (nowLocalTime: string, configured: string) => nowLocalTime 
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
+const HONORIFIC = /^(mr|ms|mrs|dr|miss|mx|prof)\.?$/i;
+
+/** How the greeting names a teacher: "Mr. Charlie Wang" -> "Mr. Charlie", "Charlie Wang" -> "Charlie". */
+export function greetingName(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length > 1 && HONORIFIC.test(words[0])) return `${words[0]} ${words[1]}`;
+  return words[0] || name;
+}
+
 export function buildTeacherDays(input: {
   date: string;
   staff: StaffLite[];
@@ -73,7 +82,7 @@ export function buildTeacherDays(input: {
       });
     const live = lines.filter((l) => !l.cancelled).length;
     const linkUrl = input.scheduleUrl(staffId, date);
-    const first = p.name.split(/\s+/)[0] || p.name;
+    const first = greetingName(p.name);
     const copyText =
       lines.length === 0
         ? `Hi ${first}, no classes scheduled for you today (${shortDate(date)}).`
