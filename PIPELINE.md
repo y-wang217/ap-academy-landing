@@ -12,6 +12,7 @@ Things Claude Code cannot do for you. Tick them off once.
   - Require status checks: `gate` (CI) and `review`.
   - Block force pushes. Include administrators is optional; leaving it off lets you hotfix.
 - [ ] Labels exist: `pipeline`, `needs-human-merge`.
+- [ ] Settings → Advanced Security: enable Dependabot alerts and Dependabot security updates (`.github/dependabot.yml` only configures the weekly version updates).
 - [ ] Claude GitHub App installed on the repo (`/install-github-app` in Claude Code).
 
 ## Claude
