@@ -94,6 +94,7 @@ Side paths: Revise (human sent the design back), Changes Requested (reviewer sen
 - Stage commands: `/design-next`, `/build-next`, `/pipeline-sweep`.
 - Agent roles: `.claude/agents/designer.md`, `builder.md`, `reviewer.md`.
 - Every change ships on a `req/<card-id>-<slug>` branch through a PR. Nothing is pushed to `main` directly.
+- Dependabot (`.github/dependabot.yml`) opens weekly npm and GitHub Actions PRs on `dependabot/` branches. They are not `req/` branches, so the Claude reviewer and auto-merge skip them; a human merges each one after the CI gate passes.
 - The Stop hook runs `gate_commands` and will not let a session finish with failing tests when code changed.
 - The SessionStart hook runs `pnpm install --frozen-lockfile` in cloud sessions so the gate has dependencies. Local sessions skip it.
 - The guard hook blocks pushes to main, merges, remote database changes, production deploys, and edits to `.env`, hooks, settings and workflows.
