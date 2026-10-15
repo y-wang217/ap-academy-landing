@@ -102,6 +102,7 @@ Side paths: Revise (human sent the design back), Changes Requested (reviewer sen
 - The Stop hook runs `gate_commands` and will not let a session finish with failing tests when code changed.
 - The SessionStart hook runs `pnpm install --frozen-lockfile` in cloud sessions, installs PostgREST and smoke-starts the local tracker stack, so `pnpm test:tracker` and `pnpm test:sso` run there. The builder runs them before any PR touching `e2e_paths`. Local sessions skip the hook.
 - The guard hook blocks pushes to main, merges, remote database changes, production deploys, and edits to `.env`, hooks, settings and workflows.
+- PRs touching `apps/tracker/lib/notion/` or `apps/tracker/app/api/scheduler/daily-task/` (what the tracker writes to Notion) are in `human_merge_paths`, so they carry `needs-human-merge` and never auto-merge.
 - Database migrations are written as files only and ship in their own `req/<card-id>-migration` PR (`needs-human-merge`); a human merges and applies it. The feature PR is based on that branch, carries `awaiting-migration`, and auto-merges once the sweep sees the migration live.
 - Risk High is reserved for auth, permissions or RLS changes, payments, personal data to a new destination, deleting or rewriting rows, and irreversible work. A migration alone is not High.
 - Kill switch: tick **Paused** on the Pipeline Control page in Notion.

@@ -66,6 +66,8 @@
     "apps/tracker/proxy.ts",
     "apps/tracker/next.config.ts",
     "scripts/",
-    ".github/"
+    ".github/",
+    "apps/tracker/lib/notion/",
+    "apps/tracker/app/api/scheduler/daily-task/"
   ]
 }
