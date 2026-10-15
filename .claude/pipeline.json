@@ -20,7 +20,7 @@
     "done": "Done",
     "blocked": "Blocked"
   },
-  "wip_limit": 1,
+  "wip_limit": 3,
   "max_attempts": 2,
   "branch_prefix": "req/",
   "gate_commands": [
