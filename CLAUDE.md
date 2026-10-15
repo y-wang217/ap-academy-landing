@@ -58,7 +58,7 @@ superseding ADR first.
   named after the file (`0004_tracker_core`). The live history records them
   under timestamp versions, so `supabase db push` would see every file as
   unapplied: never run it against the live project. Applied so far: 0001 and
-  0002 by hand, 0003 to 0005 on 2026-10-04, 0006 and 0007 on 2026-10-05, 0008 on 2026-10-06, 0009, 0010 and 0011 on 2026-10-14.
+  0002 by hand, 0003 to 0005 on 2026-10-04, 0006 and 0007 on 2026-10-05, 0008 on 2026-10-06, 0009, 0010, 0011 and 0012 on 2026-10-14, 0013 on 2026-10-15.
 
 ## Commands
 
@@ -94,6 +94,7 @@ Side paths: Revise (human sent the design back), Changes Requested (reviewer sen
 - Stage commands: `/design-next`, `/build-next`, `/pipeline-sweep`.
 - Agent roles: `.claude/agents/designer.md`, `builder.md`, `reviewer.md`.
 - Every change ships on a `req/<card-id>-<slug>` branch through a PR. Nothing is pushed to `main` directly.
+- Dependabot (`.github/dependabot.yml`) opens weekly npm and GitHub Actions PRs on `dependabot/` branches. They are not `req/` branches, so the Claude reviewer and auto-merge skip them; a human merges each one after the CI gate passes.
 - The Stop hook runs `gate_commands` and will not let a session finish with failing tests when code changed.
 - The SessionStart hook runs `pnpm install --frozen-lockfile` in cloud sessions so the gate has dependencies. Local sessions skip it.
 - The guard hook blocks pushes to main, merges, remote database changes, production deploys, and edits to `.env`, hooks, settings and workflows.

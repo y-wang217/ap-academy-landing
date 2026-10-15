@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "@ap-academy/db/headers";
 
 /**
  * Landing owns www.apacademy.ca and proxies every other app's path to that
@@ -10,6 +11,10 @@ const TRACKER_URL = process.env.TRACKER_URL?.replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@ap-academy/db"],
+
+  async headers() {
+    return [{ source: "/:path*", headers: [...securityHeaders] }];
+  },
 
   async redirects() {
     // A second domain would hold its own host-only session, so send it home.

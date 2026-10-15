@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "@ap-academy/db/headers";
 
 // The public site the tracker is served under (through landing's rewrite).
 const SITE_HOST = new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.apacademy.ca").host;
@@ -8,6 +9,9 @@ const nextConfig: NextConfig = {
   // (ADR 0002). Every route and asset lives under this prefix.
   basePath: "/tracker",
   transpilePackages: ["@ap-academy/db"],
+  async headers() {
+    return [{ source: "/:path*", headers: [...securityHeaders] }];
+  },
   experimental: {
     // Server actions reject a request whose Origin differs from the host the
     // app sees. Behind the landing proxy the app may see its own vercel.app
