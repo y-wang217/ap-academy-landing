@@ -1,0 +1,27 @@
+# REQ-12. Weekly dependency PRs for the pnpm workspace and GitHub Actions.
+# Dependabot branches start with `dependabot/`, not `req/`, so the Claude
+# reviewer and auto-merge skip them. A human merges each one after CI passes.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"          # pnpm workspace root: covers apps/* and packages/*
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Toronto"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "needs-human-merge"]
+    groups:
+      npm-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Toronto"
+    labels: ["dependencies", "needs-human-merge"]

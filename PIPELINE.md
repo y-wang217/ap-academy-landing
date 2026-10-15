@@ -12,6 +12,7 @@ Things Claude Code cannot do for you. Tick them off once.
   - Require status checks: `gate` (CI) and `review`. `review` is a commit status the reviewer workflow posts on the PR head (pending while CI is red, success or failure after the bot's verdict); the workflow runs from `workflow_run`, which GitHub does not list as a PR check on its own.
   - Block force pushes. Include administrators is optional; leaving it off lets you hotfix.
 - [ ] Labels exist: `pipeline`, `needs-human-merge`, `migration`, `awaiting-migration`.
+- [ ] Settings → Advanced Security: enable Dependabot alerts and Dependabot security updates (`.github/dependabot.yml` only configures the weekly version updates).
 - [ ] Claude GitHub App installed on the repo (`/install-github-app` in Claude Code).
 
 ## Claude

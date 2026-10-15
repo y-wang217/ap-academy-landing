@@ -49,40 +49,54 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export function ScheduleImport() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [adopted, setAdopted] = useState<Adopted[]>([]);
-  const [busy, setBusy] = useState<"check" | "import" | "retry" | null>(null);
+  // The plan is read on mount, so the page starts out checking.
+  const [busy, setBusy] = useState<"check" | "import" | "retry" | null>("check");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [month, setMonth] = useState(nextMonth);
   const [review, setReview] = useState<Review[] | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
-  const check = useCallback(async () => {
-    setBusy("check");
-    setError(null);
-    try {
-      const r = await call<{ plan: Plan; adopted: Adopted[] }>("/import");
-      setPlan(r.plan);
-      setAdopted(r.adopted);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "That did not work.");
-    } finally {
-      setBusy(null);
-    }
-  }, []);
+  // readPlan and loadReview set state only in promise callbacks, so the effects
+  // below can call them (react-hooks/set-state-in-effect).
+  const readPlan = useCallback(
+    () =>
+      call<{ plan: Plan; adopted: Adopted[] }>("/import")
+        .then(
+          (r) => {
+            setPlan(r.plan);
+            setAdopted(r.adopted);
+          },
+          (e) => setError(e instanceof Error ? e.message : "That did not work."),
+        )
+        .finally(() => setBusy(null)),
+    [],
+  );
 
   useEffect(() => {
-    void check();
-  }, [check]);
+    void readPlan();
+  }, [readPlan]);
 
-  const loadReview = useCallback(async (m: string) => {
-    setReviewError(null);
-    try {
-      setReview((await call<{ students: Review[] }>(`/monthly-review?month=${m}`)).students);
-    } catch (e) {
-      setReview(null);
-      setReviewError(e instanceof Error ? e.message : "That did not work.");
-    }
-  }, []);
+  async function check() {
+    setBusy("check");
+    setError(null);
+    await readPlan();
+  }
+
+  const loadReview = useCallback(
+    (m: string) =>
+      call<{ students: Review[] }>(`/monthly-review?month=${m}`).then(
+        (r) => {
+          setReviewError(null);
+          setReview(r.students);
+        },
+        (e) => {
+          setReview(null);
+          setReviewError(e instanceof Error ? e.message : "That did not work.");
+        },
+      ),
+    [],
+  );
 
   useEffect(() => {
     void loadReview(month);

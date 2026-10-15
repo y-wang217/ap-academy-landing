@@ -82,7 +82,7 @@ jobs:
             -f description="Waiting for green CI before the bot reviews" \
             -f target_url="${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.number }}/checks"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.pr.outputs.green == 'true'
         with:
           ref: ${{ steps.pr.outputs.sha }}
