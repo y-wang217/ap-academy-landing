@@ -8,6 +8,8 @@ The free Supabase plan has limited backups and pauses inactive projects. The pla
 ## Decision
 `scripts/backup.sh` runs `pg_dump` (Postgres 17 client) against the live database, compresses and encrypts the dump with a passphrase, and the nightly GitHub Action stores it as an artifact for 30 days. It needs two repository secrets, `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE`; without them the job skips with a notice instead of failing. The restore is documented and drilled in `docs/RESTORE.md`.
 
+**Amended (REQ-14):** the dump is now encrypted to a GPG public key, not a passphrase, so nothing in GitHub can decrypt it. The secrets are `SUPABASE_DB_URL` and `BACKUP_PUBLIC_KEY`; the private key stays offline with the operator.
+
 ## Alternatives considered
 - Rely on Supabase backups alone: the plan asks for separate storage.
 - An S3 bucket: a new service and new credentials.

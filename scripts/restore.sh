@@ -5,19 +5,25 @@
 # signup and audit triggers do not fire twice. Prints row counts to compare
 # with the archive's manifest. See docs/RESTORE.md.
 #
-# Usage: TARGET_DB_URL=... [BACKUP_PASSPHRASE=...] scripts/restore.sh <archive>
+# Usage: TARGET_DB_URL=... \
+#   BACKUP_PRIVATE_KEY="$(cat key.asc)" BACKUP_PRIVATE_KEY_PASSPHRASE=... scripts/restore.sh <archive>
+# An archive that is already a plain .tar.gz (decrypted by hand) needs no key.
 set -euo pipefail
 
 : "${TARGET_DB_URL:?TARGET_DB_URL is required}"
 archive="${1:?usage: restore.sh <archive>}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+trap 'gpgconf --kill gpg-agent >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 
 if [[ "$archive" == *.gpg ]]; then
-  : "${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE is required for an encrypted archive}"
-  gpg --batch --yes --quiet --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" \
-    --decrypt --output "$work/backup.tar.gz" "$archive"
+  : "${BACKUP_PRIVATE_KEY:?BACKUP_PRIVATE_KEY is required for an encrypted archive}"
+  : "${BACKUP_PRIVATE_KEY_PASSPHRASE:?BACKUP_PRIVATE_KEY_PASSPHRASE is required for an encrypted archive}"
+  export GNUPGHOME="$work/gnupg"
+  mkdir -m 700 "$GNUPGHOME"
+  gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 3 --import <<<"$BACKUP_PRIVATE_KEY" 3<<<"$BACKUP_PRIVATE_KEY_PASSPHRASE" 2>/dev/null
+  gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-fd 3 \
+    --decrypt --output "$work/backup.tar.gz" "$archive" 3<<<"$BACKUP_PRIVATE_KEY_PASSPHRASE"
 else
   cp "$archive" "$work/backup.tar.gz"
 fi

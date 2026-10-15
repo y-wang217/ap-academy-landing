@@ -128,7 +128,7 @@ Each step is done only when lint, typecheck and tests pass.
    `supabase/seed/tracker-bootstrap.sql`.~~ Done 2026-10-04 with sign-off;
    y.wang217@gmail.com owns the AP Academy org. Still to do: add `tracker`
    under API settings > Exposed schemas, then regenerate types.
-2. Add the `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE` repository secrets, run the
+2. Add the `SUPABASE_DB_URL` and `BACKUP_PUBLIC_KEY` repository secrets, run the
    backup workflow once, and drill a restore into a scratch project.
 3. Move Supabase to Pro (no pausing, daily backups).
 4. Privacy policy: student data is stored in the US (workspace ADR 0001).
