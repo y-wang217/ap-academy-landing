@@ -1,14 +1,30 @@
 import { redirectKeepingCookies, updateSession } from "@ap-academy/db/middleware";
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { SITE_URL } from "./lib/config";
+import { allowedSiteHosts, isCrossSiteWrite } from "./lib/cross-site";
 import { loginRedirectFor } from "./lib/login-redirect";
+
+const SITE_HOSTS = allowedSiteHosts(SITE_URL);
 
 /**
  * Next 16's proxy (formerly middleware). Refreshes the shared Supabase session
  * and keeps signed-out users out. The tracker never renders a login page: it
  * sends people to landing's /login. When Supabase isn't configured, requests
- * pass through and the page explains.
+ * pass through and the page explains. Scheduler API writes are origin-checked
+ * first, before the session is touched (tracker ADR 0042).
  */
 export async function proxy(request: NextRequest) {
+  if (
+    request.nextUrl.pathname.startsWith("/api/scheduler/") &&
+    isCrossSiteWrite({
+      method: request.method,
+      secFetchSite: request.headers.get("sec-fetch-site"),
+      origin: request.headers.get("origin"),
+      allowedHosts: SITE_HOSTS,
+    })
+  ) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
   const { response, user, configured } = await updateSession(request);
   if (!configured || user) return response;
   return redirectKeepingCookies(request, response, loginRedirectFor(request.nextUrl));
@@ -27,6 +43,7 @@ export const config = {
   // wizard). The real navigation still runs the proxy, and every page checks
   // the viewer itself, so a skipped prefetch neither refreshes nor grants a
   // session. Literal, not a shared constant: the config must be static.
+  // Scheduler API writes are origin-checked in proxy() (ADR 0042).
   matcher: [
     {
       source: "/",

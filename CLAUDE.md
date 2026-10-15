@@ -83,6 +83,8 @@ those builds when they finish.
 Each app's Vercel project sets its Root Directory to `apps/<name>`. For both
 apps on one origin locally, set `TRACKER_URL=http://localhost:3001` in
 `apps/landing/.env.local` and browse via `http://localhost:3000`.
+Also set `NEXT_PUBLIC_SITE_URL=http://localhost:3000` in `apps/tracker/.env.local`,
+or scheduler writes return 403 (tracker ADR 0042).
 
 ## Agent pipeline
 

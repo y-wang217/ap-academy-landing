@@ -46,3 +46,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0039](0039-daily-teacher-texts-task.md) | The daily teacher-texts task is one Notion page per date, kept apart by a lease | accepted |
 | [0040](0040-lesson-link-extension-point.md) | A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet | accepted |
 | [0041](0041-owner-unlinks-claimed-student.md) | An owner can unlink a claimed student, through a function only | accepted |
+| [0042](0042-origin-check-for-scheduler-api.md) | The proxy refuses cross-site writes to the scheduler API | accepted |
