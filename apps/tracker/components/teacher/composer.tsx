@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { confirmDraft, discardDraft, draftChanges, type DraftPreview, type DraftScope } from "@/app/actions/ai";
+import { AI_DISCLOSURE } from "@/lib/ai/disclosure";
 import { buttonClass, inputClass, secondaryButtonClass } from "../ui";
 
 type Preview = Extract<DraftPreview, { ok: true }>;
@@ -186,7 +187,8 @@ export function Composer({ scope, limits, placeholder }: { scope: DraftScope; li
         {fileNames.length > 0 && <span className="text-sm text-text-muted">{fileNames.join(", ")}</span>}
       </div>
       <p className="text-xs text-text-muted">
-        Notes, a course outline, a portal screenshot, or a Zoom transcript. Write the student number on notes, not the name. The student&apos;s name and email addresses are removed from text before it is sent.
+        Notes, a course outline, a portal screenshot, or a Zoom transcript. Write the student number on notes, not the name. {AI_DISCLOSURE}{" "}
+        <a href="/privacy" className="underline">Privacy policy</a>
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={pending} className={buttonClass}>
