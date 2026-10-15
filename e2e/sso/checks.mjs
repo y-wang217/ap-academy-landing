@@ -1,5 +1,5 @@
 // Acceptance checks 1 to 6 of docs/spec/single-domain-done-state.md, plus 7
-// (the tracker proxy skips prefetches), in a real browser, against both apps
+// (the tracker proxy skips prefetches) and 8 (security headers), in a real browser, against both apps
 // running behind landing's rewrite. The session the auth callback would set is
 // injected as a cookie: the magic-link email itself is not tested here. Run
 // through ./run.sh.
@@ -105,6 +105,46 @@ if (rscHop && rscHop.pathname === "/tracker/students/new" && rscHop.searchParams
   r = await fetch(rscHop, { redirect: "manual", headers: prefetch });
 }
 check("7b a prefetch is not seen by the proxy", r.status < 300 || r.status >= 400, String(r.status));
+
+// 8. Security headers (REQ-11) reach the browser on every app, with exactly
+// these values. Kept as an independent copy of packages/db/src/headers.ts.
+const SECURITY_HEADERS = {
+  "x-frame-options": "DENY",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+};
+const hasSecurityHeaders = (res) =>
+  Object.entries(SECURITY_HEADERS).every(([k, v]) => res.headers.get(k) === v);
+
+for (const [id, path] of [["8a", "/"], ["8b", "/login"], ["8c", "/sat"]]) {
+  r = await fetch(BASE + path);
+  check(`${id} ${path} has the security headers`, r.status === 200 && hasSecurityHeaders(r), String(r.status));
+}
+r = await fetch(BASE + "/tracker", { redirect: "manual" });
+check("8d signed-out /tracker redirect has the security headers", r.status === 307 && hasSecurityHeaders(r), String(r.status));
+await fetch("http://127.0.0.1:54321/__reset");
+r = await fetch(BASE + "/tracker", { headers: { cookie: `sb-127-auth-token=${cookieValue}` } });
+check("8e signed-in /tracker has the security headers", r.status === 200 && hasSecurityHeaders(r), String(r.status));
+r = await fetch("http://localhost:3001/tracker", { redirect: "manual" });
+check("8f tracker's own host has the security headers", hasSecurityHeaders(r), String(r.status));
+
+const consolePage = await browser.newPage();
+const consoleProblems = [];
+consolePage.on("console", (m) => {
+  if ((m.type() === "error" || m.type() === "warning") && /X-Frame-Options|Permissions-Policy|Refused to/.test(m.text())) {
+    consoleProblems.push(m.text());
+  }
+});
+await consolePage.goto(BASE + "/");
+const hrefs = () => consolePage.$$eval("a[href]", (as) => as.map((a) => a.getAttribute("href")));
+const calendlyLinks = await hrefs();
+await consolePage.goto(BASE + "/enroll");
+const stripeLinks = await hrefs();
+await consolePage.goto(BASE + "/info");
+check("8g no header-related console errors on / and /info", consoleProblems.length === 0, consoleProblems.join(" | "));
+check("8h / keeps its outbound Calendly link and /enroll its Stripe links",
+  calendlyLinks.some((h) => h.startsWith("https://calendly.com/")) && stripeLinks.some((h) => h.startsWith("https://buy.stripe.com/")));
 
 await browser.close();
 const failed = results.filter((x) => !x.ok).length;

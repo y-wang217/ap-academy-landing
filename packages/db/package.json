@@ -5,6 +5,7 @@
   "description": "Shared Supabase client helpers and database types for every AP Academy app.",
   "exports": {
     "./config": "./src/config.ts",
+    "./headers": "./src/headers.ts",
     "./browser": "./src/browser.ts",
     "./server": "./src/server.ts",
     "./middleware": "./src/middleware.ts",
