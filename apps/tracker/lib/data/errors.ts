@@ -11,6 +11,10 @@ export function dbMessage(error: DbError): string {
   if (/confirmed syllabus version is read-only|categories of a confirmed/.test(message)) {
     return "This syllabus is confirmed and can't be changed.";
   }
+  if (/change the student email before unlinking/.test(message)) {
+    return "Change the email first, or the same person is linked again on their next sign-in.";
+  }
+  if (/student is not linked to a login/.test(message)) return "This student isn't linked to a login.";
   switch (error.code) {
     case "42501":
       return "You don't have access to that.";
