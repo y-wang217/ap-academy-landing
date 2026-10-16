@@ -1,0 +1,50 @@
+name: Notify human
+
+# Charlie is notified only when the next move is his (ADR 0003). When the bot
+# reviewer approves a req/ PR that carries needs-human-merge, the next step is
+# a human merge, or a merge plus a migration to apply, so this posts one
+# comment as github-actions[bot] that @mentions him. A bot comment notifies
+# him; his own PR activity does not. The bot's review is posted with
+# REVIEWER_PAT, so it does start this workflow. One comment per head commit:
+# scripts/notify-human.mjs de-duplicates with an HTML marker. The review-round
+# cap uses the same script from claude-review.yml.
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  your-move:
+    if: >
+      startsWith(github.event.pull_request.head.ref, 'req/') &&
+      github.event.review.state == 'approved' &&
+      github.event.review.user.login == 'ap-academy-bot' &&
+      contains(github.event.pull_request.labels.*.name, 'needs-human-merge')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Post the one "your move" comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          IS_MIGRATION: ${{ contains(github.event.pull_request.labels.*.name, 'migration') }}
+        run: |
+          set -euo pipefail
+          reason=merge
+          extra=()
+          if [ "$IS_MIGRATION" = "true" ]; then
+            # The migration numbers this PR adds, for example "0017" or "0015, 0016".
+            migration=$(gh pr view "$NUMBER" --repo "$REPO" --json files \
+              --jq '[.files[].path | select(startswith("supabase/migrations/")) | capture("supabase/migrations/(?<n>[0-9]{4})_").n] | unique | join(", ")')
+            reason=migration
+            extra=(--migration "${migration:-see the diff}")
+          fi
+          node scripts/notify-human.mjs --repo "$REPO" --pr "$NUMBER" --sha "$SHA" --reason "$reason" "${extra[@]}"
