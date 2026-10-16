@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildStudentView } from "./student-view";
-import { assessment, bundle, course, task, TODAY, stamp } from "./test-fixture";
+import { bundle, course, task, TODAY, stamp } from "./test-fixture";
 
 describe("buildStudentView", () => {
   const view = buildStudentView(bundle(), TODAY);

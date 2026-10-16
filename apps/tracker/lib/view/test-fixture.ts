@@ -10,7 +10,7 @@ export function course(id: string, o: Partial<Course> = {}): Course {
 export function category(id: string, courseId: string, weight: number): Category {
   return { id, courseId, versionId: `v-${courseId}`, name: id, weight, aggregationMethod: "mean_of_percentages", needsReview: false, position: 0 };
 }
-export function assessment(id: string, courseId: string, categoryId: string, earned: number | null, possible: number, due: string, o: Partial<Assessment> = {}): Assessment {
+export function assessment(id: string, courseId: string, categoryId: string, earned: number | null, possible: number, due: string | null, o: Partial<Assessment> = {}): Assessment {
   return { id, courseId, categoryId, title: id, kind: "assignment", dueDate: due, heldOn: null, studentDoneAt: null, scoreEarned: earned, scorePossible: possible, excused: false, gradedAt: earned === null ? null : stamp, updatedAt: stamp, ...o };
 }
 export function task(id: string, o: Partial<Task> = {}): Task {

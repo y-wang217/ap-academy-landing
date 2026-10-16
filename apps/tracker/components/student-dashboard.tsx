@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { STATE_LABEL } from "@/lib/domain/assessment-state";
 import { gap, percent, points, stamp, whenText } from "@/lib/format";
 import type { CourseView, StudentView } from "@/lib/view/student-view";
@@ -10,6 +11,11 @@ import { TrendPill } from "./trend-pill";
 import { Card, Empty, GradeNote, StateBadge } from "./ui";
 
 const h2 = "sr-only";
+
+/** A course header: a link when the viewer can open the course, a plain block when not. */
+function CourseHeader({ href, className, children }: { href?: string; className: string; children: ReactNode }) {
+  return href ? <Link href={href} className={className}>{children}</Link> : <div className={className}>{children}</div>;
+}
 
 /** Scored marks of a course, for the chart's reveal. Components pass data through; the view computed it. */
 function chartMarks(c: CourseView) {
@@ -26,11 +32,18 @@ export function StudentDashboard({
   view,
   interactive,
   courseHref,
+  readOnly = false,
+  afterSubjects,
   today,
 }: {
   view: StudentView;
   interactive: boolean;
-  courseHref: (courseId: string) => string;
+  /** Absent for a parent: course headers are plain blocks, not links. */
+  courseHref?: (courseId: string) => string;
+  /** A parent's view: no chart hint and no Extra practice. */
+  readOnly?: boolean;
+  /** Rendered between Subjects and Next priorities. */
+  afterSubjects?: ReactNode;
   /** ISO date, the right edge of every chart. */
   today: string;
 }) {
@@ -88,7 +101,7 @@ export function StudentDashboard({
 
       <section aria-labelledby="dash-subjects" className="flex flex-col gap-3">
         <h2 id="dash-subjects" className={h2}>Subjects</h2>
-        {view.planCourses.length > 0 && <ChartHint />}
+        {view.planCourses.length > 0 && !readOnly && <ChartHint />}
         {view.planCourses.length === 0 && view.otherActive.length === 0 ? (
           <Card>
             <Empty>No courses yet.</Empty>
@@ -97,7 +110,7 @@ export function StudentDashboard({
           <ul className="flex flex-col gap-3">
             {view.planCourses.map((c) => (
               <li key={c.course.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:grid sm:grid-cols-[150px_1fr_96px] sm:items-start">
-                <Link href={courseHref(c.course.id)} className="flex items-start justify-between gap-3 sm:block">
+                <CourseHeader href={courseHref?.(c.course.id)} className="flex items-start justify-between gap-3 sm:block">
                   <span className="min-w-0">
                     <span className="block font-semibold">{c.course.name}</span>
                     <span className="block text-sm text-text-muted">
@@ -113,7 +126,7 @@ export function StudentDashboard({
                     <span className="block text-xs text-text-muted">{c.course.targetGrade !== null ? `Target ${percent(c.course.targetGrade)}` : "No target"}</span>
                     {c.result.grade !== null && <span className="block text-xs text-text-muted">{points(c.markedWeight)}% marked</span>}
                   </span>
-                </Link>
+                </CourseHeader>
                 <TrendChart
                   points={c.history}
                   target={c.course.targetGrade}
@@ -138,7 +151,7 @@ export function StudentDashboard({
             <ul className="flex flex-col divide-y divide-border">
               {view.otherActive.map((c) => (
                 <li key={c.course.id}>
-                  <Link href={courseHref(c.course.id)} className="flex items-center justify-between gap-3 py-3">
+                  <CourseHeader href={courseHref?.(c.course.id)} className="flex items-center justify-between gap-3 py-3">
                     <span className="min-w-0">
                       <span className="block font-medium">{c.course.code}</span>
                       <span className="block truncate text-sm text-text-muted">{c.course.name}</span>
@@ -147,13 +160,15 @@ export function StudentDashboard({
                       <span className="block font-semibold">{percent(c.result.grade)}</span>
                       <TrendPill trend={c.trend} />
                     </span>
-                  </Link>
+                  </CourseHeader>
                 </li>
               ))}
             </ul>
           </Card>
         )}
       </section>
+
+      {afterSubjects}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title="Next priorities">
@@ -201,7 +216,7 @@ export function StudentDashboard({
         </Card>
       </div>
 
-      {view.supplemental.length > 0 && (
+      {!readOnly && view.supplemental.length > 0 && (
         <Card title="Extra practice">
           <p className="text-xs text-text-muted">Supplemental work. It does not count toward your grades.</p>
           <ul className="flex flex-col divide-y divide-border">
