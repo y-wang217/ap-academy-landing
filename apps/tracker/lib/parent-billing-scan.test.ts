@@ -24,7 +24,11 @@ describe("parent billing source scan (AC11, AC12)", () => {
   }
   it("every POST in the billing files is a data source query, never a page create", () => {
     for (const file of PARENT_BILLING_FILES) {
-      for (const line of read(file).split("\n").filter((l) => /method:\s*"POST"/.test(l))) expect(line, file).toMatch(/\/query/);
+      // The URL sits on the method's line or the line before it.
+      const lines = read(file).split("\n");
+      lines.forEach((line, i) => {
+        if (/method:\s*"POST"/.test(line)) expect(`${lines[i - 1] ?? ""}\n${line}`, file).toMatch(/\/query/);
+      });
     }
   });
   it("the billing view model has no url field", () => {

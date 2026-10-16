@@ -138,7 +138,7 @@ describe("invoicePdfResponse (AC9, AC10)", () => {
     expect(asked?.redirect).toBe("error");
   });
   it("sanitises the filename", async () => {
-    const res = await invoicePdfResponse(params, okDeps({ fetchInvoicePdf: async () => ({ number: 'AP"/../2026 0005', fileUrl: FILE }) }));
+    const res = await invoicePdfResponse(params, okDeps({ fetchInvoicePdf: async () => ({ number: 'AP"/../2026-0005 ', fileUrl: FILE }) }));
     expect(res.headers.get("content-disposition")).toBe('inline; filename="AP2026-0005.pdf"');
   });
   it("404 for a non-parent, non-GUID IDs, an unlinked or unpublished child and a null link", async () => {
