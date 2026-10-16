@@ -65,7 +65,7 @@ export default function HowItWorksPage() {
             Try before you commit.
           </h1>
           <p className="mt-4 max-w-[50ch] text-[15px] leading-relaxed text-text-secondary">
-            We know tutoring is an investment. That's why we let you experience
+            We know tutoring is an investment. That&apos;s why we let you experience
             Lesson 1 for just ${PRICING.lesson1} — no strings attached.
           </p>
         </section>
@@ -143,7 +143,7 @@ export default function HowItWorksPage() {
               Lesson 1 only
             </p>
             <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">
-              Test the Bulletproof Method. If it's not right for your child,
+              Test the Bulletproof Method. If it&apos;s not right for your child,
               stop here. No obligation.
             </p>
           </div>
@@ -169,7 +169,7 @@ export default function HowItWorksPage() {
         <div className="mt-8 rounded-sm border border-accent/30 bg-accent/5 p-5">
           <p className="text-[14px] leading-relaxed text-text-secondary">
             <span className="font-semibold text-accent">In plain terms:</span>{" "}
-            It's 100% online. 10 classes to learn the material and get tested.
+            It&apos;s 100% online. 10 classes to learn the material and get tested.
             Enrollment is ${PRICING.lesson1} — that gets your child into Lesson
             1. After the first class, you choose to continue or not.
           </p>
@@ -190,7 +190,7 @@ export default function HowItWorksPage() {
             </h2>
             <p className="mx-auto mt-4 max-w-[40ch] text-[14px] leading-relaxed text-text-on-dark-faint">
               ${PRICING.lesson1} unlocks your first class. No subscriptions, no
-              hidden fees. Just one lesson to see if we're the right fit.
+              hidden fees. Just one lesson to see if we&apos;re the right fit.
             </p>
             <Link
               href="/enroll"

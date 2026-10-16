@@ -44,7 +44,7 @@ export default function PrivacyPolicy() {
 
           <div className="mt-10 space-y-8 text-[16px] leading-[1.75] text-text-secondary">
             <p>
-              AP Academy ("AP Academy," "we," "us," or "our") is operated by Ambitious Pathways Life Coaching Inc. (e.g. Ambition Pathways Life Coaching Inc.), located in Ontario, Canada. This Privacy Policy explains what personal information we collect, how we use it, who we share it with, and the choices you have. We are committed to handling personal information in accordance with Canada's Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable Ontario law.
+              AP Academy (&quot;AP Academy,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) is operated by Ambitious Pathways Life Coaching Inc. (e.g. Ambition Pathways Life Coaching Inc.), located in Ontario, Canada. This Privacy Policy explains what personal information we collect, how we use it, who we share it with, and the choices you have. We are committed to handling personal information in accordance with Canada&apos;s Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable Ontario law.
             </p>
             <p>
               By using our website or enrolling in our programs, you agree to the practices described in this policy.
@@ -75,7 +75,7 @@ export default function PrivacyPolicy() {
               <p className="mb-3 font-semibold text-dark">Information collected automatically:</p>
               <ul className="ml-5 list-disc space-y-1.5">
                 <li>Basic usage and device data (such as IP address, browser type, pages visited, and referring source) collected through standard web technologies and analytics.</li>
-                <li>Cookies and similar tracking technologies, including advertising pixels (e.g. the Meta pixel) used to measure and improve our advertising. See "Cookies and tracking" below.</li>
+                <li>Cookies and similar tracking technologies, including advertising pixels (e.g. the Meta pixel) used to measure and improve our advertising. See &quot;Cookies and tracking&quot; below.</li>
               </ul>
             </section>
 
@@ -189,7 +189,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="mb-4 font-serif text-[24px] text-dark">12. Changes to this policy</h2>
               <p>
-                We may update this policy from time to time. We will post the updated version here and revise the "Last updated" date above.
+                We may update this policy from time to time. We will post the updated version here and revise the &quot;Last updated&quot; date above.
               </p>
             </section>
 
