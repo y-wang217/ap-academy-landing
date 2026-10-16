@@ -49,3 +49,5 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0042](0042-origin-check-for-scheduler-api.md) | The proxy refuses cross-site writes to the scheduler API | accepted |
 | [0043](0043-daily-text-greeting-name.md) | The daily text greets a teacher by honorific and name | accepted |
 | [0044](0044-server-timing-on-scheduler-get.md) | Server-Timing on the scheduler GET routes | accepted |
+| [0045](0045-parent-accounts-read-only.md) | Parent accounts are read-only | accepted |
+| [0046](0046-parent-email-minimal-pii.md) | A parent's email is the only new personal field | accepted |
