@@ -172,7 +172,10 @@ export async function removeParentLink(linkId: string): Promise<Result> {
   return error ? failed(dbMessage(error)) : done("Removed");
 }
 
-/** Owner only: which Students & Parents page this student is, so the calendar and billing tabs can find them. */
+/**
+ * Owner only: which Students & Parents page this student is, so the calendar and billing tabs can find them.
+ * The database enforces owner-only too (migration 0017, ADR 0048).
+ */
 export async function setScheduleRecord(studentId: string, form: FormData): Promise<Result> {
   const v = await staff();
   if (!v || v.role !== "owner") return NO_ACCESS;
