@@ -1,21 +1,25 @@
 # Patch blocks: event-chained pipeline (apply by hand)
 
-Companion to `docs/spec/pipeline-event-chaining.md` and the
-`chore/pipeline-event-chaining` PR. The guard hook keeps agent sessions out of
-`.github/workflows/*` and `.claude/pipeline.json`, so these four files were
-not changed on the branch. Each block below is the **complete** new file
-content. Apply them on the PR branch before merging, through the GitHub web
-editor (as for #57 and #61) or a local checkout:
+Companion to `docs/spec/pipeline-event-chaining.md`, the
+`chore/pipeline-event-chaining` PR, and `docs/spec/pipeline-kick-via-actions.md`
+(the follow-up that moved the routine kicks into Actions). The guard hook
+keeps agent sessions out of `.github/workflows/*` and `.claude/pipeline.json`,
+so these five files were not changed on their branches. Each block below is
+the **complete** new file content. Apply them on the PR branch before merging,
+through the GitHub web editor (as for #57 and #61) or a local checkout:
 
 1. `.claude/pipeline.json` (replace the file)
 2. `.github/workflows/design-approver.yml` (replace the file)
 3. `.github/workflows/claude-review.yml` (replace the file)
 4. `.github/workflows/notify-human.yml` (new file)
+5. `.github/workflows/kick.yml` (new file, from the kick-via-actions spec)
 
 What changes, in short:
 
 - `pipeline.json`: `max_chain` 12, `review_round_cap` 3, the two routine
-  trigger IDs under `routines`, and `approver_workflow`.
+  trigger IDs under `routines`, `approver_workflow`, and (kick-via-actions)
+  `kick_workflow`, the workflow the design and build runs dispatch for K6,
+  K7 and K8 instead of firing the routines themselves.
 - `design-approver.yml`: a `chain` input, the four routine fire secrets, the
   wider Unit tests step, and the header comment.
 - `claude-review.yml`: the verdict step gets `id: verdict` and exports
@@ -23,6 +27,9 @@ What changes, in short:
   round cap) or posts the "your move" comment at the cap.
 - `notify-human.yml`: posts the one "your move" comment when the bot approves
   a `req/` PR that carries `needs-human-merge`.
+- `kick.yml`: a `workflow_dispatch` with inputs `routine`, `chain`, `from`,
+  `card` that runs `scripts/fire-routine.mjs` with the four routine fire
+  secrets. The routine runs dispatch it and never hold the tokens.
 
 The secrets referenced (`ROUTINE_DESIGN_FIRE_URL`, `ROUTINE_DESIGN_FIRE_TOKEN`,
 `ROUTINE_BUILD_FIRE_URL`, `ROUTINE_BUILD_FIRE_TOKEN`) come from human step 1 in
@@ -33,7 +40,7 @@ notice; nothing else breaks.
 
 ```json
 {
-  "_comment": "Single source of truth for the agent pipeline. gate_commands are the fast local subset of CI; ci.yml also builds both apps and runs RLS, restore and e2e. The browser suites (pnpm test:tracker, test:sso) are a builder step for diffs touching e2e_paths, not a gate command. max_chain caps how many kicks may follow each other before the 3-hour schedules take over; routines are the ap-design and ap-build trigger IDs the stage commands fire; approver_workflow is what design-next dispatches; review_round_cap is how many bot change requests kick the builder before Charlie is asked (ADR 0003).",
+  "_comment": "Single source of truth for the agent pipeline. gate_commands are the fast local subset of CI; ci.yml also builds both apps and runs RLS, restore and e2e. The browser suites (pnpm test:tracker, test:sso) are a builder step for diffs touching e2e_paths, not a gate command. max_chain caps how many kicks may follow each other before the 3-hour schedules take over; routines are the ap-design and ap-build trigger IDs the stage commands fire; approver_workflow is what design-next dispatches; kick_workflow is the workflow the design and build runs dispatch to fire a routine (K6 to K8), so no routine run holds a fire token; review_round_cap is how many bot change requests kick the builder before Charlie is asked (ADR 0003).",
   "repo": "y-wang217/ap-academy-landing",
   "default_branch": "main",
   "notion": {
@@ -72,6 +79,7 @@ notice; nothing else breaks.
     "build": "trig_01V8Lz7JVrAuzaGEpmip4dxU"
   },
   "approver_workflow": "design-approver.yml",
+  "kick_workflow": "kick.yml",
   "migration_branch_suffix": "-migration",
   "gate_commands": [
     "pnpm --filter @ap-academy/db typecheck",
@@ -425,4 +433,57 @@ jobs:
             extra=(--migration "${migration:-see the diff}")
           fi
           node scripts/notify-human.mjs --repo "$REPO" --pr "$NUMBER" --sha "$SHA" --reason "$reason" "${extra[@]}"
+```
+
+### `.github/workflows/kick.yml`
+
+```yaml
+name: Kick routine
+
+# Fires the ap-design or ap-build routine on behalf of a design or build run
+# (K6, K7, K8 in docs/spec/pipeline-event-chaining.md). The routine runs
+# dispatch this instead of holding the fire tokens themselves: the tokens
+# live only in repository secrets. Best effort: scripts/fire-routine.mjs
+# never fails the run; a failed fire is a warning and the 3-hour schedules
+# pick the card up. See docs/spec/pipeline-kick-via-actions.md.
+on:
+  workflow_dispatch:
+    inputs:
+      routine:
+        description: "Which routine to fire"
+        type: choice
+        options: [design, build]
+        required: true
+      chain:
+        description: "Depth of the run that is kicking (the fire text carries depth + 1)"
+        type: string
+        default: "0"
+      from:
+        description: "Which stage is kicking (design-next, build-next, manual)"
+        type: string
+        default: "manual"
+      card:
+        description: "Card ID the kick is about, for the fire text"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  kick:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Fire the routine
+        env:
+          ROUTINE_DESIGN_FIRE_URL: ${{ secrets.ROUTINE_DESIGN_FIRE_URL }}
+          ROUTINE_DESIGN_FIRE_TOKEN: ${{ secrets.ROUTINE_DESIGN_FIRE_TOKEN }}
+          ROUTINE_BUILD_FIRE_URL: ${{ secrets.ROUTINE_BUILD_FIRE_URL }}
+          ROUTINE_BUILD_FIRE_TOKEN: ${{ secrets.ROUTINE_BUILD_FIRE_TOKEN }}
+        run: node scripts/fire-routine.mjs "${{ inputs.routine }}" --chain "${{ inputs.chain }}" --from "${{ inputs.from }}" --card "${{ inputs.card }}"
 ```
