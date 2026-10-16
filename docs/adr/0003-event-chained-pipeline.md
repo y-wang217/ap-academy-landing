@@ -30,10 +30,11 @@ Three facts shaped the options:
   GitHub trigger are in research preview, and a routine run only has
   `fire_trigger` when the Claude_Code_Remote connector is attached to it.
   The routine edit form does not offer that connector, so the stage commands
-  can also fire through `scripts/fire-routine.mjs` with the fire URL and
+  first fired through `scripts/fire-routine.mjs` with the fire URL and
   token set as environment variables on a dedicated cloud environment; a
   network secret cannot carry them, because the agent proxy never attaches
-  one to `api.anthropic.com`.
+  one to `api.anthropic.com`. The amendment below moves those kicks into a
+  workflow.
 
 ## Decision
 
@@ -71,6 +72,18 @@ Three facts shaped the options:
    cap, `max_attempts`, branch protection or **Paused**, which stops every
    stage and every kick.
 
+**2026-10-16 amendment** (`docs/spec/pipeline-kick-via-actions.md`). The
+routine runs no longer hold the fire tokens. Environment variables are
+readable by every command in every session of that environment, and the
+design and build runs read untrusted input (Notion cards, PR text), so a
+prompt injection could have printed them. K6, K7 and K8 now dispatch
+`.github/workflows/kick.yml` with the GitHub MCP `actions_run_trigger`, the
+call the design stage already uses for the approver; that workflow runs
+`scripts/fire-routine.mjs` with the repository secrets, which become the only
+copy of the tokens. The approver and reviewer kicks already ran inside
+Actions and the merge kick is the routine's own GitHub trigger, so nothing
+else changes: chain depth, claims and the notification rules are as above.
+
 ## Options considered
 
 ### A. Keep the hourly schedules
@@ -97,6 +110,7 @@ property and a small set of secrets.
 | Two sweeps write the same Work Log row | the "shipped" check runs again right before the write |
 | The fire API or its headers change | fires are one function in `scripts/fire-routine.mjs`; a failure degrades to the schedule |
 | A kick fails silently | every kick shows in the run reply or summary with its depth |
+| A routine-to-routine kick now takes one Actions run, about 20 seconds more | accepted; the schedules remain the safety net, and no routine session can leak a fire token |
 | A Blocked card edited while it stays Blocked | notifies once more; acceptable, Charlie made the edit |
 
 ## Revisit this decision if
