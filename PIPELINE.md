@@ -21,9 +21,17 @@ Things Claude Code cannot do for you. Tick them off once.
   - `design-next`, hourly, prompt: `/design-next`
   - `build-next`, hourly offset by 30 min, prompt: `/build-next`
 
+## Design approver (optional: replaces the human design gate for Low and Medium cards)
+- [ ] Notion → Settings → Connections → Develop or manage integrations: create an internal integration `design-approver` with Read content, Update content, Read comments, Insert comments, and Read user information without email. Share the **Dev Requirements** database and the **Pipeline Control** page with it (••• → Connections).
+- [ ] Save its token as the GitHub secret `NOTION_APPROVER_TOKEN`. `CLAUDE_CODE_OAUTH_TOKEN` is reused.
+- [ ] Add `.github/workflows/design-approver.yml` by hand (the guard hook keeps agents out of workflows).
+- [ ] Actions → Design approver → Run workflow with **dry run** ticked; read the verdicts in the run summary. The hourly schedule (:20) writes for real.
+
+Claude only returns a verdict against `.claude/agents/design-approver.md`; `scripts/design-approver.mjs` makes the writes with the integration token. It never approves a High-risk card (it comments and leaves it for you), sends a card to Revise at most `max_attempts` times before handing it to you, and re-reads the status before writing. Every write leaves a `[design-approver]` comment on the card. Pausing the pipeline pauses it too.
+
 ## Daily use
 - Add requirements to the board as **Ready**. A card that depends on another goes in as **Backlog** with **Blocked by** set; the sweep moves it to Ready when every blocker is Done.
-- Check the **Design Review** view. The design's **Decisions for approval** table lists every dependency and schema choice with the default the builder will use; approve by setting Status to **Approved** (the defaults stand), or comment and set **Revise**.
+- Check the **Needs Approval** view (the design approver handles Low and Medium cards once set up; High cards, and anything it comments "Needs Charlie" on, wait for you). The design's **Decisions for approval** table lists every dependency and schema choice with the default the builder will use; approve by setting Status to **Approved** (the defaults stand), or comment and set **Revise**.
 - A card with a migration produces two PRs: `<id>: migration NNNN ...` (labelled `migration`, `needs-human-merge`) and the feature PR (labelled `awaiting-migration`, based on the migration branch). Merge the migration PR, apply the migration with the Supabase MCP `apply_migration`, record it in `CLAUDE.md`. The sweep then releases the feature PR and it auto-merges once the bot has approved.
 - Check **Blocked** and anything labelled `needs-human-merge`.
 - Card statuses follow GitHub: the sweep sets In Review, Changes Requested, Done or Blocked from the PR, whatever the card said. Only the sweep writes "shipped" Work Log rows.
