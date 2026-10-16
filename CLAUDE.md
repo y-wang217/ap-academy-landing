@@ -58,7 +58,7 @@ superseding ADR first.
   named after the file (`0004_tracker_core`). The live history records them
   under timestamp versions, so `supabase db push` would see every file as
   unapplied: never run it against the live project. Applied so far: 0001 and
-  0002 by hand, 0003 to 0005 on 2026-10-04, 0006 and 0007 on 2026-10-05, 0008 on 2026-10-06, 0009, 0010, 0011 and 0012 on 2026-10-14, 0013 and 0014 on 2026-10-15.
+  0002 by hand, 0003 to 0005 on 2026-10-04, 0006 and 0007 on 2026-10-05, 0008 on 2026-10-06, 0009, 0010, 0011 and 0012 on 2026-10-14, 0013 and 0014 on 2026-10-15, 0015 and 0016 on 2026-10-16.
 
 ## Commands
 
