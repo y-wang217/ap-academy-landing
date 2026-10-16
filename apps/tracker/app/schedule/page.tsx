@@ -79,7 +79,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   return shell(
     <>
-      {daily && <DailyTaskStatus date={body.today} time={process.env.DAILY_TASK_TIME || "06:00"} initial={daily} />}
+      {daily && <DailyTaskStatus key={daily.state} date={body.today} time={process.env.DAILY_TASK_TIME || "06:00"} initial={daily} />}
       <WeekControls weekStart={body.weekStart} today={body.today} staffId={shown?.staff.id} all={all} teachers={teachers} />
       <h2 className="text-lg font-medium">Week of {formatDayHeading(body.weekStart)}, {body.weekStart.slice(0, 4)}</h2>
       {!body.namesLoaded && <Notice tone="warn">Student names could not be loaded.</Notice>}

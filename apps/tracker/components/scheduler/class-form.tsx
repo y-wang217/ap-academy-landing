@@ -7,6 +7,7 @@ import { isoWeekday } from "@/lib/domain/schedule/wallclock";
 import { api } from "@/lib/scheduler/api-client";
 import { formatDayHeading } from "@/lib/view/availability-text";
 import { saveErrorMessage } from "@/lib/view/booking-text";
+import { readSaveOutcome, type SaveOutcome } from "@/lib/view/save-notice";
 
 export type FormMode = { kind: "create" } | { kind: "edit"; card: CardData } | { kind: "cancel"; card: CardData };
 type Scope = "this" | "future";
@@ -18,8 +19,8 @@ type Props = {
   defaultStaffId: string;
   today: string;
   onClose: () => void;
-  /** The server accepted the change. `dailyTask` is what it did to today's Notion task, if it reported one. */
-  onSaved: (dailyTask?: string) => void;
+  /** The server accepted the change. The outcome carries what it did to the Weekly Schedule and today's Notion task. */
+  onSaved: (outcome: SaveOutcome) => void;
   /** The server said the class changed under us: reload what is shown. */
   onStale: () => void;
 };
@@ -108,7 +109,10 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
     setBusy(true);
     const r = await call;
     setBusy(false);
-    if (r.ok) return onSaved((r.data as { dailyTask?: string } | null)?.dailyTask);
+    if (r.ok) {
+      const name = mode.kind === "create" ? students?.find((s) => s.id === studentId)?.name ?? null : mode.card.studentName ?? null;
+      return onSaved(readSaveOutcome(r.data, name));
+    }
     if (r.stale) onStale();
     setError(saveErrorMessage(r, teacherName(staffId)));
   }

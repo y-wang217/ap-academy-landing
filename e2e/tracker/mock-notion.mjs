@@ -4,6 +4,7 @@
 // written (the scheduler adopts a student and regenerates that one property). REQ-8 adds in-memory Work and
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
+// REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -32,6 +33,7 @@ const STUDENTS = [
 
 // Weekly Schedule text per student, empty to start (so a first booking can adopt the student).
 const schedule = new Map(STUDENTS.map((s) => [s.id, ""]));
+let scheduleFails = false;
 const studentPage = (id) => {
   const base = STUDENTS.find((s) => s.id === id);
   return {
@@ -274,6 +276,7 @@ http.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   if (req.method === "GET" && req.url === "/__journal") return res.end(JSON.stringify(journal));
   if (req.method === "POST" && req.url === "/__billing/fail") { billingFails = !billingFails; return res.end(JSON.stringify({ billingFails })); }
+  if (req.method === "POST" && req.url === "/__schedule/fail") { scheduleFails = !scheduleFails; return res.end(JSON.stringify({ scheduleFails })); }
   await bufferBody(req);
   if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
   // Read-only: the seeded lesson answers a GET and nothing else.
@@ -286,6 +289,10 @@ http.createServer(async (req, res) => {
     if (req.method === "GET") {
       res.end(JSON.stringify(studentPage(pageId)));
       return;
+    }
+    if (req.method === "PATCH" && scheduleFails) {
+      res.statusCode = 500;
+      return res.end(JSON.stringify({ object: "error", status: 500 }));
     }
     if (req.method === "PATCH") {
       const text = (await readBody(req)).properties?.["Weekly Schedule"]?.rich_text?.[0]?.text?.content ?? "";

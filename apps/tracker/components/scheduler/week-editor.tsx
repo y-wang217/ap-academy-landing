@@ -10,6 +10,7 @@ import type { AvailabilityDay } from "@/lib/domain/schedule/availability";
 import { isoWeekday } from "@/lib/domain/schedule/wallclock";
 import { api } from "@/lib/scheduler/api-client";
 import { dropLabel, saveErrorMessage } from "@/lib/view/booking-text";
+import { afterDailyRetry, afterSummaryRetry, readSaveOutcome, saveNotice, type SaveOutcome } from "@/lib/view/save-notice";
 import type { Slot } from "@/lib/view/drag";
 
 type Props = {
@@ -22,6 +23,8 @@ type Props = {
   students: { id: string; name: string }[] | null;
 };
 type Ask = { card: CardData; slot: Slot };
+type EditorNotice = { kind: "error"; text: string } | { kind: "saved"; outcome: SaveOutcome };
+const RETRY_LABEL = { summary: "Retry Weekly Schedule", dailyTask: "Retry today's task" } as const;
 
 /**
  * Charlie's week: the grid plus Book, Edit, Cancel and drag-to-move. A move
@@ -32,7 +35,8 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
   const router = useRouter();
   const [form, setForm] = useState<FormMode | null>(null);
   const [pending, setPending] = useState<Map<string, Slot>>(new Map());
-  const [notice, setNotice] = useState<{ tone: "ok" | "error" | "warn"; text: string } | null>(null);
+  const [notice, setNotice] = useState<EditorNotice | null>(null);
+  const [retrying, setRetrying] = useState<"summary" | "dailyTask" | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
   const [scope, setScope] = useState<"this" | "future">("this");
   const scopeDialog = useRef<HTMLDialogElement>(null);
@@ -72,7 +76,7 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
     const r = await api.send("PATCH", `/classes/${card.seriesId}/occurrences/${card.originalDate}`, `move:${card.occurrenceKey}:${how}:${slot.date}:${slot.startTime}`, body);
     if (r.ok) {
       // The card stays at the new slot until the refreshed week replaces it.
-      if ((r.data as { dailyTask?: string } | null)?.dailyTask === "failed") setNotice({ tone: "warn", text: "Saved. Today's Notion task could not be updated." });
+      setNotice({ kind: "saved", outcome: readSaveOutcome(r.data, card.studentName ?? null) });
       router.refresh();
       return;
     }
@@ -81,8 +85,21 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
       next.delete(card.occurrenceKey);
       return next;
     });
-    setNotice({ tone: "error", text: saveErrorMessage(r, teacher.name) });
+    setNotice({ kind: "error", text: saveErrorMessage(r, teacher.name) });
     if (r.stale) router.refresh();
+  }
+
+  // Re-run one export only; the class is not saved again (REQ-28).
+  async function retry(what: "summary" | "dailyTask", outcome: SaveOutcome) {
+    if (retrying) return;
+    setRetrying(what);
+    const next = what === "summary"
+      ? afterSummaryRetry(outcome, await api.send("POST", "/summaries/sync", `summary-retry:${outcome.studentId}`, { studentId: outcome.studentId }))
+      : afterDailyRetry(outcome, await api.send("POST", "/daily-task", `daily-task:${today}`, { date: today }));
+    setRetrying(null);
+    // A form or a move may have replaced the notice while the retry ran; only update the one it belongs to.
+    setNotice((n) => (n?.kind === "saved" && n.outcome === outcome ? { kind: "saved", outcome: next } : n));
+    router.refresh();
   }
 
   const editor: GridEditor = {
@@ -107,7 +124,7 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
         {!students && <span className="text-sm text-text-muted">Student list could not be loaded.</span>}
       </div>
       <div role="status" aria-live="polite">
-        {pending.size > 0 ? <p className="text-sm font-medium">Saving…</p> : notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+        {pending.size > 0 ? <p className="text-sm font-medium">Saving…</p> : notice?.kind === "error" ? <Notice tone="error">{notice.text}</Notice> : notice && <SavedNotice outcome={notice.outcome} retrying={retrying} onRetry={(what) => void retry(what, notice.outcome)} />}
       </div>
       <WeekGrid days={days} occurrences={occurrences} today={today} teacherName={teacher.name} editor={editor} />
 
@@ -123,9 +140,9 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
             setForm(null);
             refocus();
           }}
-          onSaved={(dailyTask) => {
+          onSaved={(outcome) => {
             setForm(null);
-            setNotice(dailyTask === "failed" ? { tone: "warn", text: "Saved. Today's Notion task could not be updated." } : { tone: "ok", text: "Saved." });
+            setNotice({ kind: "saved", outcome });
             router.refresh();
             refocus();
           }}
@@ -165,5 +182,24 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
         )}
       </dialog>
     </div>
+  );
+}
+
+/** "Saved." plus one line per Notion export, with a Retry beside a failed one. */
+function SavedNotice({ outcome, retrying, onRetry }: { outcome: SaveOutcome; retrying: "summary" | "dailyTask" | null; onRetry: (what: "summary" | "dailyTask") => void }) {
+  const { tone, lines } = saveNotice(outcome);
+  return (
+    <Notice tone={tone}>
+      {lines.map((line) => (
+        <p key={line.retry ?? line.text} className="flex flex-wrap items-center gap-2">
+          <span>{line.text}</span>
+          {line.retry && (
+            <button type="button" className={secondaryButtonClass} aria-label={RETRY_LABEL[line.retry]} disabled={retrying !== null} onClick={() => onRetry(line.retry!)}>
+              {retrying === line.retry ? "Retrying…" : "Retry"}
+            </button>
+          )}
+        </p>
+      ))}
+    </Notice>
   );
 }
