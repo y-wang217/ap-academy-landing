@@ -17,7 +17,7 @@ To approve a teacher for a live test: edit `supabase/seed/scheduler-staff-link.s
 
 ### What must be configured
 - `NOTION_TOKEN` on the tracker Vercel project, and the integration shared with Staff and Students & Parents. Without it every scheduler page says "Scheduling is not available right now."
-- Migrations 0009 to 0011 applied (they are). The daily task card also needs migration 0012, the hourly GitHub workflow and the secrets listed under "Remaining setup" in `scheduler-report.md`. Until then section 6 of this tutorial cannot be tested live.
+- Migrations 0009 to 0012 applied (they are). The daily task card also needs the hourly GitHub workflow and the Vercel secrets from `scheduler-report.md`; as of 2026-10-16 those are in place and the task has run on schedule, so section 6 is live-testable.
 - A teacher only shows up in pickers when their Staff page is Active and has the Teacher function.
 
 ### Phone or desktop
@@ -282,7 +282,7 @@ Booking, moving, editing or cancelling a class dated today refreshes the task on
 
 The ticks are Charlie's. A refresh never unticks anyone. If a ticked teacher's day changes, their to-do gains "Resend: schedule changed after you texted." and the new times; untick and retick after resending and the label clears on the next refresh.
 
-### Live tests (after the setup in `scheduler-report.md` is done)
+### Live tests
 | # | Do | Expect |
 |---|---|---|
 | 6.1 | Open `/tracker/schedule` before the task exists, press Create now. | Card switches to "ready" with an Open in Notion link. In Notion: one page for today, one unchecked to-do per active teacher, sorted by name, Owner Charlie, State Next. One Work Log entry. |
