@@ -39,7 +39,7 @@ export default function PrivacyPolicy() {
             Privacy Policy
           </h1>
           <p className="mt-3 text-[14px] text-text-muted">
-            Last updated: October 15, 2026
+            Last updated: October 16, 2026
           </p>
 
           <div className="mt-10 space-y-8 text-[16px] leading-[1.75] text-text-secondary">
@@ -100,7 +100,7 @@ export default function PrivacyPolicy() {
               <h2 className="mb-4 font-serif text-[24px] text-dark">4. How we share your information</h2>
               <p className="mb-3">We do not sell your personal information. We share it only with:</p>
               <ul className="ml-5 list-disc space-y-1.5">
-                <li><strong>Service providers</strong> who help us operate, including: Stripe (payments), Meta/Facebook (advertising and lead forms), Google (email and related services), Zapier (workflow automation), Notion (records management), and {ANTHROPIC_PROVIDER_LINE}. These providers process information on our behalf and may store data on servers outside Canada, including in the United States.</li>
+                <li><strong>Service providers</strong> who help us operate, including: Supabase (our database and sign-in, hosted in the United States), Stripe (payments), Meta/Facebook (advertising and lead forms), Google (email and related services), Zapier (workflow automation), Notion (records management), and {ANTHROPIC_PROVIDER_LINE}. These providers process information on our behalf and may store data on servers outside Canada, including in the United States.</li>
                 <li><strong>Legal and safety</strong> recipients where required by law, or to protect our rights, users, or the public.</li>
               </ul>
             </section>

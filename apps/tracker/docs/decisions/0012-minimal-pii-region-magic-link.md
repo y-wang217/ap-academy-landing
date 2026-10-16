@@ -13,4 +13,4 @@ Collect only first name, last initial, grade level and email. No date of birth, 
 - More profile fields: more data to protect, nothing gained.
 
 ## Consequences
-Superseded in part by 0013: the shared Supabase project stays in its current East region (workspace ADR 0001), and magic-link sign-in lives in the landing app (workspace ADR 0002). The minimal-PII rule stands unchanged.
+Superseded in part by 0013: the shared Supabase project stays in its current region, us-west-2 (Oregon) (workspace ADR 0001), and magic-link sign-in lives in the landing app (workspace ADR 0002). The minimal-PII rule stands unchanged.

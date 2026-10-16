@@ -5,6 +5,8 @@
 - **Decided by:** Charlie
 - **Suggested path in repo:** `docs/adr/0001-monorepo-shared-identity.md`
 
+Correction (2026-10-16): earlier text named the wrong region; the project runs in us-west-2 (Oregon). The decision to keep it in place is unchanged.
+
 ## Context
 
 AP Academy is adding a Student Tracker (student progress dashboard) alongside the existing landing app, which already hosts the SAT product and its Supabase auth.
@@ -28,7 +30,7 @@ Business context that drove the outcome: AP Academy plans to acquire users throu
 2. **One Supabase project as the shared identity layer.** A generic `accounts` table, plus one schema per product (`sat`, `tracker`), each with its own RLS policies.
 3. **Rewrite the `on auth.users` trigger** so it creates only the generic account row. Product profiles (for example the SAT profile) are created on first use of that product.
 4. **One Vercel project per app**, each on its own subdomain, with its own dependencies and test setup. A session cookie scoped to the parent domain carries login across apps.
-5. **Keep the existing Supabase project in its current East region.** No migration to a new project.
+5. **Keep the existing Supabase project in its current region, AWS us-west-2 (Oregon).** No migration to a new project.
 
 ## Options considered
 
@@ -50,7 +52,7 @@ Keeps apps isolated at the deploy and dependency level, keeps all AP Academy dev
 - **One database needs one migrations owner.** Once the auth pool is shared, the monorepo stops being overhead and becomes the simplest way to keep schema changes in one place.
 - **App isolation is preserved.** Functionality is not grouped into one app. Each app deploys, tests, and versions its dependencies on its own.
 - **Future tools have an obvious home.** A new product is a new folder under `apps/` and a new schema, reusing `packages/db` and the existing accounts.
-- **Region.** The target market is Ontario, so the East region is close enough for latency. Staying on the existing project avoids a user migration.
+- **Region.** The project runs in us-west-2 (Oregon). Latency from Ontario has been acceptable, and staying on the existing project avoids a user migration.
 
 ## Accepted risks and mitigations
 
@@ -64,7 +66,7 @@ Keeps apps isolated at the deploy and dependency level, keeps all AP Academy dev
 ## Assumptions, and what would disprove them
 
 - **Assumption: free-tier users convert to tutoring.** This is a hypothesis, not a measured result. Check: track how many SAT users become tutoring leads. Until some do, hold off on cross-product features (upsell prompts, shared dashboards). The shared auth pool is cheap enough to keep regardless.
-- **Assumption: the East region is acceptable to clients.** Check: if a parent, school, or partner requires Canadian data residency, revisit. Supabase regions cannot be changed in place, so that would mean a new project and a user migration.
+- **Assumption: a US region (us-west-2) is acceptable to clients.** Check: if a parent, school, or partner requires Canadian data residency, revisit. Supabase regions cannot be changed in place, so that would mean a new project and a user migration.
 
 ## Revisit this decision if
 

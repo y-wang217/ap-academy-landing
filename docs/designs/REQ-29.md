@@ -31,7 +31,7 @@ Readiness review finding F13. Two hygiene gaps, both for Charlie and the pipelin
 **Region docs:**
 - ADR 0001: lines 31, 53, 67 name us-west-2 (Oregon); add under Status `Correction (2026-10-16): earlier text named the wrong region; the project runs in us-west-2 (Oregon). The decision to keep it in place is unchanged.`
 - Tracker ADR 0013 line 9: "in its current region, AWS us-west-2 (Oregon), not Canada". Same correction line under Status.
-- Tracker ADR 0012: decision text and title untouched. Line 16 note: "current East region" becomes "current region, us-west-2 (Oregon)".
+- Tracker ADR 0012: decision text and title untouched. Its line 16 superseded note names "us-west-2 (Oregon)" instead of the old region.
 - `apps/tracker/CLAUDE.md`: line 10 "stays in its current region, AWS us-west-2 (Oregon) (ADR 0001). Not Canada."; line 39 "RLS. Region us-west-2 (Oregon), see workspace ADR 0001."; line 158 "0012 Minimal PII, Canada region, magic-link auth (region superseded by 0013)".
 - Verbatim specs under `apps/tracker/docs/spec/` untouched.
 

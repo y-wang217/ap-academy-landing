@@ -7,8 +7,8 @@
 > - **Spec and plan.** There is no `docs/SPEC.md`. This file and
 >   [`docs/spec/tracker-plan.md`](docs/spec/tracker-plan.md) are the spec. Both
 >   are recorded verbatim in `docs/spec/`.
-> - **Region.** The shared Supabase project stays in its current East region
->   (ADR 0001). Not Canada. One project, not separate dev and prod projects:
+> - **Region.** The shared Supabase project stays in its current region, AWS
+>   us-west-2 (Oregon) (ADR 0001). Not Canada. One project, not separate dev and prod projects:
 >   local Postgres for development and RLS tests, the live project for prod.
 > - **Schema.** Tables live in the `tracker` Postgres schema, not `public`.
 >   Migrations go in the repo-root `supabase/migrations/`, never in this app.
@@ -36,7 +36,7 @@ This is a school-grade and school-work tracker. It is NOT an LMS, a content gene
 ## Stack (do not add services without an ADR)
 
 * Next.js (App Router) + TypeScript, deployed on Vercel
-* Supabase: Postgres, Auth (email magic link / OTP), RLS. Canada region.
+* Supabase: Postgres, Auth (email magic link / OTP), RLS. Region us-west-2 (Oregon), see workspace ADR 0001.
 * Tailwind for styling. No component library unless an ADR justifies it.
 * Zod for validation at every boundary.
 * Vitest for unit tests. Playwright for a few critical end-to-end flows.
@@ -155,7 +155,7 @@ Seed ADRs to write in step 1 (decisions already made):
 * 0009 Syllabus versioning plus trigger-based append-only audit log
 * 0010 Six-course progress shows graded count, never a partial average presented as final
 * 0011 AI produces draft change sets only (deferred to v1)
-* 0012 Minimal PII, Canada region, magic-link auth
+* 0012 Minimal PII, Canada region, magic-link auth (region superseded by 0013)
 
 Keep `docs/decisions/README.md` as an index (number, title, status). Never edit an accepted ADR's decision. Supersede it with a new one.
 
