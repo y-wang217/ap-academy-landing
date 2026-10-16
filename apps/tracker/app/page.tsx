@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, Empty, Notice, Page, buttonClass, secondaryButtonClass } from "@/components/ui";
 import { StudentDashboard } from "@/components/student-dashboard";
 import { TopBar } from "@/components/top-bar";
@@ -43,6 +44,8 @@ export default async function TrackerHome() {
       </Page>
     );
   }
+
+  if (viewer.kind === "parent") redirect("/parent");
 
   if (viewer.kind === "none") {
     // A scheduler teacher has a staff link but no membership: send them to their availability.

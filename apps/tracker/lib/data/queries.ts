@@ -1,10 +1,11 @@
+import { cache } from "react";
 import { z } from "zod";
 import { getDb, type Db } from "./client";
 
 const uuidLike = z.guid();
 import {
-  AssessmentRow, CategoryRow, CourseRow, FlagRow, GoalRow, StudentRow, TaskRow, VersionRow,
-  type Assessment, type Category, type Course, type Flag, type Goal, type Student, type Task, type Version,
+  AssessmentRow, CategoryRow, ChildRow, CourseRow, FlagRow, ParentLinkRow, GoalRow, StudentRow, TaskRow, VersionRow,
+  type Assessment, type Category, type ChildRecord, type Course, type Flag, type Goal, type ParentLink, type Student, type Task, type Version,
 } from "./schemas";
 
 export type Viewer =
@@ -12,6 +13,7 @@ export type Viewer =
   | { kind: "signed_out" }
   | { kind: "staff"; userId: string; email: string; orgId: string; role: "owner" | "teacher"; db: Db }
   | { kind: "student"; userId: string; email: string; studentId: string; db: Db }
+  | { kind: "parent"; userId: string; email: string; db: Db }
   | { kind: "none"; userId: string; email: string };
 
 /**
@@ -37,6 +39,10 @@ export async function getViewer(): Promise<Viewer> {
   const { data: student } = await db.tracker.from("students").select("id").eq("user_id", user.id).maybeSingle();
   const id = z.object({ id: z.guid() }).safeParse(student);
   if (id.success) return { kind: "student", userId: user.id, email, studentId: id.data.id, db };
+
+  // Neither staff nor student: a parent invite may be waiting (REQ-22). Only parents and new users pay this call.
+  const { data: claimed } = await db.tracker.rpc("claim_parent_invites");
+  if (rows.some((m) => m.role === "parent") || Number(claimed ?? 0) > 0) return { kind: "parent", userId: user.id, email, db };
   return { kind: "none", userId: user.id, email };
 }
 
@@ -135,4 +141,19 @@ export async function listDrafts(db: Db, studentId: string, limit = 20): Promise
     .limit(limit);
   if (error) throw new Error(error.message);
   return parseRows(DraftRow, data);
+}
+
+/** The caller's linked children (tracker.my_children). Cached so the layout and the page share one call. */
+export const listChildren = cache(async (db: Db): Promise<ChildRecord[]> => {
+  const { data, error } = await db.tracker.rpc("my_children");
+  if (error) throw new Error(error.message);
+  return parseRows(ChildRow, data);
+});
+
+/** Owners: the parents linked to one student. */
+export async function listParentLinks(db: Db, studentId: string): Promise<ParentLink[]> {
+  const { data, error } = await db.tracker
+    .from("parent_links").select("id, email, claimed_at").eq("student_id", studentId).order("created_at");
+  if (error) throw new Error(error.message);
+  return parseRows(ParentLinkRow, data);
 }

@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
-import { getViewer, listLoginEmails, loadBundle, type Bundle } from "./data/queries";
+import { notFound, redirect } from "next/navigation";
+import { getViewer, listChildren, listLoginEmails, loadBundle, type Bundle } from "./data/queries";
+import type { ChildRecord } from "./data/schemas";
 import { todayIso } from "./time";
 import { buildStudentView, type StudentView } from "./view/student-view";
 
@@ -24,4 +25,23 @@ export async function staffStudent(studentId: string): Promise<{
     : null;
   const today = todayIso();
   return { viewer, bundle, view: buildStudentView(bundle, today), orgName: org?.name ?? "Your tutor", loginEmail, today };
+}
+
+/**
+ * For every parent page and the parent layout (a Next layout does not guard its
+ * pages): the parent viewer, their children and the one in the URL. Anyone who
+ * is not a parent goes back to the tracker home; an id that is not one of the
+ * caller's children is a 404.
+ */
+export async function parentChild(studentId: string): Promise<{
+  viewer: Extract<Awaited<ReturnType<typeof getViewer>>, { kind: "parent" }>;
+  children: ChildRecord[];
+  child: ChildRecord;
+}> {
+  const viewer = await getViewer();
+  if (viewer.kind !== "parent") redirect("/");
+  const children = await listChildren(viewer.db);
+  const child = children.find((c) => c.id === studentId);
+  if (!child) notFound();
+  return { viewer, children, child };
 }
