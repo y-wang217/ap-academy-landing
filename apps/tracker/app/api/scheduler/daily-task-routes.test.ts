@@ -9,6 +9,7 @@ import { handleDailyTaskCreate, handleDailyTaskRun, handleDailyTaskStatus } from
 import type { DailyTaskRow, DailyTaskStore } from "../../../lib/scheduler/daily-task-store";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import { handleCancelOccurrence, handleCreateClass, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
+import { lockedWrites } from "./series-writes.fake";
 import type { ScheduleStore, SeriesRecord, WindowRecord } from "../../../lib/scheduler/schedule-store";
 
 const ORG = "10000000-0000-4000-8000-000000000001";
@@ -25,22 +26,13 @@ const open: WindowRecord[] = [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ id: REQ(9
 /** Just enough store for create and cancel: everything else answers "empty" or is never called. */
 function scheduleStore() {
   const series = new Map<string, SeriesRecord>();
-  const byRequest = new Map<string, string>();
   let n = 100;
   const store = {
     listWindows: async () => open,
     listAvailabilityExceptions: async () => [],
     listSeries: async () => ({ series: [...series.values()], exceptions: [] }),
     getSeries: async (id: string) => series.get(id) ?? null,
-    getSeriesByRequest: async (r: string) => series.get(byRequest.get(r) ?? "") ?? null,
-    createSeries: async (input: { requestId: string } & Omit<SeriesRecord, "id" | "updatedAt" | "splitFrom">) => {
-      const { requestId, ...fields } = input;
-      const rec: SeriesRecord = { ...fields, id: REQ(++n), updatedAt: "2026-10-19T12:00:00.000Z", splitFrom: null };
-      series.set(rec.id, rec);
-      byRequest.set(requestId, rec.id);
-      return { ok: true as const, value: rec, created: true };
-    },
-    upsertException: async (input: unknown) => ({ ok: true as const, value: input, created: true }),
+    ...lockedWrites({ series, exceptions: [], newId: () => REQ(++n), stampOf: () => "2026-10-19T12:00:00.000Z" }).methods,
     listSeriesForStudent: async (id: string) => ({ series: [...series.values()].filter((x) => x.studentId === id), exceptions: [] }),
     getSummary: async () => null,
   } as unknown as ScheduleStore;

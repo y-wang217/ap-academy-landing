@@ -464,7 +464,7 @@ try {
   check("a student with no class in the week never appears", (await teacher.getByText("Nobody Booked").count()) === 0);
 
   // REQ-9: snapshot every tracker table the scheduler may not touch, after sign-in and before the first booking step.
-  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers"];
+  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers", "booking_stamps", "schedule_writes"];
   const psql = (sql) => execSync(`psql -X -A -t "${process.env.PG_URL}" -c "${sql}"`).toString().trim();
   const otherTables = () =>
     psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' order by 1")
@@ -624,6 +624,28 @@ try {
   const weekly = await adminCall("POST", "classes", { staffId: RYAN_ID, studentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003", subject: "MPM2D", kind: "weekly", startDate: plus(classDay, 9), startTime: "15:00", durationMinutes: 60, effectiveUntil: null });
   check("the admin's edit (future), cancel (this), cancel (future) and a weekly booking all saved",
     editStatus === 200 && cancelOne === 200 && cancelRest === 200 && (weekly === 201 || weekly === 200), `${editStatus}/${cancelOne}/${cancelRest}/${weekly}`);
+
+  // REQ-30: two saves of one slot at the same instant cannot both land, and a doubled request lands once.
+  // Wednesday 15:00 and 13:00 are inside Ryan's hours (the bookings above used them); these weeks are free then.
+  const race = await teacher.evaluate(async ({ base, staffId, studentId, first, second }) => {
+    const post = (requestId, startDate, startTime) => fetch(`${base}/api/scheduler/classes`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId, staffId, studentId, subject: "MCR3U", kind: "one_off", startDate, startTime, durationMinutes: 60, effectiveUntil: null }),
+    });
+    const read = async (r) => ({ status: r.status, timing: r.headers.get("server-timing"), body: await r.json().catch(() => null) });
+    const clash = await Promise.all([post(crypto.randomUUID(), first, "15:00"), post(crypto.randomUUID(), first, "15:00")].map((p) => p.then(read)));
+    const id = crypto.randomUUID();
+    const twice = await Promise.all([post(id, second, "13:00"), post(id, second, "13:00")].map((p) => p.then(read)));
+    const list = await (await fetch(`${base}/api/scheduler/classes/occurrences?from=${first}&to=${first}&staffId=${staffId}`)).json();
+    return { clash, twice, atSlot: list.occurrences.filter((o) => o.startTime === "15:00" && o.studentId === studentId).length };
+  }, { base: BASE, staffId: RYAN_ID, studentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003", first: plus(classDay, 2), second: plus(classDay, 16) });
+  const summary = (rs) => rs.map((r) => `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`).join(" | ");
+  check("two parallel bookings of one slot give one 201 and one 422 booking_conflict, and the calendar shows one class",
+    race.clash.map((r) => r.status).sort().join() === "201,422" && race.clash.find((r) => r.status === 422)?.body?.error === "booking_conflict" && race.atSlot === 1,
+    `${summary(race.clash)} atSlot=${race.atSlot}`);
+  check("two parallel bookings with one request ID give one 201 and one 200 with the same class",
+    race.twice.map((r) => r.status).sort().join() === "200,201" && race.twice[0].body?.series?.id === race.twice[1].body?.series?.id, summary(race.twice));
+  check("a class write response carries a Server-Timing header", race.clash.every((r) => /db;dur=/.test(r.timing ?? "")), race.clash.map((r) => r.timing).join(" | "));
 
   // REQ-9: nothing above reached Lessons or a payout field, and no other tracker table changed.
   const journal = await (await fetch(`${MOCK_NOTION}/__journal`)).json();

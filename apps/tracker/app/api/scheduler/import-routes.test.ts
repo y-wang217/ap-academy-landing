@@ -2,12 +2,11 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ClassException } from "../../../lib/domain/schedule/recurrence";
-import { addDays } from "../../../lib/domain/schedule/wallclock";
 import type { StaffRecord } from "../../../lib/notion/staff";
 import type { StudentRecord } from "../../../lib/notion/students";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import { handleImportPreview, handleImportRun, handleMonthlyReview, handleSyncSummaries } from "../../../lib/scheduler/import-handlers";
-import { seriesWrites } from "./series-writes.fake";
+import { lockedWrites } from "./series-writes.fake";
 import { handleCancelOccurrence, handleCreateClass, handleEditOccurrence, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
 import type { ScheduleStore, SeriesRecord, StoreResult, SummaryPatch, SummaryRecord } from "../../../lib/scheduler/schedule-store";
 
@@ -28,40 +27,24 @@ function fakeStore() {
   const series = new Map<string, SeriesRecord>();
   const exceptions: (ClassException & { requestId: string })[] = [];
   const summaries = new Map<string, SummaryRecord>();
-  const byRequest = new Map<string, string>();
   const log = { adopt: 0, markSummary: 0, createSeries: 0 };
   let n = 100;
   // REQ-7: classes are checked against availability, so every teacher is open all week.
   const openWeek = (staffId: string) => [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ id: REQ(900 + weekday), staffId, weekday, startTime: "00:00", endTime: "23:55", effectiveFrom: "2026-01-01", effectiveUntil: null, updatedAt: "2026-10-14T12:00:00.000Z" }));
+  const locked = lockedWrites({ series, exceptions, newId: () => REQ(++n) });
+  // What adopt_student_schedule does for each imported class.
+  const insertSeries = (input: Omit<SeriesRecord, "id" | "updatedAt" | "splitFrom">) => {
+    log.createSeries++;
+    const rec: SeriesRecord = { ...input, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z", splitFrom: null };
+    series.set(rec.id, rec);
+    locked.bump({ kind: "staff", id: rec.staffId }, { kind: "student", id: rec.studentId });
+  };
   const store = {
     listWindows: async (staffId?: string) => openWeek(staffId ?? T1),
     listAvailabilityExceptions: async () => [],
-    ...seriesWrites(series),
     listSeries: async () => ({ series: [...series.values()], exceptions }),
     getSeries: async (id: string) => series.get(id) ?? null,
-    getSeriesByRequest: async (r: string) => (byRequest.has(r) ? series.get(byRequest.get(r)!) ?? null : null),
-    createSeries: async (input: Omit<SeriesRecord, "id" | "updatedAt" | "splitFrom"> & { requestId: string }): Promise<StoreResult<SeriesRecord>> => {
-      log.createSeries++;
-      const existing = byRequest.get(input.requestId);
-      if (existing) return { ok: true, value: series.get(existing)!, created: false };
-      const { requestId, ...fields } = input;
-      const rec: SeriesRecord = { ...fields, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z", splitFrom: null };
-      series.set(rec.id, rec);
-      byRequest.set(requestId, rec.id);
-      return { ok: true, value: rec, created: true };
-    },
-    upsertException: async (input: ClassException & { requestId: string }): Promise<StoreResult<ClassException>> => {
-      exceptions.push(input);
-      return { ok: true, value: input, created: true };
-    },
-    split: async (input: { seriesId: string; fromDate: string; requestId: string; changes: Partial<SeriesRecord> }): Promise<StoreResult<SeriesRecord>> => {
-      const old = series.get(input.seriesId)!;
-      const rec: SeriesRecord = { ...old, ...input.changes, id: REQ(++n), startDate: input.fromDate, splitFrom: old.id, updatedAt: "2026-10-14T14:00:00.000Z" };
-      series.set(rec.id, rec);
-      old.effectiveUntil = addDays(input.fromDate, -1);
-      byRequest.set(input.requestId, rec.id);
-      return { ok: true, value: rec, created: true };
-    },
+    ...locked.methods,
     listSeriesForStudent: async (studentId: string) => {
       const own = [...series.values()].filter((s) => s.studentId === studentId);
       return { series: own, exceptions: exceptions.filter((e) => own.some((s) => s.id === e.seriesId)) };
@@ -72,7 +55,7 @@ function fakeStore() {
       const existing = summaries.get(input.studentId);
       if (existing) return { ok: true, value: existing, created: false };
       log.adopt++;
-      for (const s of input.series) await store.createSeries({ ...s, studentId: input.studentId });
+      for (const { requestId, ...s } of input.series) insertSeries((void requestId, { ...s, studentId: input.studentId }));
       const rec: SummaryRecord = {
         id: REQ(++n), studentId: input.studentId, adoptedAt: TODAY, adoptedFromText: input.sourceText, lastWrittenText: null, lastWrittenAt: null,
         syncState: "pending", lastError: null, lastDriftText: null,

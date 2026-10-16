@@ -218,7 +218,7 @@ describe("source scan (AC18)", () => {
   it("the week files never write classes, Notion, lessons or payouts, and never log", () => {
     for (const f of files) {
       const src = readFileSync(join(root, f), "utf8");
-      expect(src, f).not.toMatch(/createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|createWindow|updateWindow|deleteWindow|writeWeeklySchedule|lessons|payout|PATCH/i);
+      expect(src, f).not.toMatch(/lockedWrite|createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|createWindow|updateWindow|deleteWindow|writeWeeklySchedule|lessons|payout|PATCH/i);
       expect(src, f).not.toMatch(/api\.notion\.com|console\./);
     }
   });
