@@ -10,7 +10,7 @@ import {
 export type Viewer =
   | { kind: "not_configured" }
   | { kind: "signed_out" }
-  | { kind: "staff"; userId: string; email: string; orgId: string; db: Db }
+  | { kind: "staff"; userId: string; email: string; orgId: string; role: "owner" | "teacher"; db: Db }
   | { kind: "student"; userId: string; email: string; studentId: string; db: Db }
   | { kind: "none"; userId: string; email: string };
 
@@ -29,8 +29,10 @@ export async function getViewer(): Promise<Viewer> {
   await db.tracker.rpc("claim_student_invites");
 
   const { data: memberships } = await db.tracker.from("memberships").select("role, org_id").eq("user_id", user.id);
-  const staff = (memberships ?? []).find((m) => m.role === "owner" || m.role === "teacher");
-  if (staff) return { kind: "staff", userId: user.id, email, orgId: staff.org_id, db };
+  const rows = memberships ?? [];
+  // An owner row wins over a teacher row when a user holds both.
+  const staff = rows.find((m) => m.role === "owner") ?? rows.find((m) => m.role === "teacher");
+  if (staff) return { kind: "staff", userId: user.id, email, orgId: staff.org_id, role: staff.role === "owner" ? "owner" : "teacher", db };
 
   const { data: student } = await db.tracker.from("students").select("id").eq("user_id", user.id).maybeSingle();
   const id = z.object({ id: z.guid() }).safeParse(student);
@@ -50,6 +52,14 @@ export async function listStudents(db: Db, orgId: string): Promise<Student[]> {
     .order("status").order("first_name");
   if (error) throw new Error(error.message);
   return parseRows(StudentRow, data);
+}
+
+/** student id -> the email of the login that claimed it. Owners only; empty for anyone else. */
+export async function listLoginEmails(db: Db, orgId: string): Promise<Map<string, string>> {
+  const { data, error } = await db.tracker.rpc("student_logins", { target_org: orgId });
+  if (error) throw new Error(error.message);
+  const rows = z.array(z.object({ student_id: uuidLike, login_email: z.string() })).parse(data ?? []);
+  return new Map(rows.map((r) => [r.student_id, r.login_email]));
 }
 
 export type Bundle = {

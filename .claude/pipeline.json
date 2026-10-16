@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for the agent pipeline. gate_commands are the fast local subset of CI; ci.yml also builds both apps and runs RLS, restore and e2e.",
+  "_comment": "Single source of truth for the agent pipeline. gate_commands are the fast local subset of CI; ci.yml also builds both apps and runs RLS, restore and e2e. The browser suites (pnpm test:tracker, test:sso) are a builder step for diffs touching e2e_paths, not a gate command.",
   "repo": "y-wang217/ap-academy-landing",
   "default_branch": "main",
   "notion": {
@@ -9,6 +9,7 @@
     "work_log_data_source": "collection://03257601-dfe2-42dd-affb-49dcfe1d2dcf"
   },
   "statuses": {
+    "backlog": "Backlog",
     "ready": "Ready",
     "designing": "Designing",
     "design_review": "Design Review",
@@ -20,9 +21,17 @@
     "done": "Done",
     "blocked": "Blocked"
   },
+  "blocked_by_property": "Blocked by",
+  "labels": {
+    "pipeline": "pipeline",
+    "migration": "migration",
+    "awaiting_migration": "awaiting-migration",
+    "human_merge": "needs-human-merge"
+  },
   "wip_limit": 1,
   "max_attempts": 2,
   "branch_prefix": "req/",
+  "migration_branch_suffix": "-migration",
   "gate_commands": [
     "pnpm --filter @ap-academy/db typecheck",
     "pnpm --filter @ap-academy/db test",
@@ -33,6 +42,14 @@
     "pnpm --filter tracker test"
   ],
   "gate_ignore_paths": ["docs/", ".claude/", "README.md", "PIPELINE.md", "CLAUDE.md"],
+  "e2e_paths": [
+    "apps/tracker/app/",
+    "apps/tracker/components/",
+    "apps/tracker/proxy.ts",
+    "apps/landing/next.config.ts",
+    "apps/landing/middleware.ts",
+    "e2e/"
+  ],
   "human_merge_paths": [
     "supabase/",
     ".env",
@@ -49,6 +66,8 @@
     "apps/tracker/proxy.ts",
     "apps/tracker/next.config.ts",
     "scripts/",
-    ".github/"
+    ".github/",
+    "apps/tracker/lib/notion/",
+    "apps/tracker/app/api/scheduler/daily-task/"
   ]
 }

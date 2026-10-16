@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTeacherDays, dailyTaskTitle, isDue, planRefresh, type StoredTeacher, type TeacherDay } from "./daily-texts";
+import { buildTeacherDays, dailyTaskTitle, greetingName, isDue, planRefresh, type StoredTeacher, type TeacherDay } from "./daily-texts";
 import type { Occurrence } from "./recurrence";
 
 const RYAN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -132,5 +132,31 @@ describe("planRefresh (AC5 to AC8)", () => {
   });
   it("recreates a block that was deleted in Notion", () => {
     expect(planRefresh([stored()], [day("A")], new Map())[0]).toMatchObject({ isNew: true, write: true });
+  });
+});
+
+describe("greetingName (REQ-20 AC2-AC4)", () => {
+  it.each([
+    ["Mr. Charlie", "Mr. Charlie"], ["Mr Charlie", "Mr Charlie"], ["Ms. Pia", "Ms. Pia"], ["Ms Pia", "Ms Pia"],
+    ["Mrs. Lee", "Mrs. Lee"], ["Mrs Lee", "Mrs Lee"], ["Dr. Ahmed", "Dr. Ahmed"], ["Dr Ahmed", "Dr Ahmed"],
+    ["Miss Jones", "Miss Jones"], ["Mx. Kai", "Mx. Kai"], ["Prof. Ode", "Prof. Ode"], ["dr. Ahmed", "dr. Ahmed"],
+    ["Mr. Charlie Wang", "Mr. Charlie"],
+    ["Charlie Wang", "Charlie"], ["Ryan Test", "Ryan"],
+    ["Charlie", "Charlie"], ["Mr.", "Mr."], ["  Ms.   Pia ", "Ms. Pia"], ["Drew Smith", "Drew"], ["Mrsomething", "Mrsomething"],
+    ["", ""],
+  ])("%j -> %j", (input, expected) => {
+    expect(greetingName(input)).toBe(expected);
+  });
+});
+
+describe("buildTeacherDays honorific greeting (REQ-20 AC1)", () => {
+  const mr = [{ id: RYAN, name: "Mr. Charlie", active: true }];
+  it("greets by honorific and name when the teacher has classes", () => {
+    const [d] = build([fixture[0]], mr);
+    expect(d.copyText.startsWith("Hi Mr. Charlie, your classes today (Mon Oct 19):")).toBe(true);
+  });
+  it("greets by honorific and name when the teacher has no classes", () => {
+    const [d] = build([], mr);
+    expect(d.copyText).toBe("Hi Mr. Charlie, no classes scheduled for you today (Mon Oct 19).");
   });
 });

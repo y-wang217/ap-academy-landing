@@ -5,6 +5,7 @@
   "description": "Shared Supabase client helpers and database types for every AP Academy app.",
   "exports": {
     "./config": "./src/config.ts",
+    "./headers": "./src/headers.ts",
     "./browser": "./src/browser.ts",
     "./server": "./src/server.ts",
     "./middleware": "./src/middleware.ts",
@@ -17,15 +18,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.112.3"
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.3"
   },
   "peerDependencies": {
-    "next": "16.1.6"
+    "next": "16.4.0"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "next": "16.1.6",
+    "next": "16.4.0",
     "typescript": "^5"
   }
 }

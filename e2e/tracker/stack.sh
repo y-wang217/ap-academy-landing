@@ -70,5 +70,6 @@ NOTION_TOKEN=test-token-for-the-local-mock
 NOTION_API_BASE=http://127.0.0.1:54333
 PG_URL=$PG_URL
 SCHEDULER_CRON_SECRET=e2e-cron-secret-not-for-production
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ENV
 cat "$state/env"

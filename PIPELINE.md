@@ -5,13 +5,14 @@ Things Claude Code cannot do for you. Tick them off once.
 ## GitHub
 - [ ] Secret `CLAUDE_CODE_OAUTH_TOKEN`: output of `claude setup-token`.
 - [ ] Bot account (for example `apacademy-bot`) added as a collaborator with Write access.
-- [ ] Fine-grained PAT from the bot account, scoped to this repo only: Pull requests read/write, Contents read, Checks read. Save as secret `REVIEWER_PAT`.
-- [ ] Settings → General → Pull Requests: enable **Allow auto-merge** and **Automatically delete head branches**.
+- [ ] Fine-grained PAT from the bot account, scoped to this repo only: Pull requests read/write, Contents read, Checks read, **Actions read** (without it the reviewer cannot read failing CI logs; its reviews said "log access was denied"). Save as secret `REVIEWER_PAT`.
+- [ ] Settings → General → Pull Requests: enable **Allow auto-merge** and **Automatically delete head branches** (the second also retargets a feature PR to `main` when its migration PR merges).
 - [ ] Branch protection (or a ruleset) on `main`:
   - Require a pull request, 1 approval, dismiss stale approvals on new commits.
-  - Require status checks: `gate` (CI) and `review`.
+  - Require status checks: `gate` (CI) and `review`. `review` is a commit status the reviewer workflow posts on the PR head (pending while CI is red, success or failure after the bot's verdict); the workflow runs from `workflow_run`, which GitHub does not list as a PR check on its own.
   - Block force pushes. Include administrators is optional; leaving it off lets you hotfix.
-- [ ] Labels exist: `pipeline`, `needs-human-merge`.
+- [ ] Labels exist: `pipeline`, `needs-human-merge`, `migration`, `awaiting-migration`.
+- [ ] Settings → Advanced Security: enable Dependabot alerts and Dependabot security updates (`.github/dependabot.yml` only configures the weekly version updates).
 - [ ] Claude GitHub App installed on the repo (`/install-github-app` in Claude Code).
 
 ## Claude
@@ -21,10 +22,15 @@ Things Claude Code cannot do for you. Tick them off once.
   - `build-next`, hourly offset by 30 min, prompt: `/build-next`
 
 ## Daily use
-- Add requirements to the board as **Ready**.
-- Check the **Design Review** view. Approve by setting Status to **Approved**, or comment and set **Revise**.
+- Add requirements to the board as **Ready**. A card that depends on another goes in as **Backlog** with **Blocked by** set; the sweep moves it to Ready when every blocker is Done.
+- Check the **Design Review** view. The design's **Decisions for approval** table lists every dependency and schema choice with the default the builder will use; approve by setting Status to **Approved** (the defaults stand), or comment and set **Revise**.
+- A card with a migration produces two PRs: `<id>: migration NNNN ...` (labelled `migration`, `needs-human-merge`) and the feature PR (labelled `awaiting-migration`, based on the migration branch). Merge the migration PR, apply the migration with the Supabase MCP `apply_migration`, record it in `CLAUDE.md`. The sweep then releases the feature PR and it auto-merges once the bot has approved.
 - Check **Blocked** and anything labelled `needs-human-merge`.
+- Card statuses follow GitHub: the sweep sets In Review, Changes Requested, Done or Blocked from the PR, whatever the card said. Only the sweep writes "shipped" Work Log rows.
 - Kill switch: tick **Paused** on the Pipeline Control page.
+
+## Cloud sessions
+The SessionStart hook installs dependencies, installs PostgREST 14.5 and starts and stops the local tracker stack once, so `pnpm test:tracker` and `pnpm test:sso` run in a cloud session. The builder runs them before any PR that touches `e2e_paths` (pipeline.json). If the hook prints `e2e: ... failed`, the session can still design and build, but not prove browser flows.
 
 ## Editing the pipeline itself
 The guard hook blocks agents from editing hooks, settings, pipeline.json and workflows. Edit those by hand, or run Claude Code with the hooks temporarily disabled in a session you are watching.

@@ -128,7 +128,7 @@ Each step is done only when lint, typecheck and tests pass.
    `supabase/seed/tracker-bootstrap.sql`.~~ Done 2026-10-04 with sign-off;
    y.wang217@gmail.com owns the AP Academy org. Still to do: add `tracker`
    under API settings > Exposed schemas, then regenerate types.
-2. Add the `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE` repository secrets, run the
+2. Add the `SUPABASE_DB_URL` and `BACKUP_PUBLIC_KEY` repository secrets, run the
    backup workflow once, and drill a restore into a scratch project.
 3. Move Supabase to Pro (no pausing, daily backups).
 4. Privacy policy: student data is stored in the US (workspace ADR 0001).
@@ -164,4 +164,5 @@ committed to `spec/` first, before any code.
 - Scheduler 6/8 (REQ-7): admin booking on `/tracker/schedule`: book one-off and weekly classes, edit, cancel (this or this and future), and drag a class to another day or time with a scope prompt and rollback. Server checks teacher and student double-booking and availability (ADR 0038). No migration.
 - Scheduler 7/8 (REQ-8): a daily "Text teachers their schedules" task in Notion's Work database, one checkbox and copyable message per active teacher, refreshed when today's classes change, with a Resend label for a teacher already ticked. Hourly GitHub Actions trigger, bearer-protected endpoint, service role key confined to that route (ADR 0039). Migration 0012 (applied 2026-10-14). Nothing is sent automatically.
 - Scheduler 8/8 (REQ-9): closes the module with no new behaviour. A pure lesson-link extension point (`lesson-link.ts`, ADR 0040, not wired), tests and an e2e check proving booking, moving and cancelling never touch Lessons, payouts or other tracker tables, a verification record (`scheduler-report.md`) and an operator guide (`scheduler-operations.md`). No migration.
+- Security 6/9 (REQ-15): owners see which login claimed each student and can unlink a wrong one from the student page, with a corrected email (ADR 0041). The review step now shows the student email and who will see the grades. Migration 0014 (not yet applied).
 - Scheduler tutorial: `scheduler-tutorial.md` walks each view (week calendar, booking and moving, availability, conflicts, import, daily task) with a numbered live test checklist per view and a results table, for the first live run. Docs only.

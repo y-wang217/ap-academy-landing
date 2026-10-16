@@ -1,52 +1,131 @@
 name: Claude Reviewer
 
+# Runs once per CI result on a req/ branch, after CI has finished, and only
+# reviews when CI is green. A workflow_run job is not listed as a check on the
+# PR, so the job reports its outcome as a commit status named "review" on the
+# PR head; branch protection requires that status. A human re-requesting the
+# bot's review runs the same job through pull_request: review_requested.
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   pull_request:
-    types: [opened, synchronize, ready_for_review, labeled, review_requested]
+    types: [review_requested]
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
+  group: claude-review-${{ github.event.workflow_run.head_branch || github.head_ref }}
   cancel-in-progress: true
 
 jobs:
   review:
-    # Only pipeline PRs from req/ branches, never drafts.
+    # Same-repository req/ branches only. A workflow_run job carries secrets, so
+    # a fork branch named req/... must never reach the checkout below.
     if: >
-      startsWith(github.head_ref, 'req/') &&
-      !github.event.pull_request.draft
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       startsWith(github.event.workflow_run.head_branch, 'req/')) ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       startsWith(github.head_ref, 'req/') &&
+       !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
+      statuses: write
+      actions: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Resolve the PR and its CI state
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_run" ]; then
+            number="$RUN_PR"
+            sha="$RUN_SHA"
+            if [ -z "$number" ]; then
+              number=$(gh pr list --repo "$REPO" --head "$RUN_BRANCH" --state open --json number --jq '.[0].number // empty')
+            fi
+            if [ "$RUN_CONCLUSION" = "success" ]; then green=true; else green=false; fi
+          else
+            number="$PR_NUMBER"
+            sha="$PR_SHA"
+            # Green means gate and e2e have passed and nothing else has failed.
+            # Pending counts as not green: CI's own completion re-runs this job.
+            checks=$(gh pr checks "$number" --repo "$REPO" --json name,bucket || echo '[]')
+            passed=$(echo "$checks" | jq '[.[] | select(.name == "gate" or .name == "e2e") | select(.bucket == "pass")] | length')
+            failed=$(echo "$checks" | jq '[.[] | select(.name != "review") | select(.bucket == "fail" or .bucket == "cancel")] | length')
+            if [ "$passed" = "2" ] && [ "$failed" = "0" ]; then green=true; else green=false; fi
+          fi
+          if [ -z "$number" ]; then echo "No open PR for $RUN_BRANCH"; green=false; fi
+          {
+            echo "number=$number"
+            echo "sha=$sha"
+            echo "green=$green"
+          } >> "$GITHUB_OUTPUT"
+          echo "PR #$number at $sha, green=$green"
+
+      - name: Mark the review as waiting while CI is red
+        if: steps.pr.outputs.green != 'true' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/statuses/${{ steps.pr.outputs.sha }}" \
+            -f state=pending -f context=review \
+            -f description="Waiting for green CI before the bot reviews" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.number }}/checks"
+
+      - uses: actions/checkout@v7
+        if: steps.pr.outputs.green == 'true'
         with:
+          ref: ${{ steps.pr.outputs.sha }}
           fetch-depth: 0
 
-      - name: Wait for CI to finish
-        env:
-          GH_TOKEN: ${{ secrets.REVIEWER_PAT }}
-        run: |
-          for i in $(seq 1 40); do
-            pending=$(gh pr checks ${{ github.event.pull_request.number }} --json name,bucket \
-              --jq '[.[] | select(.name != "review") | select(.bucket=="pending")] | length' || echo 1)
-            [ "$pending" = "0" ] && exit 0
-            sleep 30
-          done
-          echo "CI still pending after 20 min"; exit 1
-
       - uses: anthropics/claude-code-action@v1
+        if: steps.pr.outputs.green == 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Post the review as the bot account so it counts as a second approver.
           github_token: ${{ secrets.REVIEWER_PAT }}
           prompt: |
             You are the reviewer subagent. Follow .claude/agents/reviewer.md exactly.
-            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Review PR #${{ steps.pr.outputs.number }} in ${{ github.repository }}.
+            CI (gate and e2e) is green on commit ${{ steps.pr.outputs.sha }}; do not ask for a green build.
             Finish by submitting exactly one review with gh pr review (approve or request-changes).
           claude_args: >-
             --max-turns 40
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr review:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr review:*),Bash(gh run view:*),Bash(gh run list:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
         env:
           GH_TOKEN: ${{ secrets.REVIEWER_PAT }}
+
+      - name: Report the verdict as the review status
+        if: always() && steps.pr.outputs.green == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          verdict=$(gh pr view "$NUMBER" --repo "$REPO" --json reviews \
+            --jq '[.reviews[] | select(.commit.oid == "'"$SHA"'") | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | last | .state // empty')
+          case "$verdict" in
+            APPROVED) state=success; desc="Bot reviewer approved" ;;
+            CHANGES_REQUESTED) state=failure; desc="Bot reviewer requested changes" ;;
+            *) state=error; desc="Bot reviewer posted no review on this commit" ;;
+          esac
+          gh api "repos/$REPO/statuses/$SHA" -f state="$state" -f context=review -f description="$desc" -f target_url="$RUN_URL"
+          echo "review status: $state ($desc)"
+          [ "$state" != "error" ]

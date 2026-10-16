@@ -134,7 +134,9 @@ const requiredNumber = z
   });
 const percentField = requiredNumber.pipe(z.number().min(0, "0 to 100").max(100, "0 to 100"));
 const optionalPercent = optionalNumber.pipe(z.number().min(0).max(100).nullable());
-const checkbox = z.union([z.literal("on"), z.literal("true"), z.literal(""), z.undefined()]).transform((v) => v === "on" || v === "true");
+// .optional(), not a z.undefined() member: an unchecked box is absent from the
+// form, and zod 4.6 refuses an absent key unless the schema is optional.
+const checkbox = z.union([z.literal("on"), z.literal("true"), z.literal("")]).optional().transform((v) => v === "on" || v === "true");
 const optionalDate = z
   .string()
   .trim()
@@ -147,6 +149,8 @@ export const StudentInput = z.object({
   gradeLevel: requiredNumber.pipe(z.number().int().min(9).max(12)),
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
 });
+
+export const UnlinkInput = z.object({ email: StudentInput.shape.email });
 
 export const GoalInput = z.object({
   school: text(120),

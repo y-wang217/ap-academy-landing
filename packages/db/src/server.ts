@@ -8,11 +8,14 @@ import type { Database } from "./types.ts";
  * Server client for Server Components and route handlers. Returns null when
  * Supabase isn't configured.
  */
-export async function getServerClient(): Promise<SupabaseClient<Database> | null> {
+export async function getServerClient(options?: {
+  fetch?: typeof fetch;
+}): Promise<SupabaseClient<Database> | null> {
   if (!isSupabaseConfigured()) return null;
   const cookieStore = await cookies();
 
   return createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    ...(options?.fetch ? { global: { fetch: options.fetch } } : {}),
     cookies: {
       getAll() {
         return cookieStore.getAll();

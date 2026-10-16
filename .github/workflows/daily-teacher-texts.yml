@@ -1,0 +1,26 @@
+name: Daily teacher texts task
+
+# Hourly: creates today's "Text teachers their schedules" task once it is past
+# DAILY_TASK_TIME local, and refreshes it. Safe to repeat (tracker ADR 0039).
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Call the run endpoint
+        env:
+          SCHEDULER_CRON_SECRET: ${{ secrets.SCHEDULER_CRON_SECRET }}
+          RUN_URL: ${{ vars.TRACKER_RUN_URL || 'https://www.apacademy.ca/tracker/api/scheduler/daily-task/run' }}
+        run: |
+          if [ -z "$SCHEDULER_CRON_SECRET" ]; then
+            echo "::notice::Skipped: set the SCHEDULER_CRON_SECRET repository secret (docs/designs/REQ-8.md)."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST -H "Authorization: Bearer $SCHEDULER_CRON_SECRET" "$RUN_URL"

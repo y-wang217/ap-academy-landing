@@ -14,16 +14,16 @@ jobs:
   backup:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check secrets
         id: secrets
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
-            echo "::notice::Backup skipped: set the SUPABASE_DB_URL and BACKUP_PASSPHRASE repository secrets (docs/RESTORE.md)."
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PUBLIC_KEY" ]; then
+            echo "::notice::Backup skipped: set the SUPABASE_DB_URL and BACKUP_PUBLIC_KEY repository secrets (docs/RESTORE.md)."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -44,10 +44,10 @@ jobs:
         if: steps.secrets.outputs.ready == 'true'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
         run: scripts/backup.sh backups
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.secrets.outputs.ready == 'true'
         with:
           name: db-backup-${{ github.run_id }}

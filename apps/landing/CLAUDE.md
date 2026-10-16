@@ -54,7 +54,9 @@ is entirely client-side — no backend, no accounts, no new dependencies.
   ever offered as a wrong answer). A regeneration that breaks these fails the build.
 - Visual skin is deliberately distinct from the main site: chalkboard green +
   index card, Fraunces/Public Sans, tokens prefixed `--color-sat-*` / `--font-sat-*`
-  in the `@theme inline` block. Fonts load via `next/font` scoped to `/sat`.
+  in the `@theme inline` block. Fonts are self-hosted from `app/sat/fonts/`
+  (latin subsets of the OFL variable fonts, built with fontTools) through
+  `next/font/local`, scoped to `/sat`, so a build needs no network.
 - No usage limit anywhere under `/sat`. The old soft 10/day localStorage gate on
   the quiz was removed until there is real traffic to gate — don't reintroduce a
   limit (and never a server-enforced one) without being asked.
