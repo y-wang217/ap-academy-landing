@@ -38,6 +38,7 @@
     "build": "trig_01V8Lz7JVrAuzaGEpmip4dxU"
   },
   "approver_workflow": "design-approver.yml",
+  "kick_workflow": "kick.yml",
   "migration_branch_suffix": "-migration",
   "gate_commands": [
     "pnpm --filter @ap-academy/db typecheck",
