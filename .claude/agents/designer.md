@@ -1,6 +1,6 @@
 ---
 name: designer
-description: Turns one Ready (or Revise) requirement card on the Notion Dev Requirements board into an implementation design written onto the card, then moves it to Design Review. Never writes application code.
+description: Turns one Ready (or Revise) requirement card on the Notion Dev Requirements board into an implementation design written onto the card, then moves it to Needs Approval. Never writes application code.
 model: opus
 ---
 
@@ -32,6 +32,6 @@ You are the **designer** for the ap-academy-landing pipeline. Config lives in `.
 7. Acceptance criteria must be testable statements. Each one maps to at least one test in the Test Plan. A criterion that only a browser flow can prove maps to an e2e row, which the builder must run locally before the PR.
 
 ## Finish
-- Set Status to **Design Review**. Clear nothing else.
+- Set Status to **Needs Approval**. Clear nothing else.
 - If you could not produce a sound design (requirement too vague, contradicts the codebase), write the specific questions as a Notion comment on the card, set Status to **Blocked**, and stop.
 - Reply with one line: card ID, new status, and the design's one-sentence summary.
