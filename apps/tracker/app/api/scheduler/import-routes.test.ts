@@ -241,6 +241,19 @@ describe("AC14: a failed Notion write never fails the class write", () => {
   });
 });
 
+describe("REQ-28 AC7: the week editor's retry body", () => {
+  it("accepts an ignored requestId, still refuses other fields, still admin only", async () => {
+    const w = world({ [S1]: CLEAN });
+    await handleImportRun(w.deps, { dryRun: false });
+    const r = await json(await handleSyncSummaries(w.deps, { studentId: S1, requestId: REQ(41) }));
+    expect(r.status).toBe(200);
+    expect(r.body.results).toEqual([{ studentId: S1, summarySync: "synced" }]);
+    expect((await handleSyncSummaries(w.deps, { studentId: S1, requestId: REQ(42), extra: 1 })).status).toBe(400);
+    expect((await handleSyncSummaries(w.deps, { studentId: S1, requestId: "not-a-guid" })).status).toBe(400);
+    expect((await handleSyncSummaries(as(w.deps, teacher), { studentId: S1, requestId: REQ(43) })).status).toBe(403);
+  });
+});
+
 describe("AC16: creating a class for a student who is not adopted", () => {
   const body = (studentId: string) => ({ requestId: REQ(7), staffId: T1, studentId, subject: "MPM2D Math", kind: "weekly", startDate: "2026-10-21", startTime: "17:30", durationMinutes: 60, effectiveUntil: null });
   it("legacy text present: 409 legacy_schedule_pending and nothing written", async () => {
