@@ -10,6 +10,8 @@
     "attempts": "Attempts",
     "pr": "PR",
     "blocked_by": "Blocked by",
-    "blocks": "Blocks"
-  }
+    "blocks": "Blocks",
+    "claimed_by": "Claimed by"
+  },
+  "charlie_user_id": "6d3ca702-9281-4f05-860f-182f06b841c2"
 }
