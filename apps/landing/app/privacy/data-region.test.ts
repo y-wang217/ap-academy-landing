@@ -30,7 +30,7 @@ function markdownFiles(rel: string): string[] {
 }
 
 test('privacy: service providers name Supabase in the United States', () => {
-  const item = page.match(/<li><strong>Service providers<\/strong>.*?<\/li>/s)?.[0];
+  const item = page.match(/<li><strong>Service providers<\/strong>[\s\S]*?<\/li>/)?.[0];
   assert.ok(item, 'Service providers item not found');
   assert.ok(item.includes('Supabase'), 'Supabase not named');
   assert.ok(item.includes('United States'), 'United States not named');
