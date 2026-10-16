@@ -98,6 +98,7 @@ property and a small set of secrets.
 | The fire API or its headers change | fires are one function in `scripts/fire-routine.mjs`; a failure degrades to the schedule |
 | A kick fails silently | every kick shows in the run reply or summary with its depth |
 | A Blocked card edited while it stays Blocked | notifies once more; acceptable, Charlie made the edit |
+| A GitHub-triggered run starts on the merged PR's head commit, so a feature branch cut before a pipeline change would run stale commands | the `ap-design` prompt checks out `main` before `/design-next` |
 
 ## Revisit this decision if
 
