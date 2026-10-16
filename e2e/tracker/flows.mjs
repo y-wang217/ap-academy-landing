@@ -640,6 +640,79 @@ try {
   }
   check("the seeded lesson reads back unchanged and was never requested by the tracker", (await (await fetch(lessonUrl, { headers: { "x-e2e-probe": "1" } })).text()) === lessonBefore && lessonBefore.includes('"Paid to Teacher"'));
 
+  // REQ-28: the week editor reports each Notion export after a save, with a Retry that re-runs only that export.
+  const NOBODY = "Nobody Booked";
+  const failLine = `Weekly Schedule for ${NOBODY}: Failed. The Notion save failed.`;
+  const scheduleFail = () => fetch(`${MOCK_NOTION}/__schedule/fail`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+  await teacher.setViewportSize({ width: 1200, height: 900 });
+  await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${plus(classDay, 9)}`);
+  await teacher.getByRole("button", { name: "Book a class" }).waitFor({ timeout: 15000 });
+  check("the mock now fails Weekly Schedule writes", (await scheduleFail()).scheduleFails === true);
+  await teacher.getByRole("button", { name: "Book a class" }).click();
+  const book28 = teacher.getByRole("dialog", { name: "Book a class" });
+  await book28.getByLabel("Student").selectOption({ label: NOBODY });
+  await book28.getByLabel("Subject").fill("MHF4U");
+  await book28.getByLabel("Date").fill(plus(classDay, 9));
+  await book28.getByLabel("Start time").fill("10:00");
+  // Weekly, so the generated Weekly Schedule text really changes and Notion is written.
+  await book28.getByLabel("Repeats weekly").check();
+  await book28.getByRole("button", { name: "Book class" }).click();
+  const failShown = await teacher.getByText(failLine, { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
+  check("a booking whose Weekly Schedule write failed says so, with a Retry",
+    failShown && (await teacher.getByRole("button", { name: "Retry Weekly Schedule" }).isVisible()) && (await teacher.getByText("Saved.", { exact: true }).isVisible()),
+    failShown ? "" : `${await book28.getByRole("alert").textContent({ timeout: 2000 }).catch(() => "no alert")} | ${await teacher.getByRole("status").nth(1).textContent({ timeout: 2000 }).catch(() => "no status")}`);
+  check("the mock recovers", (await scheduleFail()).scheduleFails === false);
+  let classCalls = 0;
+  const countClasses = (req) => { if (req.url().includes("/api/scheduler/classes")) classCalls++; };
+  teacher.on("request", countClasses);
+  await teacher.getByRole("button", { name: "Retry Weekly Schedule" }).click();
+  const synced = await teacher.getByText(`Weekly Schedule for ${NOBODY}: Synced.`, { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
+  teacher.off("request", countClasses);
+  check("Retry re-runs only the summary: Synced, no Retry left, no class request",
+    synced && (await teacher.getByRole("button", { name: "Retry Weekly Schedule" }).count()) === 0 && classCalls === 0, `synced=${synced} classCalls=${classCalls}`);
+
+  // A drag-move (this class only) whose daily task failed (the response is rewritten) shows the daily line and its Retry.
+  await teacher.route("**/api/scheduler/classes/**", async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    const res = await route.fetch();
+    const body = await res.json();
+    await route.fulfill({ response: res, json: { ...body, dailyTask: "failed" } });
+  });
+  const oneOff = teacher.getByRole("button", { name: /Nobody Booked/ }).filter({ hasText: "MHF4U" }).first();
+  await oneOff.waitFor({ timeout: 15000 });
+  const atBox = await oneOff.boundingBox();
+  await teacher.mouse.move(atBox.x + atBox.width / 2, atBox.y + 8);
+  await teacher.mouse.down();
+  await teacher.mouse.move(atBox.x + atBox.width / 2 + atBox.width * 1.2, atBox.y + 8, { steps: 8 });
+  await teacher.mouse.move(atBox.x + atBox.width / 2 + atBox.width * 2, atBox.y + 8, { steps: 8 });
+  await teacher.mouse.up();
+  const ask28 = teacher.getByRole("dialog", { name: "Move this class?" });
+  await ask28.waitFor({ timeout: 5000 });
+  await ask28.getByRole("button", { name: "Move" }).click();
+  const dailyFail = await teacher.getByText("Today's Notion task could not be updated.", { exact: true }).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+  await teacher.unroute("**/api/scheduler/classes/**");
+  check("a drag-move now shows a notice, and a failed daily task has its own Retry",
+    dailyFail && (await teacher.getByRole("button", { name: "Retry today's task" }).isVisible()),
+    dailyFail ? "" : await teacher.getByRole("status").nth(1).textContent().catch(() => "no status"));
+  await teacher.getByRole("button", { name: "Retry today's task" }).click();
+  await teacher.getByRole("button", { name: "Retry today's task" }).waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+  await teacher.waitForTimeout(500);
+  check("after the daily Retry neither the notice nor the status line says could not be updated",
+    (await teacher.getByRole("button", { name: "Retry today's task" }).count()) === 0 && (await teacher.getByText(/could not be updated/).count()) === 0);
+
+  // Delete: Cancel class, This class and future, on the weekly class. It ends the series and syncs the summary.
+  await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${plus(classDay, 16)}`);
+  const weeklyCard = teacher.getByRole("button", { name: /Nobody Booked/ }).filter({ hasText: "15:00" });
+  await weeklyCard.waitFor({ timeout: 15000 });
+  await weeklyCard.click();
+  await teacher.getByRole("dialog").filter({ hasText: NOBODY }).getByRole("button", { name: "Cancel class" }).click();
+  const del = teacher.getByRole("dialog", { name: "Cancel class" });
+  await del.getByLabel("This class and future").check();
+  await del.getByRole("button", { name: "Cancel class" }).click();
+  const deleted = await teacher.getByText(`Weekly Schedule for ${NOBODY}: Synced.`, { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
+  check("delete (cancel this class and future) shows Saved. and the Weekly Schedule Synced line",
+    deleted && (await teacher.getByText("Saved.", { exact: true }).isVisible()), deleted ? "" : await del.getByRole("alert").textContent().catch(() => "no alert"));
+
   // REQ-15: the owner sees who claimed Sam, unlinks with a corrected address, and the right person takes over.
   await teacher.goto(`${BASE}`);
   check("the owner's list shows who claimed Sam", await teacher.getByText("Signed in as sam@example.com").first().isVisible());
