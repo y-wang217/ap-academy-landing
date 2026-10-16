@@ -3,6 +3,7 @@
 // Two active teachers and three students. REQ-7: one student page can be read and its Weekly Schedule
 // written (the scheduler adopts a student and regenerates that one property). REQ-8 adds in-memory Work and
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
+// REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -96,6 +97,124 @@ const LESSON = {
   },
 };
 
+
+// REQ-25: the parent Billing tab. Invoices and Missed Sessions & Credits, plus billing properties on the Students &
+// Parents pages REQ-24 links (Ada dddd…0001, Cy dddd…0002) and Ada's sibling Haider (bbbb…0004, Billing Family Afzal).
+// Months are computed from today's Toronto date. Canary values prove the tracker drops unrequested properties.
+const INVOICES_DS = "be0f91e4-f054-4055-9ca6-c4e1a22c4f27";
+const CREDITS_DS = "38cdcded-9bef-4e68-bceb-a56920f098bd";
+const ORIGIN = "http://127.0.0.1:54333";
+const ADA = "dddddddd-dddd-4ddd-8ddd-dddddddd0001";
+const CY = "dddddddd-dddd-4ddd-8ddd-dddddddd0002";
+const HAIDER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004";
+const torontoDay = (offset = 0) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + offset * 86400000));
+const thisYm = torontoDay().slice(0, 7);
+const prevYm = (() => { const [y, m] = thisYm.split("-").map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`; })();
+const monYear = (ym) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", year: "numeric" });
+const rt = (s) => ({ rich_text: s ? [{ plain_text: s }] : [] });
+const billingStudent = (id, name, rate, cadence, family) => ({
+  id,
+  properties: {
+    "Student Name": { title: [{ plain_text: name }] },
+    "Hourly Rate (CAD)": { number: rate },
+    "Lesson Cadence": { select: cadence ? { name: cadence } : null },
+    "Billing Family": rt(family),
+    "Parent Phone": { phone_number: "555-0199" },
+    Notes: rt("CANARY-NOTE"),
+  },
+});
+const BILLING_STUDENTS = new Map([
+  [ADA, billingStudent(ADA, "Ada Afzal", 60, "2x/week", "Afzal")],
+  [CY, billingStudent(CY, "Cy Other", 70, "1x/week", "Other")],
+  [HAIDER, billingStudent(HAIDER, "Haider Afzal", 60, "1x/week", " afzal ")],
+]);
+const file = (name) => ({ name, type: "file", file: { url: `${ORIGIN}/files/${name}`, expiry_time: "2099-01-01T00:00:00Z" } });
+const invoice = (id, number, month, amount, status, student, extra = {}) => ({
+  id,
+  parent: { type: "data_source_id", data_source_id: INVOICES_DS },
+  properties: {
+    Invoice: { title: [{ plain_text: number }] },
+    Month: rt(month),
+    "Amount (CAD)": { number: amount },
+    "Credit Applied (CAD)": { number: extra.creditApplied ?? 0 },
+    Credits: { relation: (extra.credits ?? []).map((c) => ({ id: c })) },
+    Issued: { date: { start: `${month}-01` } },
+    Due: { date: { start: extra.due ?? `${month}-08` } },
+    Status: { select: { name: status } },
+    PDF: { files: extra.pdf ? [file(extra.pdf)] : [] },
+    Student: { relation: [{ id: student }] },
+    Notes: rt("CANARY-NOTE"),
+  },
+});
+const CREDIT_APPLIED = "ffffffff-ffff-4fff-8fff-ffffffff0001";
+const INVOICES = [
+  invoice("eeeeeeee-eeee-4eee-8eee-eeeeeeee0001", "AP-E2E-0007", thisYm, 420, "Sent", ADA, { creditApplied: 60, credits: [CREDIT_APPLIED], due: torontoDay(-1), pdf: "ada-current.pdf" }),
+  invoice("eeeeeeee-eeee-4eee-8eee-eeeeeeee0002", "AP-E2E-0007", thisYm, 315, "Sent", HAIDER),
+  invoice("eeeeeeee-eeee-4eee-8eee-eeeeeeee0003", "AP-E2E-0003", prevYm, 480, "Paid", ADA, { pdf: "ada-past.pdf" }),
+  invoice("eeeeeeee-eeee-4eee-8eee-eeeeeeee0004", "AP-E2E-0009", thisYm, 999, "Draft", ADA, { pdf: "ada-draft.pdf" }),
+  invoice("eeeeeeee-eeee-4eee-8eee-eeeeeeee0005", "AP-E2E-0008", prevYm, 888, "Void", ADA),
+  invoice("eeeeeeee-eeee-4eee-8eee-eeeeeeee0006", "AP-E2E-0011", thisYm, 777, "Sent", CY, { pdf: "cy.pdf" }),
+];
+const credit = (id, date, course, status, appliedTo, student) => ({
+  id,
+  properties: {
+    Session: { title: [{ plain_text: `${course} ${date}` }] },
+    Date: { date: { start: date } },
+    Course: rt(course),
+    Hours: { number: 1 },
+    "Rate (CAD)": { number: 60 },
+    "Credit Status": { select: { name: status } },
+    "Applied To": rt(appliedTo),
+    Student: { relation: [{ id: student }] },
+    Notes: rt("CANARY-NOTE"),
+  },
+});
+const CREDITS = [
+  credit(CREDIT_APPLIED, `${prevYm}-03`, "MHF4U", "Applied", `AP-E2E-0007, ${monYear(thisYm)}`, ADA),
+  credit("ffffffff-ffff-4fff-8fff-ffffffff0002", `${thisYm}-02`, "MCV4U", "Open", "", ADA),
+  credit("ffffffff-ffff-4fff-8fff-ffffffff0003", `${thisYm}-02`, "ZZZ9Z", "Open", "", CY),
+];
+let billingFails = false;
+const titleOf = (p) => (p.title ?? []).map((t) => t.plain_text).join("");
+function matches(row, f) {
+  if (!f) return true;
+  if (f.and) return f.and.every((g) => matches(row, g));
+  if (f.or) return f.or.some((g) => matches(row, g));
+  const prop = row.properties[f.property];
+  if (!prop) return false;
+  if (f.relation) return (prop.relation ?? []).some((r) => r.id === f.relation.contains);
+  if (f.select) return "does_not_equal" in f.select ? prop.select?.name !== f.select.does_not_equal : prop.select?.name === f.select.equals;
+  if (f.title) return titleOf(prop) === f.title.equals;
+  return false;
+}
+const schema = (names) => ({ properties: Object.fromEntries(names.map((n, i) => [n, { id: `p${i}` }])) });
+const INVOICE_SCHEMA = schema(["Invoice", "Month", "Amount (CAD)", "Credit Applied (CAD)", "Credits", "Issued", "Due", "Status", "PDF", "Student", "Hours", "Rate (CAD)", "Paid On", "Notes"]);
+const CREDIT_SCHEMA = schema(["Session", "Date", "Course", "Hours", "Rate (CAD)", "Credit Status", "Applied To", "Student", "Notes", "Billed Month", "Invoice"]);
+
+async function billingApi(req, res) {
+  const url = req.url ?? "";
+  const path = url.split("?")[0];
+  if (req.method === "GET" && path.startsWith("/files/")) {
+    res.setHeader("Content-Type", "application/pdf");
+    return res.end(`%PDF-1.4 ${path.slice(7)}`), true;
+  }
+  if (req.method === "GET" && path === `/v1/data_sources/${INVOICES_DS}`) return res.end(JSON.stringify(INVOICE_SCHEMA)), true;
+  if (req.method === "GET" && path === `/v1/data_sources/${CREDITS_DS}`) return res.end(JSON.stringify(CREDIT_SCHEMA)), true;
+  for (const [ds, rows] of [[INVOICES_DS, INVOICES], [CREDITS_DS, CREDITS]]) {
+    if (req.method === "POST" && path === `/v1/data_sources/${ds}/query`) {
+      if (billingFails && ds === INVOICES_DS) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })), true; }
+      const body = await readBody(req);
+      return res.end(JSON.stringify({ results: rows.filter((r) => matches(r, body.filter)), has_more: false, next_cursor: null })), true;
+    }
+  }
+  const pageId = /^\/v1\/pages\/([0-9a-f-]{36})$/.exec(path)?.[1];
+  if (pageId && req.method === "GET") {
+    const page = BILLING_STUDENTS.get(pageId) ?? INVOICES.find((i) => i.id === pageId);
+    if (page) return res.end(JSON.stringify(page)), true;
+  }
+  return false;
+}
+
 async function workApi(req, res) {
   const url = req.url ?? "";
   if (req.method === "GET" && url === "/__work") return res.end(JSON.stringify(dump())), true;
@@ -154,12 +273,14 @@ async function workApi(req, res) {
 http.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   if (req.method === "GET" && req.url === "/__journal") return res.end(JSON.stringify(journal));
+  if (req.method === "POST" && req.url === "/__billing/fail") { billingFails = !billingFails; return res.end(JSON.stringify({ billingFails })); }
   await bufferBody(req);
   if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
   // Read-only: the seeded lesson answers a GET and nothing else.
   if (req.method === "GET" && req.url === `/v1/pages/${LESSON_ID}`) return res.end(JSON.stringify(LESSON));
   if ((req.url ?? "").includes(LESSON_ID) || (req.url ?? "").includes(LESSONS_DS)) { res.statusCode = 405; return res.end(JSON.stringify({ object: "error", status: 405 })); }
   if (await workApi(req, res)) return;
+  if (await billingApi(req, res)) return;
   const pageId = /^\/v1\/pages\/([0-9a-f-]{36})(\?.*)?$/.exec(req.url ?? "")?.[1];
   if (pageId && schedule.has(pageId)) {
     if (req.method === "GET") {
@@ -174,7 +295,10 @@ http.createServer(async (req, res) => {
     }
   }
   if (req.method === "GET" && req.url === `/v1/data_sources/${STUDENTS_DS}`) {
-    res.end(JSON.stringify({ properties: { "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" } } }));
+    res.end(JSON.stringify({ properties: {
+      "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" },
+      "Hourly Rate (CAD)": { id: "hr" }, "Lesson Cadence": { id: "lc" }, "Billing Family": { id: "bf" }, "Parent Phone": { id: "pp" }, Notes: { id: "nts" },
+    } }));
     return;
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`)) {

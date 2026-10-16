@@ -51,3 +51,23 @@ export function readWorkConfig(): WorkConfig | null {
     logId: process.env.NOTION_WORK_LOG_DATA_SOURCE_ID || DEFAULT_WORK_LOG_DATA_SOURCE_ID,
   };
 }
+
+export const DEFAULT_INVOICES_DATA_SOURCE_ID = "be0f91e4-f054-4055-9ca6-c4e1a22c4f27";
+export const DEFAULT_CREDITS_DATA_SOURCE_ID = "38cdcded-9bef-4e68-bceb-a56920f098bd";
+export type BillingConfig = { token: string; invoicesId: string; creditsId: string; studentsId: string };
+
+/**
+ * Same token, pointed at Invoices, Missed Sessions & Credits and Students &
+ * Parents (REQ-25, ADR 0049). Read access only; the integration must be shared
+ * with Invoices and Missed Sessions & Credits before the parent Billing tab works.
+ */
+export function readBillingConfig(): BillingConfig | null {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) return null;
+  return {
+    token,
+    invoicesId: process.env.NOTION_INVOICES_DATA_SOURCE_ID || DEFAULT_INVOICES_DATA_SOURCE_ID,
+    creditsId: process.env.NOTION_CREDITS_DATA_SOURCE_ID || DEFAULT_CREDITS_DATA_SOURCE_ID,
+    studentsId: process.env.NOTION_STUDENTS_DATA_SOURCE_ID || DEFAULT_STUDENTS_DATA_SOURCE_ID,
+  };
+}

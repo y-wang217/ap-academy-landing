@@ -20,3 +20,37 @@ export const PARENT_CALENDAR_FILES = [
   "lib/view/calendar-text.ts",
   "lib/data/parent-calendar.ts",
 ];
+
+/**
+ * What no Billing tab file may contain (REQ-25, AC12). PARENT_FORBIDDEN stays
+ * calendar-only because it bans the billing words themselves. Case-sensitive
+ * and word-bounded, so a property name is caught but ordinary prose is not.
+ */
+export const BILLING_FORBIDDEN: RegExp[] = [
+  /\bParent (Phone|Email|Name)\b/,
+  /\bSales Notes\b/,
+  /\bNotes\b/,
+  /\bDiscounts\b/,
+  /\bLast Invoice\b/,
+  /\bLessons\b/,
+  /\bPayouts\b/,
+  /\bReason\b/,
+  /\bBilled Month\b/,
+  /6300f58a/,
+  /unstable_cache/,
+  /\.(insert|update|upsert|delete|rpc)\(/,
+  /service.?role|createServiceClient/i,
+  /PATCH/,
+  /console\./,
+];
+
+/** Billing tab files (REQ-25), relative to apps/tracker. */
+export const PARENT_BILLING_FILES = [
+  "lib/notion/billing.ts",
+  "lib/domain/billing.ts",
+  "lib/view/parent-billing.ts",
+  "lib/data/parent-billing.ts",
+  "app/parent/[studentId]/billing/page.tsx",
+  "app/parent/[studentId]/billing/invoices/[invoiceId]/route.ts",
+  "components/parent-billing.tsx",
+];

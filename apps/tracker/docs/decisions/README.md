@@ -53,3 +53,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0046](0046-parent-email-minimal-pii.md) | A parent's email is the only new personal field | accepted |
 | [0047](0047-parent-calendar-states.md) | Parent Calendar states, makeups and the not-available rule | accepted |
 | [0048](0048-notion-link-owner-only.md) | Only an owner can change a student's Notion record link | accepted |
+| [0049](0049-parent-billing-from-notion.md) | Parent Billing reads from Notion, gated on the child's Notion link | accepted |
