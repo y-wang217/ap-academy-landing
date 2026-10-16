@@ -1,5 +1,5 @@
 -- REQ-22 (Parent 1/4): parent accounts linked to students, read-only.
--- Tested by supabase/tests/parent_links.sql. Tracker ADR 0044 and 0045.
+-- Tested by supabase/tests/parent_links.sql. Tracker ADR 0045 and 0046.
 --
 -- A parent reads the published rows of their linked children and writes
 -- nothing. The only write paths are the owner's insert on parent_links and

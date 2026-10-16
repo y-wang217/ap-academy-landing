@@ -246,35 +246,36 @@ do $$ begin
 end $$;
 
 -- AC5: every write refused ---------------------------------------------------------------
+-- Each statement is checked on its own: refused with 42501, or it touches 0 rows.
+reset role;
+create function parent_helpers.expect_denied(stmt text)
+returns void language plpgsql as $$
+declare n bigint;
+begin
+  begin
+    execute stmt;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege then
+    return;
+  end;
+  if n <> 0 then raise exception 'write touched % rows: %', n, stmt; end if;
+end $$;
+grant execute on function parent_helpers.expect_denied(text) to public;
+
+set role authenticated;
 set request.jwt.claims = '{"sub": "00000000-0000-0000-0000-0000000000c1", "email": "p1@example.com"}';
 do $$
-declare t text; n bigint; sam text := '20000000-0000-0000-0000-000000000001';
+declare t text; sam text := '20000000-0000-0000-0000-000000000001';
 begin
-  -- Updates and deletes touch 0 rows or are refused outright (no grant).
   foreach t in array array['goals', 'courses', 'syllabus_versions', 'categories', 'assessments', 'tasks'] loop
-    begin
-      execute format('update tracker.%I set org_id = org_id where student_id = %L', t, sam);
-      get diagnostics n = row_count;
-      if n <> 0 then raise exception 'parent updated % rows of %', n, t; end if;
-    exception when insufficient_privilege then null;
-    end;
-    begin
-      execute format('delete from tracker.%I where student_id = %L', t, sam);
-      get diagnostics n = row_count;
-      if n <> 0 then raise exception 'parent deleted % rows of %', n, t; end if;
-    exception when insufficient_privilege then null;
-    end;
+    perform parent_helpers.expect_denied(format('update tracker.%I set org_id = org_id where student_id = %L', t, sam));
+    perform parent_helpers.expect_denied(format('delete from tracker.%I where student_id = %L', t, sam));
   end loop;
-  update tracker.students set first_name = 'Hax' where id = sam::uuid;
-  get diagnostics n = row_count;
-  if n <> 0 then raise exception 'parent updated students'; end if;
-  update tracker.parent_links set email = 'hax@example.com';
-  get diagnostics n = row_count;
-  if n <> 0 then raise exception 'parent updated parent_links'; end if;
-  delete from tracker.parent_links;
-  get diagnostics n = row_count;
-  if n <> 0 then raise exception 'parent deleted parent_links'; end if;
-exception when insufficient_privilege then null;
+  perform parent_helpers.expect_denied(format('update tracker.students set first_name = %L where id = %L', 'Hax', sam));
+  perform parent_helpers.expect_denied($q$update tracker.parent_links set email = 'hax@example.com'$q$);
+  perform parent_helpers.expect_denied($q$delete from tracker.parent_links$q$);
+  perform parent_helpers.expect_denied($q$update tracker.class_series set subject = 'Hax'$q$);
+  perform parent_helpers.expect_denied($q$delete from tracker.class_exceptions$q$);
 end $$;
 select parent_helpers.expect_error($q$insert into tracker.tasks (org_id, student_id, course_id, title)
   values ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'x')$q$, '42501');
@@ -289,6 +290,8 @@ do $$ begin
     raise exception 'a parent write got through';
   end if;
   if (select count(*) from tracker.parent_links) <> 2 then raise exception 'a parent changed parent_links'; end if;
+  if (select count(*) from tracker.parent_links where email = 'p1@example.com') <> 2 then raise exception 'a parent changed a link email'; end if;
+  if exists (select 1 from tracker.class_series where subject = 'Hax') then raise exception 'a parent changed class_series'; end if;
   raise notice 'ok: parent writes refused (AC5)';
 end $$;
 
