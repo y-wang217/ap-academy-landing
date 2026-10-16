@@ -880,6 +880,87 @@ try {
   await parent.getByText("Schedule not available yet").waitFor({ timeout: 15000 });
   check("a child with no scheduler link sees Schedule not available yet and no grid", (await parent.locator("[data-grid]").count()) === 0 && (await parent.getByText("This week", { exact: true }).count()) === 0);
 
+  // REQ-25: the Billing tab. Ada's Students & Parents page (ADA_NOTION) has a current Sent invoice due yesterday, shared
+  // with Haider (Billing Family Afzal) and carrying an Applied credit, one Paid past invoice with a PDF, a $999 Draft,
+  // an $888 Void and an Open credit. Cy's family has a $777 invoice and a ZZZ9Z credit. All from the mock's Invoices and
+  // Missed Sessions & Credits data sources.
+  const billingUrl = (id) => `${BASE}/parent/${id}/billing`;
+  const pdfUrl = (child, invoice) => `${BASE}/parent/${child}/billing/invoices/${invoice}`;
+  const ADA_CURRENT = "eeeeeeee-eeee-4eee-8eee-eeeeeeee0001";
+  const ADA_PAST = "eeeeeeee-eeee-4eee-8eee-eeeeeeee0003";
+  const ADA_DRAFT = "eeeeeeee-eeee-4eee-8eee-eeeeeeee0004";
+  const CY_INVOICE = "eeeeeeee-eeee-4eee-8eee-eeeeeeee0006";
+  const billingTablesBefore = process.env.PG_URL ? snapshot() : null;
+  const billingJournalStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+
+  await parent.goto(billingUrl(adaId));
+  await parent.locator("[data-invoice-card]").waitFor({ timeout: 15000 });
+  const cardText = await parent.locator("[data-invoice-card]").innerText();
+  check("the card shows this month's invoice, the amount, Overdue, the credit line and the shared line",
+    /\w+ invoice/.test(cardText) && cardText.includes("$420") && cardText.includes("Credit applied: -$60") && /Missed \w{3} \d{1,2} · MHF4U/.test(cardText) && cardText.includes("Shared invoice with Haider"),
+    cardText.replaceAll("\n", " | "));
+  check("the card's status pill is Overdue", (await parent.locator('[data-invoice-card] [data-state="overdue"]').innerText()) === "Overdue");
+  const creditsText = await section(parent, "Credits").innerText();
+  check("Credits shows the Open total, an Open pill and the footnote",
+    creditsText.includes("Open total") && creditsText.includes("$60") && (await section(parent, "Credits").locator('[data-state="open"]').count()) === 1 && creditsText.includes("Open credits come off your next invoice."),
+    creditsText.replaceAll("\n", " | "));
+  const pastLink = section(parent, "Past invoices").locator(`a[href$="/billing/invoices/${ADA_PAST}"]`);
+  check("Past invoices has a Paid row that is a link", (await pastLink.count()) === 1 && (await pastLink.locator('[data-state="paid"]').count()) === 1);
+  check("the rate line reads Rate: $60/h · 2x/week", await parent.getByText("Rate: $60/h · 2x/week", { exact: true }).isVisible());
+  const billingHtml = await parent.content();
+  const leaked = ["$999", "$888", "$777", "$315", "ZZZ9Z", "555-0199", "CANARY-NOTE", "amazonaws", "/files/", "127.0.0.1:54333"].filter((w) => billingHtml.includes(w));
+  check("no Draft, Void, other family, sibling amount, canary or file link reaches the page", leaked.length === 0, leaked.join(","));
+  const billingButtons = await parent.locator("button").allTextContents();
+  check("the Billing tab has only the Sign out button and no input", billingButtons.length === 1 && /sign out/i.test(billingButtons[0]) && (await parent.locator("input, textarea, select").count()) === 0, JSON.stringify(billingButtons));
+  check("the Billing tab does not scroll sideways at 375px", await parent.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  check("the Billing tab has no payment or e-transfer text and no em-dash", !/e-?transfer|pay now/i.test(await parent.locator("main").innerText()) && !(await parent.locator("main").innerText()).includes("—"));
+
+  // AC9, AC10, AC14: the PDF route.
+  const api = parent.context().request;
+  const pdf = await api.get(pdfUrl(adaId, ADA_PAST), { maxRedirects: 0 });
+  const pdfBody = await pdf.body();
+  check("the Paid invoice's PDF is served inline with no-store",
+    pdf.status() === 200 && pdf.headers()["content-type"] === "application/pdf" && /no-store/.test(pdf.headers()["cache-control"] ?? "") && pdfBody.subarray(0, 4).toString() === "%PDF" && /inline; filename="AP-E2E-0003.pdf"/.test(pdf.headers()["content-disposition"] ?? ""),
+    `${pdf.status()} ${JSON.stringify(pdf.headers())}`);
+  const statusOf = async (url) => (await api.get(url, { maxRedirects: 0 })).status();
+  check("another family's invoice under Ada is 404", (await statusOf(pdfUrl(adaId, CY_INVOICE))) === 404);
+  check("Ada's invoice under Cy (unlinked) or Bo (unpublished) is 404", (await statusOf(pdfUrl(cyId, ADA_PAST))) === 404 && (await statusOf(pdfUrl(boId, ADA_PAST))) === 404);
+  check("the Draft invoice's PDF is 404", (await statusOf(pdfUrl(adaId, ADA_DRAFT))) === 404);
+  check("a teacher asking for Ada's PDF is refused", (await teacher2.context().request.get(pdfUrl(adaId, ADA_CURRENT), { maxRedirects: 0 })).status() !== 200);
+
+  // AC11, AC12: Notion saw only reads of the billing data sources and pages, each naming its properties, filtered on Ada.
+  const billingJournal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(billingJournalStart);
+  const billingPaths = /^\/v1\/(data_sources\/(be0f91e4-f054-4055-9ca6-c4e1a22c4f27|38cdcded-9bef-4e68-bceb-a56920f098bd|fe3d651a-70c6-4d1e-8a38-656163d6bc63)(\/query)?|pages\/[0-9a-f-]{36})(\?.*)?$|^\/files\//;
+  const queries = billingJournal.filter((j) => j.path.includes("/query"));
+  const relationIds = queries.flatMap((j) => JSON.stringify(j.body).match(/"contains":"[^"]+"/g) ?? []);
+  check("Billing asked Notion only for billing reads, with filter_properties, filtered on Ada, never Lessons or a write",
+    billingJournal.length > 0 && billingJournal.every((j) => ["GET", "POST"].includes(j.method) && billingPaths.test(j.path)) &&
+      billingJournal.every((j) => j.method !== "POST" || j.path.includes("/query")) &&
+      billingJournal.filter((j) => j.path.startsWith("/v1/pages/") || j.path.includes("/query")).every((j) => j.path.includes("filter_properties")) &&
+      relationIds.length >= 2 && relationIds.every((r) => r === `"contains":"${ADA_NOTION}"`) && !billingJournal.some((j) => LESSONS_RE.test(j.path)),
+    JSON.stringify(billingJournal.map((j) => `${j.method} ${j.path}`)));
+  if (billingTablesBefore) {
+    const after = snapshot();
+    check("no tracker table changed while the parent browsed Billing", JSON.stringify(after) === JSON.stringify(billingTablesBefore),
+      Object.keys(after).filter((t) => after[t] !== billingTablesBefore[t]).join(","));
+  } else {
+    check("no tracker table changed while the parent browsed Billing (PG_URL missing)", false);
+  }
+
+  // AC13: a failed invoices read is an error, never an empty month; a child with no Notion link is not available.
+  try {
+    await fetch(`${MOCK_NOTION}/__billing/fail`, { method: "POST", headers: { "x-e2e-probe": "1" } });
+    await parent.goto(billingUrl(adaId));
+    await parent.getByText("Could not load billing. Try again later.").waitFor({ timeout: 15000 });
+    check("a failed invoices read shows the error and no cards or empty states",
+      (await parent.getByText("No invoice yet this month").count()) === 0 && (await parent.locator("[data-invoice-card]").count()) === 0 && (await parent.getByRole("heading", { name: "Credits" }).count()) === 0);
+  } finally {
+    await fetch(`${MOCK_NOTION}/__billing/fail`, { method: "POST", headers: { "x-e2e-probe": "1" } });
+  }
+  await parent.goto(billingUrl(diId));
+  await parent.getByText("Billing not available yet").waitFor({ timeout: 15000 });
+  check("a child with no Notion link sees Billing not available yet and no cards", (await parent.locator("[data-invoice-card]").count()) === 0 && (await parent.getByRole("heading", { name: "Credits" }).count()) === 0);
+
   // Teachers, owners and students are sent back to the tracker home.
   await teacher.goto(`${BASE}/parent`);
   check("an owner opening /tracker/parent is redirected", new URL(teacher.url()).pathname.replace(/\/$/, "") === "/tracker");
