@@ -169,4 +169,4 @@ Keep `docs/decisions/README.md` as an index (number, title, status). Never edit 
 
 ## Out of scope (do not build)
 
-Backup programs, parent accounts or views, auto-updated benchmarks, admission probability, content or worksheet generation, LMS integrations, multi-teacher management UI, student self-onboarding, student grade entry.
+Backup programs, parent writes of any kind (parent views are read-only, ADR 0045), auto-updated benchmarks, admission probability, content or worksheet generation, LMS integrations, multi-teacher management UI, student self-onboarding, student grade entry.

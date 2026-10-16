@@ -7,9 +7,10 @@ import { orderTasks } from "@/lib/domain/priorities";
 import { CATEGORY_PROBLEM, applyChangeSet, contextFromBundle, type ChangeItem, type StudentContext } from "@/lib/data/change-set";
 import { dbMessage } from "@/lib/data/errors";
 import { getViewer, listLoginEmails, loadBundle } from "@/lib/data/queries";
+import { checkParentInvite } from "@/lib/data/parent-invite";
 import { checkUnlink } from "@/lib/data/unlink";
 import {
-  AssessmentInput, CategoryInput, CourseInput, GoalInput, ScoreInput, StudentInput, TargetInput, TaskInput, UnlinkInput,
+  AssessmentInput, CategoryInput, CourseInput, GoalInput, ParentInviteInput, ScheduleRecordInput, ScoreInput, StudentInput, TargetInput, TaskInput, UnlinkInput,
   fieldErrors, formObject,
 } from "@/lib/data/schemas";
 import { failed, type Result } from "@/lib/result";
@@ -136,6 +137,55 @@ export async function unlinkStudent(studentId: string, form: FormData): Promise<
   }
   const { error } = await v.db.tracker.rpc("unlink_student", { student_id: studentId });
   return error ? failed(dbMessage(error)) : done("Unlinked");
+}
+
+/** Owner only (REQ-22). The database trigger refuses a student's address too; the check here is for the plain message. */
+export async function inviteParent(studentId: string, form: FormData): Promise<Result> {
+  const v = await staff();
+  if (!v || v.role !== "owner") return NO_ACCESS;
+  const input = parse(ParentInviteInput, form);
+  if (!input.ok) return input.result;
+  if (!z.guid().safeParse(studentId).success) return NO_ACCESS;
+  const { data: student } = await v.db.tracker.from("students").select("id, org_id").eq("id", studentId).maybeSingle();
+  if (!student || student.org_id !== v.orgId) return NO_ACCESS;
+  const { data: emails, error: emailsError } = await v.db.tracker.from("students").select("email").eq("org_id", v.orgId);
+  if (emailsError) return failed(dbMessage(emailsError));
+  const check = checkParentInvite({ role: v.role, email: input.data.email, studentEmails: (emails ?? []).map((r) => String(r.email)) });
+  if (!check.ok) return check;
+  const { error } = await v.db.tracker.from("parent_links").insert({
+    org_id: v.orgId, student_id: studentId, email: input.data.email, invited_by: v.userId,
+  });
+  if (error) {
+    if (error.code === "23505") return failed("That parent is already added.", { email: "Already added" });
+    if (error.code === "23514") return failed("That email belongs to a student. Use the parent's own email.", { email: "Already a student's email" });
+    return failed(dbMessage(error));
+  }
+  return done("Parent added");
+}
+
+/** Owner only. The function deletes the link and, with the last link, the parent's membership. */
+export async function removeParentLink(linkId: string): Promise<Result> {
+  const v = await staff();
+  if (!v || v.role !== "owner") return NO_ACCESS;
+  if (!z.guid().safeParse(linkId).success) return NO_ACCESS;
+  const { error } = await v.db.tracker.rpc("remove_parent_link", { link_id: linkId });
+  return error ? failed(dbMessage(error)) : done("Removed");
+}
+
+/** Owner only: which Students & Parents page this student is, so the calendar and billing tabs can find them. */
+export async function setScheduleRecord(studentId: string, form: FormData): Promise<Result> {
+  const v = await staff();
+  if (!v || v.role !== "owner") return NO_ACCESS;
+  const input = parse(ScheduleRecordInput, form);
+  if (!input.ok) return input.result;
+  if (!z.guid().safeParse(studentId).success) return NO_ACCESS;
+  const { data, error } = await v.db.tracker
+    .from("students").update({ notion_student_id: input.data.notionStudentId || null }).eq("id", studentId).eq("org_id", v.orgId).select("id");
+  if (error) {
+    return error.code === "23505" ? failed("That record is already linked to another student.") : failed(dbMessage(error));
+  }
+  if (!data || data.length === 0) return NO_ACCESS;
+  return done();
 }
 
 export async function saveGoal(studentId: string, form: FormData): Promise<Result> {

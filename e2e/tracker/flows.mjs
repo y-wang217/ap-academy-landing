@@ -663,6 +663,76 @@ try {
   check("the corrected address now sees Hi Sam", realH1 === "Hi Sam", `${realH1} | ${(await samReal.locator("body").innerText()).slice(0, 200)}`);
   await teacher.goto(`${BASE}`);
   check("the list now shows the corrected login", await teacher.getByText("Signed in as sam.real@example.com").first().isVisible());
+  // REQ-22: parents. Ada (published) and Bo (not published) share one parent email; Cy is unlinked.
+  const ORG = "10000000-0000-0000-0000-00000000aaaa";
+  psql(`insert into tracker.students (org_id, teacher_id, email, first_name, last_initial, grade_level, status, published_at) values
+    ('${ORG}', '00000000-0000-0000-0000-00000000aaaa', 'ada@example.com', 'Ada', 'P', 11, 'active', now()),
+    ('${ORG}', '00000000-0000-0000-0000-00000000aaaa', 'bo@example.com', 'Bo', 'Q', 11, 'setup', null),
+    ('${ORG}', '00000000-0000-0000-0000-00000000aaaa', 'cy@example.com', 'Cy', 'R', 11, 'active', now())`);
+  const kid = (name) => psql(`select id from tracker.students where first_name = '${name}'`);
+  const [adaId, boId, cyId] = [kid("Ada"), kid("Bo"), kid("Cy")];
+  psql(`insert into tracker.parent_links (org_id, student_id, email, invited_by) values ('${ORG}', '${boId}', 'parent@example.com', '00000000-0000-0000-0000-00000000aaaa')`);
+
+  // The owner adds Ada's parent on the student page and sees "Invited".
+  await teacher.goto(`${BASE}/students/${adaId}`);
+  const parentCard = section(teacher, "Parent");
+  check("the owner sees an empty Parent section", await parentCard.getByText("No parent added yet.").isVisible());
+  await parentCard.getByLabel("Parent email").fill("Parent@Example.com");
+  await parentCard.getByRole("button", { name: "Add parent", exact: true }).click();
+  await parentCard.getByText("Invited", { exact: true }).waitFor({ timeout: 15000 });
+  check("the new parent shows as Invited with an invite email link", await parentCard.getByRole("link", { name: "Open invite email" }).isVisible());
+  await parentCard.getByLabel("Parent email").fill("ada@example.com");
+  await parentCard.getByRole("button", { name: "Add parent", exact: true }).click();
+  await parentCard.getByText("That email belongs to a student. Use the parent's own email.").first().waitFor({ timeout: 15000 });
+  check("a student's own email is refused as a parent", true);
+
+  // A teacher (not an owner) has no Parent section.
+  const teacher2 = await signedIn(browser, "teacher2@example.com");
+  psql(`insert into tracker.memberships (user_id, org_id, role) select id, '${ORG}', 'teacher' from auth.users where email = 'teacher2@example.com'`);
+  await teacher2.goto(`${BASE}/students/${adaId}`);
+  await teacher2.getByRole("heading", { name: /Ada/ }).first().waitFor({ timeout: 15000 });
+  check("a teacher's student page has no Parent section", (await teacher2.getByRole("heading", { name: "Parent", exact: true }).count()) === 0);
+
+  // The parent signs in: lands on Ada's grades, switches to Bo, never meets Cy.
+  const parent = await signedIn(browser, "parent@example.com");
+  await parent.goto(`${BASE}`);
+  await parent.waitForURL(new RegExp(`/parent/${adaId}/grades$`), { timeout: 15000 });
+  check("a parent opening the tracker lands on the first child's Grades", parent.url().endsWith(`/parent/${adaId}/grades`));
+  check("the Grades tab shows its placeholder", await parent.getByText("Grades will show here.").isVisible());
+  check("the top bar shows AP Academy and the parent's email", (await parent.getByText("AP Academy", { exact: true }).count()) > 0 && await parent.getByText("parent@example.com").isVisible());
+  check("the shell has no input, textarea or select", (await parent.locator("input, textarea, select").count()) === 0);
+  check("the shell does not scroll sideways at 375px", await parent.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  check("both children show as pills, the Cy pill does not", await parent.getByRole("link", { name: "Ada", exact: true }).isVisible() && await parent.getByRole("link", { name: "Bo", exact: true }).isVisible() && (await parent.getByText("Cy").count()) === 0);
+  await parent.getByRole("link", { name: "Calendar", exact: true }).click();
+  await parent.waitForURL(/\/calendar$/);
+  await parent.getByRole("link", { name: "Bo", exact: true }).click();
+  await parent.waitForURL(new RegExp(`/parent/${boId}/calendar$`), { timeout: 15000 });
+  check("switching child keeps the tab", parent.url().endsWith(`/parent/${boId}/calendar`));
+  check("an unpublished child shows Not ready yet and no tab content", await parent.getByText("Not ready yet").isVisible() && (await parent.getByText("Classes will show here.").count()) === 0);
+  check("the parent never sees Cy", (await parent.locator("body").innerText()).includes("Cy") === false);
+  await parent.goto(`${BASE}/parent/${cyId}/grades`);
+  check("a parent URL for an unlinked student gives the not-found state", await parent.getByText("This page could not be found").isVisible() && (await parent.locator("body").innerText()).includes("Cy") === false);
+  await parent.goto(`${BASE}/parent`);
+  await parent.waitForURL(new RegExp(`/parent/${adaId}/grades$`), { timeout: 15000 });
+  check("/tracker/parent goes to the first child", true);
+
+  // Teachers, owners and students are sent back to the tracker home.
+  await teacher.goto(`${BASE}/parent`);
+  check("an owner opening /tracker/parent is redirected", new URL(teacher.url()).pathname.replace(/\/$/, "") === "/tracker");
+  await teacher2.goto(`${BASE}/parent/${adaId}/grades`);
+  check("a teacher opening a parent route is redirected", new URL(teacher2.url()).pathname.replace(/\/$/, "") === "/tracker");
+  await samReal.goto(`${BASE}/parent`);
+  check("a student opening /tracker/parent is redirected to their dashboard", new URL(samReal.url()).pathname.replace(/\/$/, "") === "/tracker" && await samReal.getByRole("heading", { name: "Hi Sam" }).isVisible());
+
+  // The owner shows Ada's parent as signed in, removes them, and Ada is no longer visible to the parent.
+  await teacher.goto(`${BASE}/students/${adaId}`);
+  await section(teacher, "Parent").getByText("Signed in", { exact: true }).waitFor({ timeout: 15000 });
+  teacher.once("dialog", (d) => d.accept());
+  await section(teacher, "Parent").getByRole("button", { name: "Remove", exact: true }).click();
+  await section(teacher, "Parent").getByText("No parent added yet.").waitFor({ timeout: 15000 });
+  await parent.goto(`${BASE}/parent/${adaId}/grades`);
+  check("after removal the parent gets not-found for Ada", await parent.getByText("This page could not be found").isVisible());
+
   // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.
   const timing = teacher;
   const timingRes = await timing.context().request.get(`${BASE}/api/scheduler/me`);
