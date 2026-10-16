@@ -46,7 +46,7 @@ describe("saveNotice: all 20 combinations (AC1, AC2)", () => {
         }
       }
     }
-    expect(alone.sort()).toEqual(["undefined/skipped", "undefined/undefined", "undefined/unchanged"]);
+    expect(alone.sort()).toEqual(["undefined/skipped", "undefined/unchanged", "undefined/undefined"]);
   });
 
   it("falls back to this student when the name is unknown", () => {

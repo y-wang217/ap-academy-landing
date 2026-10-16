@@ -98,7 +98,8 @@ async function handleImportRunInner(deps: ScheduleDeps, body: unknown): Promise<
   return send(200, ImportRunResponse.parse({ dryRun: parsed.data.dryRun, plan: planBody(plan), results }));
 }
 
-const SyncBody = z.strictObject({ studentId: z.guid().optional() });
+// requestId: the week editor's API client always sends one (REQ-28). The sync is idempotent, so it is ignored.
+const SyncBody = z.strictObject({ studentId: z.guid().optional(), requestId: z.guid().optional() });
 
 /** POST: retry the Notion write-back for one adopted student, or all of them. */
 async function handleSyncSummariesInner(deps: ScheduleDeps, body: unknown): Promise<Response> {
