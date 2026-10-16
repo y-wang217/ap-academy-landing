@@ -663,6 +663,11 @@ try {
   check("the corrected address now sees Hi Sam", realH1 === "Hi Sam", `${realH1} | ${(await samReal.locator("body").innerText()).slice(0, 200)}`);
   await teacher.goto(`${BASE}`);
   check("the list now shows the corrected login", await teacher.getByText("Signed in as sam.real@example.com").first().isVisible());
+  // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.
+  const timing = teacher;
+  const timingRes = await timing.context().request.get(`${BASE}/api/scheduler/me`);
+  const st = timingRes.headers()["server-timing"] ?? "";
+  check("scheduler GET carries Server-Timing auth, db and total", timingRes.status() === 200 && /auth;dur=/.test(st) && /db;dur=/.test(st) && /total;dur=/.test(st), `${timingRes.status()} ${st}`);
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {
