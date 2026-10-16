@@ -44,9 +44,9 @@ Run 2026-10-14 on the REQ-9 branch. PASS means the command passed in that run. N
 3. On a real phone signed in as a teacher: (1) open `/tracker/schedule/availability`, add and save a window; (2) open `/tracker/schedule` and open a class; (3) signed in as Charlie, open Book a class and book one. Check nothing scrolls sideways and every button is reachable.
 
 ## Remaining setup
-Everything below is a human step from REQ-8 and is still open.
-- Apply migration `0012_scheduler_daily_task.sql` through the Supabase MCP `apply_migration`, with Charlie's sign-off.
-- Add the GitHub Actions workflow for the hourly run (YAML in `docs/designs/REQ-8.md`).
-- Set `SUPABASE_SERVICE_ROLE_KEY`, `SCHEDULER_CRON_SECRET`, `DAILY_TASK_ORG_ID` (and optionally `DAILY_TASK_TIME`) in the tracker Vercel project, and the secret in GitHub.
-- Share the Notion integration with the Work and Work Log databases.
+The REQ-8 human steps are done as of 2026-10-16; the last item is still open.
+- Migration `0012_scheduler_daily_task` applied on 2026-10-14 through the Supabase MCP `apply_migration`, with Charlie's sign-off (tables, six policies and `claim_daily_task` verified on the live project).
+- GitHub Actions workflow `daily-teacher-texts.yml` added on 2026-10-15 (#46); scheduled runs green since.
+- `SUPABASE_SERVICE_ROLE_KEY`, `SCHEDULER_CRON_SECRET` and `DAILY_TASK_ORG_ID` set in the tracker Vercel project on 2026-10-15, and the secret in GitHub.
+- Notion integration shared with Work and Work Log: the 2026-10-15 task was created and refreshed in Notion (`tracker.daily_tasks` row `ready`, refresh count 1).
 - Decide how to wire the lesson link (ADR 0040).
