@@ -17,6 +17,9 @@ const MOCK = process.env.MOCK_URL ?? "http://127.0.0.1:54321";
 const MOCK_AI = process.env.MOCK_AI_URL ?? "http://127.0.0.1:54332";
 const MOCK_NOTION = process.env.MOCK_NOTION_URL ?? "http://127.0.0.1:54333";
 
+// REQ-9: the Lessons data source and the seeded lesson page. No tracker flow may name either.
+const LESSONS_RE = /6300f58a|cccccccc-cccc-4ccc-8ccc-cccccccc0001/;
+
 const results = [];
 function check(name, ok, detail = "") {
   results.push({ name, ok });
@@ -624,7 +627,7 @@ try {
   // REQ-9: nothing above reached Lessons or a payout field, and no other tracker table changed.
   const journal = await (await fetch(`${MOCK_NOTION}/__journal`)).json();
   check("no Notion request, of any method, names the Lessons data source or the lesson page",
-    !journal.some((j) => /6300f58a|cccccccc-cccc-4ccc-8ccc-cccccccc0001/.test(j.path)) && journal.length > 0, `${journal.length} requests`);
+    !journal.some((j) => LESSONS_RE.test(j.path)) && journal.length > 0, `${journal.length} requests`);
   const studentPatches = journal.filter((j) => j.method === "PATCH" && /\/v1\/pages\/bbbbbbbb-/.test(j.path));
   check("every student-page PATCH carries exactly the property Weekly Schedule",
     studentPatches.length > 0 && studentPatches.every((j) => JSON.stringify(Object.keys(j.body?.properties ?? {})) === '["Weekly Schedule"]'), `${studentPatches.length} patches`);
@@ -763,6 +766,119 @@ try {
   await parent.goto(`${BASE}/parent`);
   await parent.waitForURL(new RegExp(`/parent/${adaId}/grades$`), { timeout: 15000 });
   check("/tracker/parent goes to the first child", true);
+
+  // REQ-24: the Calendar tab. Ada gets a scheduler link and, with Ryan on today's Toronto date, one class in each
+  // state (MHF4U 15:00 scheduled, MCV4U 17:00 cancelled, a one-off SPH4U 18:00, MPM2D moved 16:00 to 19:00). Cy gets Kuby's SCH4U.
+  const today = isoIn(0);
+  const ADA_NOTION = "dddddddd-dddd-4ddd-8ddd-dddddddd0001";
+  const CY_NOTION = "dddddddd-dddd-4ddd-8ddd-dddddddd0002";
+  psql(`update tracker.students set notion_student_id = '${ADA_NOTION}' where id = '${adaId}'`);
+  psql(`update tracker.students set notion_student_id = '${CY_NOTION}' where id = '${cyId}'`);
+  const addSeries = (student, staff, subject, kind, time) => psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('${ORG}', gen_random_uuid(), '${staff}', '${student}', '${subject}', '${kind}', '${today}', '${time}', 60, '00000000-0000-0000-0000-00000000aaaa') returning id`).split("\n")[0];
+  const addException = (seriesId, kind, newTime) => psql(`insert into tracker.class_exceptions (org_id, request_id, series_id, original_date, kind, new_date, new_start_time, created_by) values ('${ORG}', gen_random_uuid(), '${seriesId}', '${today}', '${kind}', ${newTime ? `'${today}'` : "null"}, ${newTime ? `'${newTime}'` : "null"}, '00000000-0000-0000-0000-00000000aaaa')`);
+  addSeries(ADA_NOTION, RYAN_ID, "MHF4U", "weekly", "15:00");
+  addException(addSeries(ADA_NOTION, RYAN_ID, "MCV4U", "weekly", "17:00"), "cancelled", null);
+  addSeries(ADA_NOTION, RYAN_ID, "SPH4U", "one_off", "18:00");
+  addException(addSeries(ADA_NOTION, RYAN_ID, "MPM2D", "weekly", "16:00"), "moved", "19:00");
+  addSeries(CY_NOTION, KUBY, "SCH4U", "weekly", "15:00");
+  const calendarTablesBefore = process.env.PG_URL ? snapshot() : null;
+  const calendarJournalStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+  const fullDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" }).replace(",", "");
+  const monthName = (ym) => new Date(`${ym}-01T00:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "long", year: "numeric" });
+  const shiftYm = (ym, n) => { const [y, m] = ym.split("-").map(Number); const t = y * 12 + m - 1 + n; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; };
+  const calendarUrl = (id) => `${BASE}/parent/${id}/calendar`;
+
+  await parent.goto(calendarUrl(adaId));
+  const todayCell = parent.locator(`[data-date="${today}"]`);
+  await todayCell.waitFor({ timeout: 15000 });
+  const summaryText = await parent.locator("[data-summary]").innerText();
+  check("the calendar summary line reads N classes this month · D done · U upcoming", /^\d+ classes? this month · \d+ done · \d+ upcoming$/.test(summaryText), summaryText);
+  const weekText = await section(parent, "This week").innerText();
+  check("This week shows the course, the teacher and every state with the moved note",
+    ["MCV4U", "Ryan", "Cancelled", "Makeup", "Scheduled", "Moved from"].every((w) => weekText.includes(w)), weekText.replaceAll("\n", " | "));
+  const dotStates = await todayCell.locator("[data-dots] [data-state]").evaluateAll((els) => els.map((e) => e.getAttribute("data-state")));
+  check("today's cell shows 3 dots and +1, each toned by a state",
+    dotStates.length === 3 && dotStates.every((s) => ["scheduled", "cancelled", "makeup", "moved"].includes(s)) && (await todayCell.locator("[data-dots]").innerText()).includes("+1"), JSON.stringify(dotStates));
+  const cellName = (await todayCell.getAttribute("aria-label")) ?? "";
+  check("today's cell is named with the full date and all four state words",
+    cellName.startsWith(fullDate(today)) && ["Scheduled", "Cancelled", "Makeup", "Moved"].every((w) => cellName.includes(w)), cellName);
+  await todayCell.click();
+  check("tapping today lists its 4 classes", (await parent.locator("[data-day-list] li").count()) === 4);
+  check("another student's class and teacher never appear", (await parent.getByText("SCH4U").count()) === 0 && !(await parent.content()).includes("Kuby"));
+  check("the Calendar tab has no input, textarea or select", (await parent.locator("input, textarea, select").count()) === 0);
+  check("the Calendar tab does not scroll sideways at 375px", await parent.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+
+  // AC17 and AC6: hold next month's request, see the pending state, then step back two months.
+  const thisYm = today.slice(0, 7);
+  const [nextYm, prevYm] = [shiftYm(thisYm, 1), shiftYm(thisYm, -1)];
+  let release = () => {};
+  const held = new Promise((r) => { release = r; });
+  const holdNext = (url) => url.searchParams.get("month") === nextYm;
+  await parent.route(holdNext, async (route) => { await Promise.race([held, new Promise((r) => setTimeout(r, 10000))]); await route.continue(); });
+  const nextLink = parent.getByRole("link", { name: "Next month" });
+  await nextLink.click();
+  await parent.waitForFunction(() => document.querySelector('a[aria-label="Next month"]')?.getAttribute("aria-busy") === "true", null, { timeout: 1200 }).catch(() => {});
+  const busy = await nextLink.getAttribute("aria-busy");
+  const pendingLabel = await parent.locator("[data-month-label]").innerText();
+  const gridKept = await todayCell.isVisible();
+  check("while the next month loads, the link is busy, the label says Loading and the month stays", busy === "true" && pendingLabel === "Loading" && gridKept, `${busy} ${pendingLabel} ${gridKept}`);
+  release();
+  await parent.locator("[data-month-label]", { hasText: monthName(nextYm) }).waitFor({ timeout: 15000 });
+  await parent.unroute(holdNext);
+  check("Next shows next month by ?month= and the busy state is gone",
+    parent.url().includes(`month=${nextYm}`) && (await parent.getByRole("link", { name: "Next month" }).getAttribute("aria-busy")) === null);
+  await parent.getByRole("link", { name: "Previous month" }).click();
+  await parent.locator("[data-month-label]", { hasText: monthName(thisYm) }).waitFor({ timeout: 15000 });
+  await parent.getByRole("link", { name: "Previous month" }).click();
+  await parent.locator("[data-month-label]", { hasText: monthName(prevYm) }).waitFor({ timeout: 15000 });
+  check("Previous twice shows last month", parent.url().includes(`month=${prevYm}`));
+
+  // AC8: from 640px, full blocks tinted by state.
+  await parent.setViewportSize({ width: 720, height: 900 });
+  await parent.goto(calendarUrl(adaId));
+  await todayCell.waitFor({ timeout: 15000 });
+  const blocks = await todayCell.locator("[data-block]").evaluateAll((els) => els.map((e) => {
+    const cs = getComputedStyle(e);
+    return { state: e.getAttribute("data-state"), text: e.textContent, visible: e.getBoundingClientRect().width > 0, bg: cs.backgroundColor, line: cs.textDecorationLine, color: cs.color };
+  }));
+  check("at 720px today's blocks show and the dots are hidden", blocks.length === 4 && blocks.every((b) => b.visible) && await todayCell.locator("[data-dots]").isHidden());
+  check("a block shows time, course and teacher first name", blocks.some((b) => b.text.includes("PM") && b.text.includes("MCV4U") && b.text.includes("Ryan")));
+  check("each block carries its own state", JSON.stringify(blocks.map((b) => [b.state, b.text.match(/[A-Z]{3}\dU|MPM2D/)?.[0]])) === JSON.stringify([["scheduled", "MHF4U"], ["cancelled", "MCV4U"], ["makeup", "SPH4U"], ["moved", "MPM2D"]]), JSON.stringify(blocks.map((b) => b.state)));
+  const cancelledBlock = blocks.find((b) => b.state === "cancelled");
+  check("the cancelled block is struck through and muted", cancelledBlock?.line === "line-through" && cancelledBlock?.color === "rgb(110, 101, 91)", `${cancelledBlock?.line} ${cancelledBlock?.color}`);
+  check("the four blocks have four different tints", new Set(blocks.map((b) => b.bg)).size === 4, JSON.stringify(blocks.map((b) => b.bg)));
+  await parent.setViewportSize({ width: 375, height: 800 });
+
+  // AC14: browsing the Calendar asked Notion for nothing but Staff and changed no tracker table.
+  const calendarJournal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(calendarJournalStart);
+  check("the Calendar never names Lessons and asks Notion only for Staff",
+    !calendarJournal.some((j) => LESSONS_RE.test(j.path)) && calendarJournal.every((j) => j.method === "POST" && j.path === "/v1/data_sources/eaf8e9be-9ec3-4e0d-9442-f2c2ce111925/query"), JSON.stringify(calendarJournal.map((j) => `${j.method} ${j.path}`)));
+  if (calendarTablesBefore) {
+    const after = snapshot();
+    check("no tracker table changed while the parent browsed the Calendar", JSON.stringify(after) === JSON.stringify(calendarTablesBefore),
+      Object.keys(after).filter((t) => after[t] !== calendarTablesBefore[t]).join(","));
+  } else {
+    check("no tracker table changed while the parent browsed the Calendar (PG_URL missing)", false);
+  }
+
+  // AC12: a failed class read is an error, never an empty month.
+  try {
+    psql("revoke select on tracker.class_exceptions from authenticated");
+    await parent.goto(calendarUrl(adaId));
+    await parent.getByText("Could not load classes. Try again later.").waitFor({ timeout: 15000 });
+    check("a failed class read shows the error and no grid, summary or empty month",
+      (await parent.locator("[data-grid]").count()) === 0 && (await parent.locator("[data-summary]").count()) === 0 && (await parent.getByText("No classes this month.").count()) === 0);
+  } finally {
+    psql("grant select on tracker.class_exceptions to authenticated");
+  }
+
+  // AC10: a published, linked child with no scheduler link sees the not-available state.
+  psql(`insert into tracker.students (org_id, teacher_id, email, first_name, last_initial, grade_level, status, published_at) values ('${ORG}', '00000000-0000-0000-0000-00000000aaaa', 'di@example.com', 'Di', 'S', 10, 'active', now())`);
+  const diId = kid("Di");
+  psql(`insert into tracker.parent_links (org_id, student_id, email, invited_by) values ('${ORG}', '${diId}', 'parent@example.com', '00000000-0000-0000-0000-00000000aaaa')`);
+  await parent.goto(calendarUrl(diId));
+  await parent.getByText("Schedule not available yet").waitFor({ timeout: 15000 });
+  check("a child with no scheduler link sees Schedule not available yet and no grid", (await parent.locator("[data-grid]").count()) === 0 && (await parent.getByText("This week", { exact: true }).count()) === 0);
 
   // Teachers, owners and students are sent back to the tracker home.
   await teacher.goto(`${BASE}/parent`);

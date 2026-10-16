@@ -51,3 +51,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0044](0044-server-timing-on-scheduler-get.md) | Server-Timing on the scheduler GET routes | accepted |
 | [0045](0045-parent-accounts-read-only.md) | Parent accounts are read-only | accepted |
 | [0046](0046-parent-email-minimal-pii.md) | A parent's email is the only new personal field | accepted |
+| [0047](0047-parent-calendar-states.md) | Parent Calendar states, makeups and the not-available rule | accepted |
