@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for the agent pipeline. gate_commands are the fast local subset of CI; ci.yml also builds both apps and runs RLS, restore and e2e. The browser suites (pnpm test:tracker, test:sso) are a builder step for diffs touching e2e_paths, not a gate command.",
+  "_comment": "Single source of truth for the agent pipeline. gate_commands are the fast local subset of CI; ci.yml also builds both apps and runs RLS, restore and e2e. The browser suites (pnpm test:tracker, test:sso) are a builder step for diffs touching e2e_paths, not a gate command. max_chain caps how many kicks may follow each other before the 3-hour schedules take over; routines are the ap-design and ap-build trigger IDs the stage commands fire; approver_workflow is what design-next dispatches; review_round_cap is how many bot change requests kick the builder before Charlie is asked (ADR 0003).",
   "repo": "y-wang217/ap-academy-landing",
   "default_branch": "main",
   "notion": {
@@ -30,7 +30,14 @@
   },
   "wip_limit": 1,
   "max_attempts": 2,
+  "max_chain": 12,
+  "review_round_cap": 3,
   "branch_prefix": "req/",
+  "routines": {
+    "design": "trig_01JdnScf4xGzsjQwBqxjEJij",
+    "build": "trig_01V8Lz7JVrAuzaGEpmip4dxU"
+  },
+  "approver_workflow": "design-approver.yml",
   "migration_branch_suffix": "-migration",
   "gate_commands": [
     "pnpm --filter @ap-academy/db typecheck",
@@ -41,7 +48,13 @@
     "pnpm --filter tracker typecheck",
     "pnpm --filter tracker test"
   ],
-  "gate_ignore_paths": ["docs/", ".claude/", "README.md", "PIPELINE.md", "CLAUDE.md"],
+  "gate_ignore_paths": [
+    "docs/",
+    ".claude/",
+    "README.md",
+    "PIPELINE.md",
+    "CLAUDE.md"
+  ],
   "e2e_paths": [
     "apps/tracker/app/",
     "apps/tracker/components/",

@@ -27,7 +27,7 @@ Do this after step 2, so a card whose blocker just became Done moves in the same
 - For every card in **Ready** whose **Blocked by** has a card that is not Done, set Status **Backlog** (it was filed early).
 
 ## 5. Work Log, once per shipped card
-Only the sweep writes "shipped" rows, and only in the run that moved the card to Done. Before writing, query `notion.work_log_data_source` for a row whose Summary starts with `<card-id> shipped`; if one exists, skip. Otherwise write one entry (fetch the schema first and use its real property names):
+Only the sweep writes "shipped" rows, and only in the run that moved the card to Done. Before writing, query `notion.work_log_data_source` for a row whose Summary starts with `<card-id> shipped`; if one exists, skip. Two sweeps can run at the same time now (a kick and a schedule), so run that query again immediately before the write, after every other step for the card, and skip if a row has appeared. Otherwise write one entry (fetch the schema first and use its real property names):
 - Summary: "<card-id> shipped: <card title>"
 - Date: today
 - Source: Agent

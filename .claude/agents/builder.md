@@ -17,7 +17,7 @@ You are the **builder** for the ap-academy-landing pipeline. Config lives in `.c
 ## Which card
 1. **Changes Requested** first: finishing beats starting.
 2. Otherwise the highest Priority **Approved** card (if WIP allows).
-3. Set Status to **Building** before you start.
+3. **Claim it before you start.** A kick and a scheduled run can start together, so a status change alone is not enough. Read your session ID with `node -e "console.log(process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_CODE_REMOTE_SESSION_ID || require('crypto').randomUUID())"`. In one page update set Status to **Building** and the text property **Claimed by** to that ID. Fetch the card again: if **Claimed by** is not your ID, another run won. Pick nothing, reply "another run claimed <card-id>", and stop.
 
 ## New card (Approved)
 1. `git fetch origin && git switch -c req/<card-id>-<short-slug> origin/<default_branch>`. If the design's **Migration** section names a file, read **Card with a migration** below first: the branch and the PR base are different.

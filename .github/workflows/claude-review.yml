@@ -110,6 +110,7 @@ jobs:
           GH_TOKEN: ${{ secrets.REVIEWER_PAT }}
 
       - name: Report the verdict as the review status
+        id: verdict
         if: always() && steps.pr.outputs.green == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -128,4 +129,36 @@ jobs:
           esac
           gh api "repos/$REPO/statuses/$SHA" -f state="$state" -f context=review -f description="$desc" -f target_url="$RUN_URL"
           echo "review status: $state ($desc)"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
           [ "$state" != "error" ]
+
+      # K4 and R4 (ADR 0003): a bot "changes requested" kicks the builder now
+      # instead of waiting for the build schedule, up to review_round_cap rounds
+      # per PR. At the cap the next move is Charlie's, so one comment from
+      # github-actions[bot] mentions him (one per head commit). Best effort:
+      # the step never fails the run.
+      - name: Kick the builder, or notify Charlie at the round cap
+        if: always() && steps.pr.outputs.green == 'true' && steps.verdict.outputs.state == 'failure'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch || github.head_ref }}
+          ROUTINE_BUILD_FIRE_URL: ${{ secrets.ROUTINE_BUILD_FIRE_URL }}
+          ROUTINE_BUILD_FIRE_TOKEN: ${{ secrets.ROUTINE_BUILD_FIRE_TOKEN }}
+        run: |
+          set -euo pipefail
+          cap=$(jq -r '.review_round_cap // 3' .claude/pipeline.json)
+          rounds=$(gh pr view "$NUMBER" --repo "$REPO" --json reviews \
+            --jq '[.reviews[] | select(.author.login == "ap-academy-bot") | select(.state == "CHANGES_REQUESTED")] | length')
+          card=$(echo "$BRANCH" | sed -E 's#^req/((REQ-)?[0-9]+).*#\1#')
+          echo "bot changes-requested rounds on #$NUMBER: $rounds (cap $cap)"
+          if [ "$rounds" -lt "$cap" ]; then
+            # The reviewer is event-driven, so it sits at depth 0 and its kick carries chain=1.
+            node scripts/fire-routine.mjs build --chain 0 --from reviewer --card "$card"
+          else
+            node scripts/notify-human.mjs --repo "$REPO" --pr "$NUMBER" --sha "$SHA" --reason review-cap --rounds "$rounds"
+          fi

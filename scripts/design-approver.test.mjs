@@ -10,8 +10,12 @@ import {
   decide,
   reviewCard,
   isPaused,
+  notifyBlocked,
+  toRichText,
+  run,
   CHECK_IDS,
   MARKER,
+  NOTIFY_MARKER,
 } from "./design-approver.mjs";
 
 const rt = (text, annotations = {}) => [{ plain_text: text, annotations }];
@@ -383,4 +387,188 @@ test("bold labels with trailing spaces and bold headings still parse", () => {
   assert.equal(md, "**Summary:** A tutor downloads goals.\n## **Approach**");
   const bolded = GOOD_DESIGN.replace("## Approach", "## **Approach**");
   assert.deepEqual(structuralCheck({ design: bolded, riskProperty: "Low" }), []);
+});
+
+// ---------- Kicks and notifications (docs/spec/pipeline-event-chaining.md) ----------
+
+const CHARLIE = "6d3ca702-9281-4f05-860f-182f06b841c2";
+const PIPELINE = { statuses: { approved: "Approved", revise: "Revise", blocked: "Blocked" }, max_attempts: 2, max_chain: 12 };
+const IDS = { board_data_source_id: "ds", pipeline_control_page_id: "ctl", board_properties: { status: "Status" }, charlie_user_id: CHARLIE };
+const FIRE_ENV = {
+  ROUTINE_DESIGN_FIRE_URL: "https://api/design/fire", ROUTINE_DESIGN_FIRE_TOKEN: "d",
+  ROUTINE_BUILD_FIRE_URL: "https://api/build/fire", ROUTINE_BUILD_FIRE_TOKEN: "b",
+};
+
+// A fake workspace: a control page and a board of cards, each with a body,
+// comments and a status. Writes are recorded; fires are recorded separately.
+function fakeWorkspace({ cards = [], paused = false } = {}) {
+  const writes = [];
+  const byId = new Map(cards.map((c) => [c.id, { ...c, comments: [...(c.comments ?? [])] }]));
+  const page = (c) => ({
+    id: c.id,
+    last_edited_time: c.last_edited_time ?? "2026-10-16T12:00:00.000Z",
+    properties: {
+      Title: { type: "title", title: rt(c.title ?? "Card") },
+      "Card ID": { type: "unique_id", unique_id: { prefix: "REQ", number: c.number ?? 1 } },
+      Risk: { type: "select", select: { name: c.risk ?? "Low" } },
+      Status: { type: "status", status: { name: c.status } },
+    },
+  });
+  const client = {
+    me: async () => ({ id: "bot-1" }),
+    children: async (id) => id === "ctl"
+      ? [block("to_do", "Paused", { checked: paused })]
+      : `${REQUIREMENT}\n${byId.get(id).design ?? GOOD_DESIGN}`.split("\n").map((l) => block("paragraph", l)),
+    queryByStatus: async (_ds, _prop, status) => [...byId.values()].filter((c) => c.status === status).map(page),
+    getPage: async (id) => page(byId.get(id)),
+    comments: async (id) => byId.get(id).comments,
+    user: async (id) => ({ id, type: "person" }),
+    comment: async (id, text, opts) => {
+      writes.push({ kind: "comment", id, text, opts });
+      byId.get(id).comments.push({ created_by: { id: "bot-1" }, created_time: new Date().toISOString(), rich_text: [...(opts?.mentionUserId ? rt("@Charlie ") : []), ...rt(text)] });
+    },
+    setStatus: async (id, prop, name) => { writes.push({ kind: "status", id, prop, name }); byId.get(id).status = name; },
+  };
+  const fires = [];
+  const fetchImpl = async (url, init) => {
+    fires.push({ url, text: JSON.parse(init.body).text });
+    return { ok: true, status: 200, text: async () => JSON.stringify({ claude_code_session_url: "https://claude.ai/code/s" }) };
+  };
+  const logs = [];
+  const overrides = (judge) => ({ client, judge, botId: "bot-1", pipeline: PIPELINE, ids: IDS, fetchImpl, log: (l) => logs.push(String(l)) });
+  return { client, writes, fires, logs, overrides };
+}
+
+const judgeByTitle = (map) => async (prompt) => {
+  for (const [title, verdict] of Object.entries(map)) if (prompt.includes(title)) return verdictOf(verdict);
+  return verdictOf("approve");
+};
+
+test("an approval fires ap-build once, at depth + 1, with the card id", async () => {
+  const ws = fakeWorkspace({ cards: [
+    { id: "a", number: 30, title: "Export goals", status: "Needs Approval" },
+    { id: "b", number: 31, title: "Second card", status: "Needs Approval" },
+  ] });
+  const report = await run({ ...FIRE_ENV, APPROVER_CHAIN: "2" }, ws.overrides(judgeByTitle({})));
+  assert.equal(ws.fires.length, 1, "one kick for two approvals");
+  assert.equal(ws.fires[0].url, "https://api/build/fire");
+  assert.equal(ws.fires[0].text, "chain=3 from=approver card=REQ-30");
+  assert.match(report, /Kicks: kicked ap-build \(chain 3\)/);
+  assert.match(report, /Chain depth 2/);
+});
+
+test("a revise fires ap-design; approve and revise in one run fire each once", async () => {
+  const ws = fakeWorkspace({ cards: [
+    { id: "a", number: 30, title: "Export goals", status: "Needs Approval" },
+    { id: "b", number: 31, title: "Needs work", status: "Needs Approval" },
+    { id: "c", number: 32, title: "Also needs work", status: "Needs Approval" },
+  ] });
+  await run(FIRE_ENV, ws.overrides(judgeByTitle({ "Needs work": "revise", "Also needs work": "revise" })));
+  assert.deepEqual(ws.fires.map((f) => f.url).sort(), ["https://api/build/fire", "https://api/design/fire"]);
+  const design = ws.fires.find((f) => f.url.includes("design"));
+  assert.equal(design.text, "chain=1 from=approver card=REQ-31");
+});
+
+test("dry run fires nothing and writes nothing", async () => {
+  const ws = fakeWorkspace({ cards: [
+    { id: "a", status: "Needs Approval" },
+    { id: "z", number: 9, title: "Stuck", status: "Blocked" },
+  ] });
+  const report = await run({ ...FIRE_ENV, DRY_RUN: "1" }, ws.overrides(judgeByTitle({})));
+  assert.equal(ws.fires.length, 0);
+  assert.equal(ws.writes.length, 0);
+  assert.match(report, /dry run/);
+  assert.doesNotMatch(report, /Kicks:/);
+});
+
+test("paused fires nothing", async () => {
+  const ws = fakeWorkspace({ paused: true, cards: [{ id: "a", status: "Needs Approval" }] });
+  const report = await run(FIRE_ENV, ws.overrides(judgeByTitle({})));
+  assert.equal(report, "Design approver: paused.");
+  assert.equal(ws.fires.length, 0);
+  assert.equal(ws.writes.length, 0);
+});
+
+test("at or above max_chain the cards are still processed but nothing is kicked", async () => {
+  const ws = fakeWorkspace({ cards: [{ id: "a", status: "Needs Approval" }] });
+  const report = await run({ ...FIRE_ENV, APPROVER_CHAIN: "12" }, ws.overrides(judgeByTitle({})));
+  assert.equal(ws.fires.length, 0);
+  assert.equal(ws.writes.filter((w) => w.kind === "status")[0].name, "Approved");
+  assert.match(report, /chain limit reached/);
+});
+
+test("a missing secret pair skips that kick with a notice and still sends the other", async () => {
+  const ws = fakeWorkspace({ cards: [
+    { id: "a", number: 30, title: "Export goals", status: "Needs Approval" },
+    { id: "b", number: 31, title: "Needs work", status: "Needs Approval" },
+  ] });
+  const env = { ROUTINE_DESIGN_FIRE_URL: FIRE_ENV.ROUTINE_DESIGN_FIRE_URL, ROUTINE_DESIGN_FIRE_TOKEN: "d" };
+  const report = await run(env, ws.overrides(judgeByTitle({ "Needs work": "revise" })));
+  assert.equal(ws.fires.length, 1);
+  assert.ok(ws.fires[0].url.includes("design"));
+  assert.ok(ws.logs.some((l) => l.startsWith("::notice::") && /ROUTINE_BUILD_FIRE_URL/.test(l)));
+  assert.match(report, /ap-build not kicked/);
+});
+
+test("a failed fire warns and leaves the exit code alone", async () => {
+  const ws = fakeWorkspace({ cards: [{ id: "a", status: "Needs Approval" }] });
+  const o = ws.overrides(judgeByTitle({}));
+  o.fetchImpl = async () => ({ ok: false, status: 503, text: async () => "overloaded" });
+  const before = process.exitCode;
+  const report = await run(FIRE_ENV, o);
+  assert.equal(process.exitCode, before);
+  assert.ok(ws.logs.some((l) => l.startsWith("::warning::") && /503/.test(l)));
+  assert.match(report, /Kicks: kick ap-build \(chain 1\) failed: 503/);
+});
+
+test("Needs Charlie comments mention Charlie; approvals and revises do not", async () => {
+  const ws = fakeWorkspace({ cards: [
+    { id: "h", number: 40, title: "Risky", status: "Needs Approval", risk: "High", design: GOOD_DESIGN.replace("**Risk:** Low", "**Risk:** High") },
+    { id: "a", number: 41, title: "Fine", status: "Needs Approval" },
+  ] });
+  await run(FIRE_ENV, ws.overrides(judgeByTitle({})));
+  const comments = ws.writes.filter((w) => w.kind === "comment");
+  const needsCharlie = comments.find((c) => /Needs Charlie/.test(c.text));
+  assert.equal(needsCharlie.opts.mentionUserId, CHARLIE);
+  const approved = comments.find((c) => /Approved/.test(c.text));
+  assert.equal(approved.opts?.mentionUserId, undefined);
+});
+
+test("toRichText puts a user mention first when asked", () => {
+  const plainOnly = toRichText("hello");
+  assert.deepEqual(plainOnly, [{ type: "text", text: { content: "hello" } }]);
+  const withMention = toRichText("hello", CHARLIE);
+  assert.equal(withMention[0].type, "mention");
+  assert.equal(withMention[0].mention.user.id, CHARLIE);
+  assert.equal(withMention[2].text.content, "hello");
+});
+
+test("a Blocked card notifies Charlie once, not again on the next run", async () => {
+  const ws = fakeWorkspace({ cards: [
+    { id: "z", number: 9, title: "Stuck", status: "Blocked", last_edited_time: "2026-10-16T12:00:00.000Z" },
+    { id: "ok", number: 10, title: "Moving", status: "Ready" },
+  ] });
+  const first = await run(FIRE_ENV, ws.overrides(judgeByTitle({})));
+  const notes = ws.writes.filter((w) => w.kind === "comment");
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].id, "z");
+  assert.equal(notes[0].opts.mentionUserId, CHARLIE);
+  assert.match(notes[0].text, /^\[pipeline-notify\] Blocked \(since 2026-10-16T12:00:00.000Z\) REQ-9 Stuck is Blocked/);
+  assert.match(first, /Notified Charlie: Blocked REQ-9/);
+
+  const second = await run(FIRE_ENV, ws.overrides(judgeByTitle({})));
+  assert.equal(ws.writes.filter((w) => w.kind === "comment").length, 1, "no second notification");
+  assert.doesNotMatch(second, /Notified Charlie/);
+});
+
+test("notifyBlocked notifies again after the card was edited, but not when its own comment is the newest thing", async () => {
+  const old = { created_by: { id: "bot-1" }, created_time: "2026-10-16T09:00:30.000Z", rich_text: rt(`${NOTIFY_MARKER} Blocked (since 2026-10-16T09:00:00.000Z) REQ-9 Stuck is Blocked.`) };
+  // Edited two hours after the notification: a new entry into Blocked.
+  const reentered = fakeWorkspace({ cards: [{ id: "z", number: 9, title: "Stuck", status: "Blocked", last_edited_time: "2026-10-16T11:00:00.000Z", comments: [old] }] });
+  assert.deepEqual(await notifyBlocked(reentered.client, { dataSource: "ds", charlieUserId: CHARLIE, log: () => {} }), ["REQ-9"]);
+  // The notify comment itself bumped the edit time to the same minute: already notified.
+  const bumped = fakeWorkspace({ cards: [{ id: "z", number: 9, title: "Stuck", status: "Blocked", last_edited_time: "2026-10-16T09:00:00.000Z", comments: [old] }] });
+  assert.deepEqual(await notifyBlocked(bumped.client, { dataSource: "ds", charlieUserId: CHARLIE, log: () => {} }), []);
+  const bumpedLater = fakeWorkspace({ cards: [{ id: "z", number: 9, title: "Stuck", status: "Blocked", last_edited_time: "2026-10-16T09:01:00.000Z", comments: [old] }] });
+  assert.deepEqual(await notifyBlocked(bumpedLater.client, { dataSource: "ds", charlieUserId: CHARLIE, log: () => {} }), []);
 });
