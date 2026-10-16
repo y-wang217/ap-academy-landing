@@ -37,11 +37,11 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0030](0030-assessment-kind-and-date.md) | An assessment is an assignment with a due date or a test with a held date | accepted |
 | [0031](0031-grade-history-and-trend-pills.md) | Grade history is replayed on the assessment date; the pill follows four rules | accepted |
 | [0032](0032-story-line.md) | The story line is a fact chosen by rule, never a forecast | accepted |
-| [0033](0033-scheduler-staff-identity.md) | Scheduler teachers are linked to Notion Staff by approval, not given a membership | accepted |
+| [0033](0033-scheduler-staff-identity.md) | Scheduler teachers are linked to Notion Staff by approval, not given a membership | accepted in part; the live Notion read and five-minute recheck are superseded by workspace ADR 0004 once REQ-38 ships |
 | [0034](0034-scheduler-recurrence-model.md) | Occurrences are computed from a series plus one exception row each | accepted |
 | [0035](0035-weekly-schedule-import-and-summary.md) | Weekly Schedule import is all or nothing per student, and the text field becomes a generated summary | accepted |
 | [0036](0036-availability-conflicts-computed.md) | Availability conflicts are computed on read, and a teacher with nothing entered is not flagged | accepted |
-| [0037](0037-teachers-see-own-student-names.md) | Teachers see the names of their own scheduled students | accepted |
+| [0037](0037-teachers-see-own-student-names.md) | Teachers see the names of their own scheduled students | accepted in part; the names cache and "never stored" are superseded by workspace ADR 0004 once REQ-38 ships |
 | [0038](0038-booking-validation.md) | Bookings are checked on the server before any write | accepted |
 | [0039](0039-daily-teacher-texts-task.md) | The daily teacher-texts task is one Notion page per date, kept apart by a lease | accepted |
 | [0040](0040-lesson-link-extension-point.md) | A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet | accepted |

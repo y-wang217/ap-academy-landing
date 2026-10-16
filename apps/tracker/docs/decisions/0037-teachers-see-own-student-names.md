@@ -1,5 +1,5 @@
 # 0037: Teachers see the names of their own scheduled students
-Status: accepted
+Status: accepted in part; the names cache and "never stored" are superseded by workspace ADR 0004 once REQ-38 ships
 Date: 2026-10-14
 ## Context
 Scheduler 5/8 (REQ-6) adds a read-only week calendar. A class card is only useful with a student name on it, but until now student names reached the browser only on Charlie's import page. Teachers are not org members and have no Notion access of their own.
