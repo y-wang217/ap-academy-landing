@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ClassException } from "../domain/schedule/recurrence";
 import type { Db } from "./client";
 import type {
-  AvailabilityExceptionRecord, ScheduleStore, SeriesRecord, StoreError, StoreResult, SummaryRecord, WindowRecord,
+  AvailabilityExceptionRecord, LockedWrite, ScheduleStore, SeriesRecord, StoreError, StoreResult, SummaryRecord, WindowRecord, WriteContext,
 } from "../scheduler/schedule-store";
 
 /**
@@ -54,16 +54,73 @@ const SummaryRow = z.object({
 }));
 
 const UNAVAILABLE: StoreError = { ok: false, status: 503, error: "unavailable" };
-type PgError = { code?: string; message?: string } | null;
+type PgError = { code?: string; message?: string };
 
-/** Postgres errors from split_class_series() and the version check, as store errors. */
-function mapSplitError(error: NonNullable<PgError>): StoreError {
+const WriteOp = z.enum(["create", "move", "cancel", "edit_one_off", "split", "end_series"]);
+const ContextRow = z.object({
+  stamps: z.array(z.object({ kind: z.enum(["staff", "student"]), id: uuid, version: z.number() })),
+  replay: z.object({ op: WriteOp, series_id: uuid.nullable(), result: SeriesRow }).nullable(),
+}).transform((r): WriteContext => ({
+  stamps: r.stamps,
+  replay: r.replay && { op: r.replay.op, seriesId: r.replay.series_id, result: r.replay.result },
+}));
+const WriteRow = z.object({ replay: z.boolean(), result: SeriesRow });
+
+/**
+ * Errors raised by tracker.schedule_write (migration 0018) as store errors.
+ * A lock timeout (55P03) or deadlock (40P01) is the one 503; the caller retries.
+ */
+function mapWriteError(error: PgError): StoreError | "duplicate" {
+  if (error.code === "23505") return "duplicate";
   switch (error.message) {
-    case "not_found": return { ok: false, status: 404, error: "not_found" };
+    case "booking_changed": return { ok: false, status: 409, error: "booking_changed" };
     case "stale": return { ok: false, status: 409, error: "stale" };
+    case "not_found": return { ok: false, status: 404, error: "not_found" };
     case "past_occurrence": return { ok: false, status: 422, error: "past_occurrence" };
     case "not_weekly": return { ok: false, status: 422, error: "not_weekly" };
+    case "request_reused": return { ok: false, status: 400, error: "request_reused" };
+    case "forbidden": return { ok: false, status: 403, error: "forbidden" };
     default: return UNAVAILABLE;
+  }
+}
+
+/** The p_args of tracker.schedule_write for one write. */
+function writeArgs(w: LockedWrite): Record<string, unknown> {
+  const position = (p: { status: string; date: string; startTime: string }) => ({ status: p.status, date: p.date, start_time: p.startTime });
+  switch (w.op) {
+    case "create": {
+      const s = w.series;
+      return {
+        staff_id: s.staffId, student_id: s.studentId, subject: s.subject, kind: s.kind, start_date: s.startDate,
+        start_time: s.startTime, duration_minutes: s.durationMinutes, effective_until: s.effectiveUntil,
+      };
+    }
+    case "move":
+      return {
+        series_id: w.seriesId, original_date: w.originalDate, new_date: w.newDate, new_start_time: w.newStartTime,
+        expected_updated_at: w.expectedUpdatedAt, expected_position: position(w.expectedPosition),
+      };
+    case "cancel":
+      return { series_id: w.seriesId, original_date: w.originalDate, expected_updated_at: w.expectedUpdatedAt, expected_position: position(w.expectedPosition) };
+    case "edit_one_off":
+      return {
+        series_id: w.seriesId, original_date: w.originalDate,
+        ...(w.move ? { new_date: w.move.newDate, new_start_time: w.move.newStartTime } : {}),
+        fields: Object.fromEntries(Object.entries({ staff_id: w.fields.staffId, subject: w.fields.subject, duration_minutes: w.fields.durationMinutes })
+          .filter(([, v]) => v !== undefined)),
+        expected_updated_at: w.expectedUpdatedAt, expected_position: position(w.expectedPosition),
+      };
+    case "split": {
+      const c = w.changes;
+      return {
+        series_id: w.seriesId, from_date: w.fromDate, expected_updated_at: w.expectedUpdatedAt,
+        new_values: Object.fromEntries(Object.entries({
+          staff_id: c.staffId, student_id: c.studentId, subject: c.subject, start_time: c.startTime, duration_minutes: c.durationMinutes, weekday: c.weekday,
+        }).filter(([, v]) => v !== undefined)),
+      };
+    }
+    case "end_series":
+      return { series_id: w.seriesId, last_date: w.lastDate, expected_updated_at: w.expectedUpdatedAt };
   }
 }
 
@@ -98,14 +155,6 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
     return data ? parse(data) : null;
   }
 
-  // The same stale pattern as updateWindow: the version token is part of the WHERE, zero rows means 409 or 404.
-  const updateSeries = async (id: string, expected: string, patch: Record<string, unknown>): Promise<StoreResult<SeriesRecord>> => {
-    const { db } = await ctx();
-    const { data, error } = await db.tracker.from("class_series").update(patch).eq("id", id).eq("updated_at", expected).select();
-    if (error) return UNAVAILABLE;
-    if (data?.length) return { ok: true, value: SeriesRow.parse(data[0]), created: false };
-    return (await store.getSeries(id)) ? { ok: false, status: 409, error: "stale" } : { ok: false, status: 404, error: "not_found" };
-  };
   const store: ScheduleStore = {
     async listWindows(staffId) {
       const { db } = await ctx();
@@ -176,56 +225,26 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
       return { series, exceptions: exceptions.filter((e) => ids.has(e.seriesId)) };
     },
     getSeries: (id) => getOne("class_series", id, (r) => SeriesRow.parse(r)),
-    async getSeriesByRequest(requestId) {
+    async readWriteContext(requestId, keys) {
       const { db, orgId } = await ctx();
-      const { data } = await db.tracker.from("class_series").select().eq("org_id", orgId).eq("request_id", requestId).maybeSingle();
-      return data ? SeriesRow.parse(data) : null;
+      const { data, error } = await db.tracker.rpc("schedule_write_context", { p_org_id: orgId, p_request_id: requestId, p_keys: keys });
+      if (error) throw new Error("unavailable");
+      return ContextRow.parse(data);
     },
-    createSeries: (i) => guarded(() => insertOnce("class_series", {
-      request_id: i.requestId, notion_staff_id: i.staffId, notion_student_id: i.studentId, subject: i.subject, kind: i.kind,
-      start_date: i.startDate, start_time: i.startTime, duration_minutes: i.durationMinutes, effective_until: i.effectiveUntil,
-    }, (r) => SeriesRow.parse(r))),
-    // One row per occurrence (unique series_id + original_date): find, then insert or update.
-    upsertException: (i) => guarded(async () => {
-      const { db, orgId, userId } = await ctx();
-      const fields = { kind: i.kind, new_date: i.newDate, new_start_time: i.newStartTime };
-      const update = async () => db.tracker.from("class_exceptions").update({ ...fields, request_id: i.requestId })
-        .eq("series_id", i.seriesId).eq("original_date", i.originalDate).select().maybeSingle();
-      const existing = await db.tracker.from("class_exceptions").select("id").eq("series_id", i.seriesId).eq("original_date", i.originalDate).maybeSingle();
-      if (existing.data) {
-        const u = await update();
-        return u.data ? { ok: true, value: ExceptionRow.parse(u.data), created: false } : UNAVAILABLE;
-      }
-      const ins = await db.tracker.from("class_exceptions").insert({
-        org_id: orgId, created_by: userId, request_id: i.requestId, series_id: i.seriesId, original_date: i.originalDate, ...fields,
-      }).select().maybeSingle();
-      if (ins.data) return { ok: true, value: ExceptionRow.parse(ins.data), created: true };
-      if (ins.error?.code === "23505") {
-        const u = await update();
-        if (u.data) return { ok: true, value: ExceptionRow.parse(u.data), created: false };
-      }
-      return UNAVAILABLE;
-    }),
-    endSeries: (id, lastDate, expected) => guarded(async () => updateSeries(id, expected, { effective_until: lastDate })),
-    updateSeriesFields: (id, expected, f) => guarded(async () => {
-      const patch: Record<string, unknown> = {};
-      if (f.staffId !== undefined) patch.notion_staff_id = f.staffId;
-      if (f.subject !== undefined) patch.subject = f.subject;
-      if (f.durationMinutes !== undefined) patch.duration_minutes = f.durationMinutes;
-      return updateSeries(id, expected, patch);
-    }),
-    split: (i) => guarded(async () => {
-      const { db } = await ctx();
-      const c = i.changes;
-      const newValues = Object.fromEntries(Object.entries({
-        staff_id: c.staffId, student_id: c.studentId, subject: c.subject, start_time: c.startTime, duration_minutes: c.durationMinutes, weekday: c.weekday,
-      }).filter(([, v]) => v !== undefined));
-      const { data, error } = await db.tracker.rpc("split_class_series", {
-        p_series_id: i.seriesId, p_from_date: i.fromDate, p_expected_updated_at: i.expectedUpdatedAt, p_request_id: i.requestId, p_new_values: newValues,
+    lockedWrite: (w) => guarded(async () => {
+      const { db, orgId } = await ctx();
+      const { data, error } = await db.tracker.rpc("schedule_write", {
+        p_org_id: orgId, p_request_id: w.requestId, p_op: w.op, p_stamps: w.stamps, p_args: writeArgs(w),
       });
-      if (error) return mapSplitError(error);
-      const created = await store.getSeries(z.guid().parse(data));
-      return created ? { ok: true, value: created, created: true } : UNAVAILABLE;
+      if (error) {
+        const mapped = mapWriteError(error);
+        if (mapped !== "duplicate") return mapped;
+        // A duplicate that got past the function's own claim: its first result, if recorded.
+        const again = await store.readWriteContext(w.requestId, []);
+        return again.replay ? { ok: true, value: again.replay.result, created: false } : UNAVAILABLE;
+      }
+      const r = WriteRow.parse(data);
+      return { ok: true, value: r.result, created: !r.replay };
     }),
 
     // These three throw on any query error: an empty answer from a failed read would look like

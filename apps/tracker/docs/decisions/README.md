@@ -42,7 +42,7 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0035](0035-weekly-schedule-import-and-summary.md) | Weekly Schedule import is all or nothing per student, and the text field becomes a generated summary | accepted |
 | [0036](0036-availability-conflicts-computed.md) | Availability conflicts are computed on read, and a teacher with nothing entered is not flagged | accepted |
 | [0037](0037-teachers-see-own-student-names.md) | Teachers see the names of their own scheduled students | accepted in part; the names cache and "never stored" are superseded by workspace ADR 0004 once REQ-38 ships |
-| [0038](0038-booking-validation.md) | Bookings are checked on the server before any write | accepted |
+| [0038](0038-booking-validation.md) | Bookings are checked on the server before any write | accepted; atomicity and one-off writes superseded by 0050 |
 | [0039](0039-daily-teacher-texts-task.md) | The daily teacher-texts task is one Notion page per date, kept apart by a lease | accepted |
 | [0040](0040-lesson-link-extension-point.md) | A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet | accepted |
 | [0041](0041-owner-unlinks-claimed-student.md) | An owner can unlink a claimed student, through a function only | accepted |
@@ -54,3 +54,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0047](0047-parent-calendar-states.md) | Parent Calendar states, makeups and the not-available rule | accepted |
 | [0048](0048-notion-link-owner-only.md) | Only an owner can change a student's Notion record link | accepted |
 | [0049](0049-parent-billing-from-notion.md) | Parent Billing reads from Notion, gated on the child's Notion link | accepted |
+| [0050](0050-locked-booking-writes.md) | Class writes are revalidated under a lock | accepted |

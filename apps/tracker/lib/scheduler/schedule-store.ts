@@ -5,19 +5,39 @@ export type WindowRecord = AvailabilityWindow & { id: string; staffId: string; u
 export type AvailabilityExceptionRecord = AvailabilityException & { id: string; staffId: string; updatedAt: string };
 export type SeriesRecord = ClassSeries & { updatedAt: string; splitFrom: string | null };
 
-export type StoreError = { ok: false; status: 404 | 409 | 422 | 503; error: "not_found" | "stale" | "past_occurrence" | "not_weekly" | "unavailable" };
+export type StoreError = {
+  ok: false;
+  status: 400 | 403 | 404 | 409 | 422 | 503;
+  error: "not_found" | "stale" | "past_occurrence" | "not_weekly" | "unavailable" | "booking_changed" | "request_reused" | "forbidden";
+};
 export type StoreResult<T> = { ok: true; value: T; created: boolean } | StoreError;
 
 export type NewWindow = Omit<WindowRecord, "id" | "updatedAt"> & { requestId: string };
 export type NewAvailabilityException = Omit<AvailabilityExceptionRecord, "id" | "updatedAt"> & { requestId: string };
 export type NewSeries = Omit<SeriesRecord, "id" | "updatedAt" | "splitFrom"> & { requestId: string };
-export type SplitInput = {
-  seriesId: string;
-  fromDate: string;
-  expectedUpdatedAt: string;
-  requestId: string;
-  changes: { staffId?: string; studentId?: string; subject?: string; startTime?: string; durationMinutes?: number; weekday?: number };
-};
+export type SplitChanges = { staffId?: string; studentId?: string; subject?: string; startTime?: string; durationMinutes?: number; weekday?: number };
+
+/** A teacher or a student whose bookings a class write depends on (tracker ADR 0050). */
+export type BookingKey = { kind: "staff" | "student"; id: string };
+export type BookingStamp = BookingKey & { version: number };
+export type WriteOp = "create" | "move" | "cancel" | "edit_one_off" | "split" | "end_series";
+/** An earlier write with the same request ID. `seriesId` is its target (for a create, the series it made). */
+export type WriteReplay = { op: WriteOp; seriesId: string | null; result: SeriesRecord };
+export type WriteContext = { stamps: BookingStamp[]; replay: WriteReplay | null };
+/** Where an occurrence stood when the handler checked it; re-checked under the lock. */
+export type Position = { status: "scheduled" | "moved" | "cancelled"; date: string; startTime: string };
+type Seen = { seriesId: string; expectedUpdatedAt: string };
+export type LockedWriteArgs =
+  | { op: "create"; series: Omit<NewSeries, "requestId"> }
+  | (Seen & { op: "move"; originalDate: string; newDate: string; newStartTime: string; expectedPosition: Position })
+  | (Seen & { op: "cancel"; originalDate: string; expectedPosition: Position })
+  | (Seen & {
+    op: "edit_one_off"; originalDate: string; move: { newDate: string; newStartTime: string } | null;
+    fields: { staffId?: string; subject?: string; durationMinutes?: number }; expectedPosition: Position;
+  })
+  | (Seen & { op: "split"; fromDate: string; changes: SplitChanges })
+  | (Seen & { op: "end_series"; lastDate: string });
+export type LockedWrite = LockedWriteArgs & { requestId: string; stamps: BookingStamp[] };
 
 export type SummaryState = "pending" | "synced" | "failed";
 /** One row per adopted student: the scheduler owns their Weekly Schedule text from adoption on. */
@@ -54,15 +74,15 @@ export type ScheduleStore = {
 
   listSeries(range: { from: string; to: string }, staffId?: string): Promise<{ series: SeriesRecord[]; exceptions: ClassException[] }>;
   getSeries(id: string): Promise<SeriesRecord | null>;
-  /** The series a create or split with this request ID produced, if any. */
-  getSeriesByRequest(requestId: string): Promise<SeriesRecord | null>;
-  createSeries(input: NewSeries): Promise<StoreResult<SeriesRecord>>;
-  upsertException(input: ClassException & { requestId: string }): Promise<StoreResult<ClassException>>;
-  split(input: SplitInput): Promise<StoreResult<SeriesRecord>>;
-  /** Ends a weekly series: its last occurrence date becomes `lastDate`. Stale-checked like every series write. */
-  endSeries(id: string, lastDate: string, expectedUpdatedAt: string): Promise<StoreResult<SeriesRecord>>;
-  /** One-off edits: teacher, subject and duration on the series row itself. Stale-checked. */
-  updateSeriesFields(id: string, expectedUpdatedAt: string, fields: { staffId?: string; subject?: string; durationMinutes?: number }): Promise<StoreResult<SeriesRecord>>;
+  /** The booking stamps of these keys and any earlier write with this request ID. Throws when storage is down. */
+  readWriteContext(requestId: string, keys: BookingKey[]): Promise<WriteContext>;
+  /**
+   * The only class write. Under the keys' locks it refuses with 409
+   * `booking_changed` if any stamp moved since readWriteContext, so the check
+   * the handler ran on that context still holds. A repeat of a finished request
+   * returns its first result with `created: false`.
+   */
+  lockedWrite(input: LockedWrite): Promise<StoreResult<SeriesRecord>>;
 
   /** Every series of one student, ended ones included, with all their exceptions. */
   listSeriesForStudent(studentId: string): Promise<{ series: SeriesRecord[]; exceptions: ClassException[] }>;

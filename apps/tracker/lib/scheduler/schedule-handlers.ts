@@ -13,7 +13,7 @@ import { findConflicts, type StaffAvailability } from "../domain/schedule/confli
 import {
   AvailabilityExceptionResponse, AvailabilityResponse, BookingConflictResponse, ConflictsResponseAdmin, ConflictsResponseTeacher, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WeekResponseAdmin, WeekResponseTeacher, WindowResponse,
 } from "./schemas";
-import type { ScheduleStore, SeriesRecord, StoreError } from "./schedule-store";
+import type { BookingKey, BookingStamp, ScheduleStore, SeriesRecord, StoreError, StoreResult, WriteOp } from "./schedule-store";
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
 import { ensureDailyTask, type DailyTaskDeps } from "./daily-task";
 import { normaliseScheduleText } from "../domain/schedule/legacy-line";
@@ -385,22 +385,21 @@ export async function handleCreateClass(deps: ScheduleDeps, body: unknown): Prom
   if (!shape.ok) return send(shape.status, { error: shape.error });
   const notTeacher = await activeTeacher(deps, p.data.staffId);
   if (notTeacher) return notTeacher;
-  // A retry finds its first result before the clash check, which would otherwise see the class it already made.
-  const done = await deps.store.getSeriesByRequest(p.data.requestId).catch(() => null);
-  if (done) return send(200, SeriesResponse.parse(seriesBody(done, await syncStudents(deps, [done.studentId]), await refreshToday(deps))));
   const { requestId, ...fields } = p.data;
-  void requestId;
-  const blocked = await validateBooking(deps, {
-    series: { id: NEW_ID, ...fields }, exceptions: [], window: bookingWindow(fields.startDate, deps.today(), fields.effectiveUntil),
-    checkAvailability: true,
+  // A retry finds its first result in the write context, before the clash check, which would otherwise see the class it already made.
+  const written = await bookUnderStamps(deps, { requestId, keys: keysOf(fields), ops: ["create"] }, async (stamps) => {
+    const blocked = await validateBooking(deps, {
+      series: { id: NEW_ID, ...fields }, exceptions: [], window: bookingWindow(fields.startDate, deps.today(), fields.effectiveUntil),
+      checkAvailability: true,
+    });
+    if (blocked) return blocked;
+    const ready = await prepareStudent(deps, fields.studentId);
+    if (isRes(ready)) return ready;
+    return deps.store.lockedWrite({ op: "create", requestId, stamps, series: fields });
   });
-  if (blocked) return blocked;
-  const ready = await prepareStudent(deps, p.data.studentId);
-  if (isRes(ready)) return ready;
-  const r = await deps.store.createSeries(p.data);
-  if (!r.ok) return fromStore(r);
-  const summarySync = await syncStudents(deps, [p.data.studentId]);
-  return send(r.created ? 201 : 200, SeriesResponse.parse(seriesBody(r.value, summarySync, await refreshToday(deps))));
+  if (isRes(written)) return written;
+  const summarySync = await syncStudents(deps, [written.series.studentId]);
+  return send(written.replayed ? 200 : 201, SeriesResponse.parse(seriesBody(written.series, summarySync, await refreshToday(deps))));
 }
 
 /**
@@ -503,125 +502,197 @@ async function currentPosition(deps: ScheduleDeps, series: SeriesRecord, date: s
   return { status: "scheduled" as const, date, startTime: series.startTime };
 }
 
-async function loadOccurrence(deps: ScheduleDeps, seriesId: string, date: string) {
-  if (!Guid.safeParse(seriesId).success || !IsoDate.safeParse(date).success) return bad();
-  const series = await deps.store.getSeries(seriesId);
-  if (!series || !isPatternDate(series, date)) return send(404, { error: "not_found" });
+/** The occurrence on `date` exists in the series and can still be changed; else the response to send. */
+function checkOccurrence(deps: ScheduleDeps, series: SeriesRecord, date: string): Response | null {
+  if (!isPatternDate(series, date)) return send(404, { error: "not_found" });
   const editable = checkOccurrenceEditable(date, deps.today());
-  if (!editable.ok) return send(editable.status, { error: editable.error });
-  return series;
+  return editable.ok ? null : send(editable.status, { error: editable.error });
 }
 const isRes = (x: unknown): x is Response => x instanceof Response;
+const unavailable = () => send(503, { error: "scheduler_unavailable" });
+
+/** The teacher and student keys of a class write, without repeats. */
+function keysOf(...people: { staffId?: string; studentId?: string }[]): BookingKey[] {
+  const keys = new Map<string, BookingKey>();
+  for (const p of people) {
+    if (p.staffId) keys.set(`staff:${p.staffId}`, { kind: "staff", id: p.staffId });
+    if (p.studentId) keys.set(`student:${p.studentId}`, { kind: "student", id: p.studentId });
+  }
+  return [...keys.values()];
+}
+
+type Written = { series: SeriesRecord; replayed: boolean };
+
+/**
+ * Every class write goes through here (tracker ADR 0050). Read the booking
+ * stamps of the people the write touches, and any earlier result for this
+ * request ID; then `attempt` runs the existing checks and writes under those
+ * stamps. If anything the checks read changed in between, the database refuses
+ * with `booking_changed` and the whole attempt runs once more on fresh data. A
+ * second refusal is 409 stale. Any 503 from storage is `scheduler_unavailable`.
+ */
+async function bookUnderStamps(
+  deps: ScheduleDeps,
+  w: { requestId: string; keys: BookingKey[]; ops: WriteOp[]; target?: string },
+  attempt: (stamps: BookingStamp[]) => Promise<Response | StoreResult<SeriesRecord>>,
+): Promise<Response | Written> {
+  for (let round = 1; ; round++) {
+    let context;
+    try {
+      context = await deps.store.readWriteContext(w.requestId, w.keys);
+    } catch {
+      return unavailable();
+    }
+    if (context.replay) {
+      const r = context.replay;
+      if (!w.ops.includes(r.op) || (w.target !== undefined && r.seriesId !== w.target)) return bad();
+      return { series: r.result, replayed: true };
+    }
+    const r = await attempt(context.stamps);
+    if (isRes(r)) return r;
+    if (r.ok) return { series: r.value, replayed: !r.created };
+    if (r.error === "booking_changed") {
+      if (round < 2) continue;
+      return send(409, { error: "stale" });
+    }
+    if (r.error === "request_reused") return bad();
+    if (r.status === 503) return unavailable();
+    return fromStore(r);
+  }
+}
 
 /**
  * PATCH: "this" moves one occurrence (and, on a one-off, may change its teacher, subject and duration);
- * "future" splits the series at this occurrence. Every change that could clash is checked before any write.
+ * "future" splits the series at this occurrence, which is the only series edit. Every change that could
+ * clash is checked before the write, and the write refuses if anything the check read has changed since.
  */
 export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string, date: string, body: unknown): Promise<Response> {
   const g = await gate(deps, ["admin"]);
   if (isResponse(g)) return g;
   const p = EditBody.safeParse(body);
   if (!p.success) return bad();
-  // A retried split must find its first result before any check on the old
-  // series, which now ends before this date (AC8).
-  if (p.data.scope === "future" && Guid.safeParse(seriesId).success) {
-    const done = await deps.store.getSeriesByRequest(p.data.requestId).catch(() => "unavailable" as const);
-    if (done === "unavailable") return send(503, { error: "scheduler_unavailable" });
-    if (done && done.splitFrom === seriesId) return send(200, SeriesResponse.parse(seriesBody(done)));
-  }
-  const series = await loadOccurrence(deps, seriesId, date);
-  if (isRes(series)) return series;
+  if (!Guid.safeParse(seriesId).success || !IsoDate.safeParse(date).success) return bad();
+  // Read once to learn whose bookings the write touches. A change to this row
+  // after this read is caught by the version check inside the locked write.
+  const series = await deps.store.getSeries(seriesId).catch(() => "unavailable" as const);
+  if (series === "unavailable") return unavailable();
+  if (!series) return send(404, { error: "not_found" });
   const c = p.data.changes;
-  const today = deps.today();
+  const { requestId, expectedUpdatedAt } = p.data;
 
+  if (p.data.scope === "future") {
+    // A retried split finds its first result before the pattern-date check, which would 404 now that the old series ends before this date.
+    const written = await bookUnderStamps(deps, { requestId, keys: keysOf(series, { staffId: c.staffId, studentId: c.studentId }), ops: ["split"], target: seriesId },
+      (stamps) => attemptSplit(deps, series, date, p.data, stamps));
+    if (isRes(written)) return written;
+    if (written.replayed) return send(200, SeriesResponse.parse(seriesBody(written.series)));
+    const summarySync = await syncStudents(deps, [series.studentId, written.series.studentId]);
+    return send(200, SeriesResponse.parse(seriesBody(written.series, summarySync, await refreshToday(deps))));
+  }
+
+  const written = await bookUnderStamps(deps, { requestId, keys: keysOf(series, { staffId: c.staffId }), ops: ["move", "edit_one_off"], target: seriesId }, async (stamps) => {
+    const closed = checkOccurrence(deps, series, date);
+    if (closed) return closed;
+    let now;
+    try {
+      now = await currentPosition(deps, series, date);
+    } catch {
+      return unavailable();
+    }
+    if (stalePosition(p.data, now)) return send(409, { error: "stale" });
+    if (series.updatedAt !== expectedUpdatedAt) return send(409, { error: "stale" });
+    const oneOff = series.kind === "one_off";
+    if (c.studentId || c.weekday || (!oneOff && (c.staffId || c.subject || c.durationMinutes))) return bad("use_scope_future");
+    const newDate = c.date ?? now.date;
+    const newStart = c.startTime ?? now.startTime;
+    const duration = c.durationMinutes ?? series.durationMinutes;
+    const shape = checkClassShape(newStart, duration);
+    if (!shape.ok) return send(shape.status, { error: shape.error });
+    if (c.staffId && c.staffId !== series.staffId) {
+      const notTeacher = await activeTeacher(deps, c.staffId);
+      if (notTeacher) return notTeacher;
+    }
+    if (newDate < deps.today()) return send(422, { error: "past_occurrence" });
+
+    const moves = newDate !== now.date || newStart !== now.startTime;
+    const fields = {
+      ...(c.staffId && c.staffId !== series.staffId ? { staffId: c.staffId } : {}),
+      ...(c.subject && c.subject !== series.subject ? { subject: c.subject } : {}),
+      ...(c.durationMinutes && c.durationMinutes !== series.durationMinutes ? { durationMinutes: c.durationMinutes } : {}),
+    };
+    if (!moves && Object.keys(fields).length === 0) return send(200, SeriesResponse.parse(seriesBody(series)));
+    const exception: ClassException = { seriesId, originalDate: date, kind: "moved", newDate, newStartTime: newStart };
+    const asked = oneOff ? { ...series, ...fields } : series;
+    const retimed = moves || fields.staffId !== undefined || fields.durationMinutes !== undefined;
+    const blocked = await validateBooking(deps, {
+      // An already-moved class keeps its move when only its teacher or length changes, so it is checked where it now sits.
+      series: asked, exceptions: moves || now.status === "moved" ? [exception] : [], window: { from: newDate, to: newDate },
+      checkAvailability: retimed, exclude: (o) => o.seriesId === seriesId && o.originalDate === date,
+      // Moving 10-19 to Monday 10-26 must not also test the unmoved 10-26 occurrence against itself.
+      only: (o) => o.originalDate === date,
+    });
+    if (blocked) return blocked;
+
+    // One transaction: the exception and the series fields change together or not at all.
+    const seen = { requestId, stamps, seriesId, expectedUpdatedAt, originalDate: date, expectedPosition: now };
+    if (oneOff && Object.keys(fields).length > 0) {
+      return deps.store.lockedWrite({ ...seen, op: "edit_one_off", move: moves ? { newDate, newStartTime: newStart } : null, fields });
+    }
+    return deps.store.lockedWrite({ ...seen, op: "move", newDate, newStartTime: newStart });
+  });
+  if (isRes(written)) return written;
+  return send(200, SeriesResponse.parse(seriesBody(written.series, undefined, await refreshToday(deps))));
+}
+
+/** "This class and future": the checks of a split, then the locked write. */
+async function attemptSplit(
+  deps: ScheduleDeps, series: SeriesRecord, date: string,
+  body: { requestId: string; expectedUpdatedAt: string; changes: z.infer<typeof EditBody>["changes"] } & Seen,
+  stamps: BookingStamp[],
+): Promise<Response | StoreResult<SeriesRecord>> {
+  const closed = checkOccurrence(deps, series, date);
+  if (closed) return closed;
+  const c = body.changes;
   let now;
   try {
     now = await currentPosition(deps, series, date);
   } catch {
-    return send(503, { error: "scheduler_unavailable" });
+    return unavailable();
   }
-  if (stalePosition(p.data, now)) return send(409, { error: "stale" });
-
-  if (p.data.scope === "future") {
-    if (now.status === "moved") return send(422, { error: "moved_occurrence" });
-    const shape = checkClassShape(c.startTime ?? series.startTime, c.durationMinutes ?? series.durationMinutes);
-    if (!shape.ok) return send(shape.status, { error: shape.error });
-    if (c.staffId) {
-      const notTeacher = await activeTeacher(deps, c.staffId);
-      if (notTeacher) return notTeacher;
-    }
-    const { date: _ignored, ...rest } = c;
-    void _ignored;
-    let exceptions: ClassException[];
-    try {
-      exceptions = (await deps.store.listSeriesForStudent(series.studentId)).exceptions.filter((e) => e.seriesId === series.id);
-    } catch {
-      return send(503, { error: "scheduler_unavailable" });
-    }
-    const plan = planSplit(series, exceptions, date, rest, NEW_ID);
-    const retimed =
-      (c.weekday !== undefined && c.weekday !== isoWeekday(date)) ||
-      (c.startTime !== undefined && c.startTime !== series.startTime) ||
-      (c.durationMinutes !== undefined && c.durationMinutes !== series.durationMinutes) ||
-      (c.staffId !== undefined && c.staffId !== series.staffId);
-    const blocked = await validateBooking(deps, {
-      series: plan.newSeries, exceptions: plan.exceptions, window: bookingWindow(plan.newSeries.startDate, today, plan.newSeries.effectiveUntil),
-      checkAvailability: retimed, exclude: (o) => o.seriesId === series.id && o.originalDate >= date,
-    });
-    if (blocked) return blocked;
-    if (c.studentId && c.studentId !== series.studentId) {
-      const ready = await prepareStudent(deps, c.studentId);
-      if (isRes(ready)) return ready;
-    }
-    const r = await deps.store.split({ seriesId, fromDate: date, expectedUpdatedAt: p.data.expectedUpdatedAt, requestId: p.data.requestId, changes: rest });
-    if (!r.ok) return fromStore(r);
-    const summarySync = await syncStudents(deps, [series.studentId, r.value.studentId]);
-    return send(200, SeriesResponse.parse(seriesBody(r.value, summarySync, await refreshToday(deps))));
-  }
-
-  if (series.updatedAt !== p.data.expectedUpdatedAt) return send(409, { error: "stale" });
-  const oneOff = series.kind === "one_off";
-  if (c.studentId || c.weekday || (!oneOff && (c.staffId || c.subject || c.durationMinutes))) return bad("use_scope_future");
-  const newDate = c.date ?? now.date;
-  const newStart = c.startTime ?? now.startTime;
-  const duration = c.durationMinutes ?? series.durationMinutes;
-  const shape = checkClassShape(newStart, duration);
+  if (stalePosition(body, now)) return send(409, { error: "stale" });
+  if (now.status === "moved") return send(422, { error: "moved_occurrence" });
+  const shape = checkClassShape(c.startTime ?? series.startTime, c.durationMinutes ?? series.durationMinutes);
   if (!shape.ok) return send(shape.status, { error: shape.error });
-  if (c.staffId && c.staffId !== series.staffId) {
+  if (c.staffId) {
     const notTeacher = await activeTeacher(deps, c.staffId);
     if (notTeacher) return notTeacher;
   }
-  if (newDate < today) return send(422, { error: "past_occurrence" });
-
-  const moves = newDate !== now.date || newStart !== now.startTime;
-  const fields = {
-    ...(c.staffId && c.staffId !== series.staffId ? { staffId: c.staffId } : {}),
-    ...(c.subject && c.subject !== series.subject ? { subject: c.subject } : {}),
-    ...(c.durationMinutes && c.durationMinutes !== series.durationMinutes ? { durationMinutes: c.durationMinutes } : {}),
-  };
-  if (!moves && Object.keys(fields).length === 0) return send(200, SeriesResponse.parse(seriesBody(series)));
-  const exception: ClassException = { seriesId, originalDate: date, kind: "moved", newDate, newStartTime: newStart };
-  const asked = oneOff ? { ...series, ...fields } : series;
-  const retimed = moves || fields.staffId !== undefined || fields.durationMinutes !== undefined;
+  const { date: _ignored, ...rest } = c;
+  void _ignored;
+  let exceptions: ClassException[];
+  try {
+    exceptions = (await deps.store.listSeriesForStudent(series.studentId)).exceptions.filter((e) => e.seriesId === series.id);
+  } catch {
+    return unavailable();
+  }
+  const plan = planSplit(series, exceptions, date, rest, NEW_ID);
+  const retimed =
+    (c.weekday !== undefined && c.weekday !== isoWeekday(date)) ||
+    (c.startTime !== undefined && c.startTime !== series.startTime) ||
+    (c.durationMinutes !== undefined && c.durationMinutes !== series.durationMinutes) ||
+    (c.staffId !== undefined && c.staffId !== series.staffId);
   const blocked = await validateBooking(deps, {
-    // An already-moved class keeps its move when only its teacher or length changes, so it is checked where it now sits.
-    series: asked, exceptions: moves || now.status === "moved" ? [exception] : [], window: { from: newDate, to: newDate },
-    checkAvailability: retimed, exclude: (o) => o.seriesId === seriesId && o.originalDate === date,
-    // Moving 10-19 to Monday 10-26 must not also test the unmoved 10-26 occurrence against itself.
-    only: (o) => o.originalDate === date,
+    series: plan.newSeries, exceptions: plan.exceptions, window: bookingWindow(plan.newSeries.startDate, deps.today(), plan.newSeries.effectiveUntil),
+    checkAvailability: retimed, exclude: (o) => o.seriesId === series.id && o.originalDate >= date,
   });
   if (blocked) return blocked;
-
-  // Exception first (an idempotent upsert), series row second (stale-checked): a retry after a partial failure is safe.
-  if (moves) {
-    const r = await deps.store.upsertException({ ...exception, requestId: p.data.requestId });
-    if (!r.ok) return fromStore(r);
+  if (c.studentId && c.studentId !== series.studentId) {
+    const ready = await prepareStudent(deps, c.studentId);
+    if (isRes(ready)) return ready;
   }
-  if (oneOff && Object.keys(fields).length > 0) {
-    const r = await deps.store.updateSeriesFields(seriesId, p.data.expectedUpdatedAt, fields);
-    return r.ok ? send(200, SeriesResponse.parse(seriesBody(r.value, undefined, await refreshToday(deps)))) : fromStore(r);
-  }
-  return send(200, SeriesResponse.parse(seriesBody(series, undefined, await refreshToday(deps))));
+  return deps.store.lockedWrite({
+    op: "split", requestId: body.requestId, stamps, seriesId: series.id, expectedUpdatedAt: body.expectedUpdatedAt, fromDate: date, changes: rest,
+  });
 }
 
 type Seen = { expectedDate?: string; expectedStartTime?: string };
@@ -635,31 +706,31 @@ export async function handleCancelOccurrence(deps: ScheduleDeps, seriesId: strin
   if (isResponse(g)) return g;
   const p = CancelBody.safeParse(body);
   if (!p.success) return bad();
+  if (!Guid.safeParse(seriesId).success || !IsoDate.safeParse(date).success) return bad();
+  const series = await deps.store.getSeries(seriesId).catch(() => "unavailable" as const);
+  if (series === "unavailable") return unavailable();
+  if (!series) return send(404, { error: "not_found" });
+  const { requestId, expectedUpdatedAt } = p.data;
+  const ends = p.data.scope === "future" && series.kind === "weekly";
 
-  // A retried "future" cancel finds the series already ending the day before: nothing to change.
-  if (p.data.scope === "future" && Guid.safeParse(seriesId).success && IsoDate.safeParse(date).success) {
-    const ended = await deps.store.getSeries(seriesId);
-    if (ended && ended.kind === "weekly" && ended.effectiveUntil === addDays(date, -1) && daysBetween(ended.startDate, date) % 7 === 0 && date >= deps.today()) {
-      return send(200, SeriesResponse.parse(seriesBody(ended)));
+  // A retried "future" cancel finds its first result in the write context: the series already ends the day before.
+  const written = await bookUnderStamps(deps, { requestId, keys: keysOf(series), ops: [ends ? "end_series" : "cancel"], target: seriesId }, async (stamps) => {
+    const closed = checkOccurrence(deps, series, date);
+    if (closed) return closed;
+    let now;
+    try {
+      now = await currentPosition(deps, series, date);
+    } catch {
+      return unavailable();
     }
-  }
-  const series = await loadOccurrence(deps, seriesId, date);
-  if (isRes(series)) return series;
-  let now;
-  try {
-    now = await currentPosition(deps, series, date);
-  } catch {
-    return send(503, { error: "scheduler_unavailable" });
-  }
-  if (stalePosition(p.data, now)) return send(409, { error: "stale" });
-  if (series.updatedAt !== p.data.expectedUpdatedAt) return send(409, { error: "stale" });
-
-  if (p.data.scope === "future" && series.kind === "weekly") {
-    const r = await deps.store.endSeries(seriesId, addDays(date, -1), p.data.expectedUpdatedAt);
-    if (!r.ok) return fromStore(r);
-    const summarySync = await syncStudents(deps, [series.studentId]);
-    return send(200, SeriesResponse.parse(seriesBody(r.value, summarySync, await refreshToday(deps))));
-  }
-  const r = await deps.store.upsertException({ seriesId, originalDate: date, kind: "cancelled", newDate: null, newStartTime: null, requestId: p.data.requestId });
-  return r.ok ? send(200, SeriesResponse.parse(seriesBody(series, undefined, await refreshToday(deps)))) : fromStore(r);
+    if (stalePosition(p.data, now)) return send(409, { error: "stale" });
+    if (series.updatedAt !== expectedUpdatedAt) return send(409, { error: "stale" });
+    if (ends) return deps.store.lockedWrite({ op: "end_series", requestId, stamps, seriesId, expectedUpdatedAt, lastDate: addDays(date, -1) });
+    return deps.store.lockedWrite({ op: "cancel", requestId, stamps, seriesId, expectedUpdatedAt, originalDate: date, expectedPosition: now });
+  });
+  if (isRes(written)) return written;
+  if (!ends) return send(200, SeriesResponse.parse(seriesBody(written.series, undefined, await refreshToday(deps))));
+  if (written.replayed) return send(200, SeriesResponse.parse(seriesBody(written.series)));
+  const summarySync = await syncStudents(deps, [series.studentId]);
+  return send(200, SeriesResponse.parse(seriesBody(written.series, summarySync, await refreshToday(deps))));
 }

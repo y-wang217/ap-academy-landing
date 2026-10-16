@@ -1,5 +1,5 @@
 # 0038: Bookings are checked on the server before any write
-Status: accepted
+Status: accepted, superseded in part by 0050 (atomic check and write, one-off edits in one transaction)
 Date: 2026-10-14
 ## Context
 Scheduler 6/8 (REQ-7) lets Charlie book, move and cancel classes from the week calendar. Until now the write endpoints accepted any class: nothing stopped a teacher or a student being in two places, or a class landing outside the teacher's declared hours.
