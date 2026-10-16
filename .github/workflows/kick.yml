@@ -1,0 +1,48 @@
+name: Kick routine
+
+# Fires the ap-design or ap-build routine on behalf of a design or build run
+# (K6, K7, K8 in docs/spec/pipeline-event-chaining.md). The routine runs
+# dispatch this instead of holding the fire tokens themselves: the tokens
+# live only in repository secrets. Best effort: scripts/fire-routine.mjs
+# never fails the run; a failed fire is a warning and the 3-hour schedules
+# pick the card up. See docs/spec/pipeline-kick-via-actions.md.
+on:
+  workflow_dispatch:
+    inputs:
+      routine:
+        description: "Which routine to fire"
+        type: choice
+        options: [design, build]
+        required: true
+      chain:
+        description: "Depth of the run that is kicking (the fire text carries depth + 1)"
+        type: string
+        default: "0"
+      from:
+        description: "Which stage is kicking (design-next, build-next, manual)"
+        type: string
+        default: "manual"
+      card:
+        description: "Card ID the kick is about, for the fire text"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  kick:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Fire the routine
+        env:
+          ROUTINE_DESIGN_FIRE_URL: ${{ secrets.ROUTINE_DESIGN_FIRE_URL }}
+          ROUTINE_DESIGN_FIRE_TOKEN: ${{ secrets.ROUTINE_DESIGN_FIRE_TOKEN }}
+          ROUTINE_BUILD_FIRE_URL: ${{ secrets.ROUTINE_BUILD_FIRE_URL }}
+          ROUTINE_BUILD_FIRE_TOKEN: ${{ secrets.ROUTINE_BUILD_FIRE_TOKEN }}
+        run: node scripts/fire-routine.mjs "${{ inputs.routine }}" --chain "${{ inputs.chain }}" --from "${{ inputs.from }}" --card "${{ inputs.card }}"
