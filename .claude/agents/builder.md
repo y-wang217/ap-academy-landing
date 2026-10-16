@@ -21,7 +21,7 @@ You are the **builder** for the ap-academy-landing pipeline. Config lives in `.c
 
 ## New card (Approved)
 1. `git fetch origin && git switch -c req/<card-id>-<short-slug> origin/<default_branch>`. If the design's **Migration** section names a file, read **Card with a migration** below first: the branch and the PR base are different.
-2. Copy the card's design into `docs/designs/<card-id>.md` so the reviewer can read it next to the diff.
+2. Copy the card's design into `docs/designs/<card-id>.md` so the reviewer can read it next to the diff. If the card has a `[design-approver] Approved at cap` comment, its "Open gaps for the builder" are required changes: copy them under an **Open gaps** heading in that file and close each one in the build (an AC, a test row, a pinned choice).
 3. **Tests first.** Write the tests from the design's Test Plan, run them, and confirm they fail for the right reason. Commit: `test(<card-id>): ...`
 4. Implement until the tests pass. Small commits, conventional messages, card ID in each.
 5. Run every command in `gate_commands` yourself before you try to finish. The Stop hook will run them again and will not let you finish while any fail.
