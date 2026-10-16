@@ -43,8 +43,8 @@ describe("ADR 0004 structure", () => {
 
   it("names options A and C with a reason each", () => {
     const options = section(adr, "Options rejected");
-    expect(options).toMatch(/\*\*A\b[^\n]*\*\*[^\n]*:\s*\S+/);
-    expect(options).toMatch(/\*\*C\b[^\n]*\*\*[^\n]*:\s*\S+/);
+    expect(options).toMatch(/\*\*A \([^)]+\):\*\*\s+\S/);
+    expect(options).toMatch(/\*\*C \([^)]+\):\*\*\s+\S/);
   });
 });
 

@@ -52,7 +52,7 @@ This is a school-grade and school-work tracker. It is NOT an LMS, a content gene
 6. Never show a failed save as successful. Optimistic UI must roll back and show an error.
 7. No AI writes. AI (v1) only produces a draft change set that the teacher confirms.
 8. Multi-tenant from day one. `org_id` on every tenant table, even with one teacher.
-9. Minimal personal data. First name, last initial, grade level, email. Nothing else without an ADR.
+9. Minimal personal data. First name, last initial, grade level, email. Nothing else without an ADR. Synced copies of Notion people fields: workspace ADR [`docs/adr/0004-notion-edits-people-supabase-reads-local.md`](../../docs/adr/0004-notion-edits-people-supabase-reads-local.md).
 
 ## Data model (starting point; refine via migrations plus an ADR)
 

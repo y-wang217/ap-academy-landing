@@ -6,6 +6,8 @@ routed by path. Why, and what would make us revisit it:
 and [`docs/adr/0002-single-domain-path-routing.md`](docs/adr/0002-single-domain-path-routing.md),
 which supersedes parts of 0001. The done state they describe:
 [`docs/spec/single-domain-done-state.md`](docs/spec/single-domain-done-state.md).
+Who edits people data and what the apps may copy:
+[`docs/adr/0004-notion-edits-people-supabase-reads-local.md`](docs/adr/0004-notion-edits-people-supabase-reads-local.md).
 Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 
 ## Layout
