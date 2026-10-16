@@ -673,6 +673,15 @@ try {
   const [adaId, boId, cyId] = [kid("Ada"), kid("Bo"), kid("Cy")];
   psql(`insert into tracker.parent_links (org_id, student_id, email, invited_by) values ('${ORG}', '${boId}', 'parent@example.com', '00000000-0000-0000-0000-00000000aaaa')`);
 
+  // REQ-23: Ada gets a goal, six plan courses and one other course by psql, with no marks, before the parent first signs in.
+  const adaSql = (q) => psql(q.replaceAll("$ADA", adaId).replaceAll("$ORG", ORG));
+  adaSql(`insert into tracker.goals (org_id, student_id, school, program, application_year, target_six_avg) values ('$ORG', '$ADA', 'Waterloo', 'Software Engineering', 2027, 92)`);
+  adaSql(`insert into tracker.courses (org_id, student_id, code, name, in_six_plan, position, target_grade) select '$ORG', '$ADA', v.code, v.name, v.plan, v.pos, 92 from (values ('MHF4U','Advanced Functions',true,0),('MCV4U','Calculus',true,1),('SPH4U','Physics',true,2),('SCH4U','Chemistry',true,3),('ENG4U','English',true,4),('ICS4U','Computer Science',true,5),('MUS3M','Music',false,6)) as v(code, name, plan, pos)`);
+  adaSql(`insert into tracker.syllabus_versions (org_id, student_id, course_id, version) select '$ORG', '$ADA', id, 1 from tracker.courses where student_id = '$ADA'`);
+  adaSql(`insert into tracker.categories (org_id, student_id, course_id, syllabus_version_id, name, weight) select '$ORG', '$ADA', course_id, id, 'Work', 100 from tracker.syllabus_versions where student_id = '$ADA'`);
+  adaSql(`update tracker.courses c set active_syllabus_version_id = (select v.id from tracker.syllabus_versions v where v.course_id = c.id) where c.student_id = '$ADA'`);
+  adaSql(`update tracker.syllabus_versions set confirmed_at = now() where student_id = '$ADA'`);
+
   // The owner adds Ada's parent on the student page and sees "Invited".
   await teacher.goto(`${BASE}/students/${adaId}`);
   const parentCard = section(teacher, "Parent");
@@ -698,17 +707,56 @@ try {
   await parent.goto(`${BASE}`);
   await parent.waitForURL(new RegExp(`/parent/${adaId}/grades$`), { timeout: 15000 });
   check("a parent opening the tracker lands on the first child's Grades", parent.url().endsWith(`/parent/${adaId}/grades`));
-  check("the Grades tab shows its placeholder", await parent.getByText("Grades will show here.").isVisible());
+  check("with no marks, Recent marks says No marks yet", await parent.getByText("No marks yet", { exact: true }).isVisible());
+  check("with no marks, the course rows say No grades yet", (await section(parent, "Subjects").getByText("No grades yet", { exact: true }).count()) >= 6);
+  check("with no marks, the footer still shows", await parent.getByText("Current grades are calculated based on existing marked grades.").last().isVisible());
   check("the top bar shows AP Academy and the parent's email", (await parent.getByText("AP Academy", { exact: true }).count()) > 0 && await parent.getByText("parent@example.com").isVisible());
   check("the shell has no input, textarea or select", (await parent.locator("input, textarea, select").count()) === 0);
   check("the shell does not scroll sideways at 375px", await parent.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   check("both children show as pills, the Cy pill does not", await parent.getByRole("link", { name: "Ada", exact: true }).isVisible() && await parent.getByRole("link", { name: "Bo", exact: true }).isVisible() && (await parent.getByText("Cy").count()) === 0);
+  // REQ-23: seven scored marks, one excused and one unscored item, then the full Grades tab.
+  const mark = (title, code, daysAgo, earned, possible, kind = "assignment") =>
+    adaSql(`insert into tracker.assessments (org_id, student_id, course_id, category_id, title, kind, due_date, held_on, score_earned, score_possible) select '$ORG', '$ADA', c.id, k.id, '${title}', '${kind}', ${kind === "test" ? "null" : `current_date - ${daysAgo}`}, ${kind === "test" ? `current_date - ${daysAgo}` : "null"}, ${earned}, ${possible} from tracker.courses c join tracker.categories k on k.course_id = c.id where c.student_id = '$ADA' and c.code = '${code}'`);
+  mark("Unit 2 test", "MHF4U", 1, 41, 42, "test");
+  mark("Calculus quiz", "MCV4U", 2, 8, 10);
+  mark("Physics lab", "SPH4U", 3, 18, 20);
+  mark("Functions homework", "MHF4U", 4, 9, 10);
+  mark("Limits quiz", "MCV4U", 5, 7, 10);
+  mark("Kinematics lab", "SPH4U", 6, 15, 20);
+  mark("Functions quiz", "MHF4U", 7, 10, 10);
+  adaSql(`insert into tracker.assessments (org_id, student_id, course_id, category_id, title, due_date, excused, score_possible) select '$ORG', '$ADA', c.id, k.id, 'Excused task', current_date, true, 10 from tracker.courses c join tracker.categories k on k.course_id = c.id where c.student_id = '$ADA' and c.code = 'MHF4U'`);
+  adaSql(`insert into tracker.assessments (org_id, student_id, course_id, category_id, title, due_date, score_possible) select '$ORG', '$ADA', c.id, k.id, 'Unmarked task', current_date, 10 from tracker.courses c join tracker.categories k on k.course_id = c.id where c.student_id = '$ADA' and c.code = 'MCV4U'`);
+  await parent.reload();
+  const gradeHeadings = await parent.locator("main h1, main h2").allTextContents();
+  check("the Grades tab headings are in order", JSON.stringify(gradeHeadings.map((t) => t.trim())) === JSON.stringify(["Ada P.", "Target", "Progress", "Subjects", "Also taking", "Recent marks", "Next priorities", "Upcoming"]), JSON.stringify(gradeHeadings));
+  check("the Target section shows the goal's school", await section(parent, "Target").getByText("Waterloo").isVisible());
+  const progressText = await section(parent, "Progress").innerText();
+  check("the Progress section shows the count and the story line", /3 of 6 courses graded/.test(progressText) && progressText.includes("2 courses are below their targets: MCV4U and SPH4U."), progressText);
+  check("Subjects has six course rows", (await section(parent, "Subjects").locator("ul").first().locator("> li").count()) === 6);
+  const mainText = await parent.locator("main").innerText();
+  const recentText = mainText.slice(mainText.indexOf("Recent marks"), mainText.indexOf("Next priorities"));
+  const recentOrder = ["Unit 2 test", "Calculus quiz", "Physics lab", "Functions homework", "Limits quiz"].map((t) => recentText.indexOf(t));
+  check("Recent marks lists the 5 newest in date order", recentOrder.every((i, n) => i >= 0 && (n === 0 || i > recentOrder[n - 1])) && !recentText.includes("Kinematics lab") && !recentText.includes("Excused task") && !recentText.includes("Unmarked task"), recentText);
+  check("a recent mark shows its score and percent", recentText.includes("41 / 42") && recentText.includes("97.6%"));
+  check("the last paragraph in main is the grade footer", (await parent.locator("main p").last().textContent()) === "Current grades are calculated based on existing marked grades.");
+  // Read-only: one button (Sign out), no form controls, links for pills and tabs, no student-only cards.
+  const buttons = await parent.locator("button").allTextContents();
+  check("the parent Grades tab has only the Sign out button", buttons.length === 1 && /sign out/i.test(buttons[0]), JSON.stringify(buttons));
+  check("the parent Grades tab has no input, textarea or select", (await parent.locator("input, textarea, select").count()) === 0);
+  check("the child pills are links", await parent.getByRole("link", { name: "Ada", exact: true }).isVisible() && await parent.getByRole("link", { name: "Bo", exact: true }).isVisible());
+  check("no chart hint, Got it, Extra practice or course link", (await parent.getByText("Tap a point to see the marks behind it.").count()) === 0 && (await parent.getByText("Got it").count()) === 0 && (await parent.getByText("Extra practice").count()) === 0 && (await parent.locator('a[href*="/courses/"]').count()) === 0);
+  const adaMhf = section(parent, "Subjects").locator("li", { hasText: "Advanced Functions" }).first();
+  await adaMhf.locator("svg [role=button]").last().click();
+  check("tapping the newest point reveals its marks", await adaMhf.getByText(/grade after these marks \d+\.\d%/).isVisible() && await adaMhf.getByText("Unit 2 test · 41 / 42 · 97.6%").isVisible());
+  check("the Grades tab does not scroll sideways at 375px", await parent.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await parent.getByRole("link", { name: "Calendar", exact: true }).click();
   await parent.waitForURL(/\/calendar$/);
   await parent.getByRole("link", { name: "Bo", exact: true }).click();
   await parent.waitForURL(new RegExp(`/parent/${boId}/calendar$`), { timeout: 15000 });
   check("switching child keeps the tab", parent.url().endsWith(`/parent/${boId}/calendar`));
   check("an unpublished child shows Not ready yet and no tab content", await parent.getByText("Not ready yet").isVisible() && (await parent.getByText("Classes will show here.").count()) === 0);
+  await parent.goto(`${BASE}/parent/${boId}/grades`);
+  check("an unpublished child's Grades tab shows Not ready yet and no grade headings", await parent.getByText("Not ready yet").isVisible() && (await parent.getByRole("heading", { name: /^(Recent marks|Progress|Subjects)$/ }).count()) === 0);
   check("the parent never sees Cy", (await parent.locator("body").innerText()).includes("Cy") === false);
   await parent.goto(`${BASE}/parent/${cyId}/grades`);
   check("a parent URL for an unlinked student gives the not-found state", await parent.getByText("This page could not be found").isVisible() && (await parent.locator("body").innerText()).includes("Cy") === false);
