@@ -32,9 +32,20 @@ export function kickText({ chain, from, card }) {
   return parts.join(" ");
 }
 
+// Values pasted into an environment form often arrive with the sample curl's
+// "Bearer " prefix, surrounding quotes or stray whitespace. The API answers
+// all of those with a bare "Authentication failed", so normalise here.
+export function cleanToken(raw) {
+  let t = String(raw ?? "").trim().replace(/^["']+|["']+$/g, "").trim();
+  t = t.replace(/^bearer\s+/i, "").replace(/^["']+|["']+$/g, "").trim();
+  return t;
+}
+
 export function routineEnv(routine, env = process.env) {
   const key = String(routine).toUpperCase();
-  return { url: env[`ROUTINE_${key}_FIRE_URL`], token: env[`ROUTINE_${key}_FIRE_TOKEN`] };
+  const url = String(env[`ROUTINE_${key}_FIRE_URL`] ?? "").trim().replace(/^["']+|["']+$/g, "").trim();
+  const token = cleanToken(env[`ROUTINE_${key}_FIRE_TOKEN`]);
+  return { url: url || undefined, token: token || undefined };
 }
 
 // POST to the routine's /fire endpoint. Resolves to a result, never rejects.
@@ -78,6 +89,8 @@ export async function kick({ routine, depth = 0, from, card, maxChain = DEFAULT_
     log(`::notice::${summary} (PIPELINE.md, Event chaining).`);
     return { ok: false, skipped: true, reason: "unconfigured", summary };
   }
+  if (!token.startsWith("sk-ant-oat01-")) log(`::notice::ROUTINE_${key}_FIRE_TOKEN does not look like a routine API token (expected to start with sk-ant-oat01-).`);
+  if (!/^https:\/\/api\.anthropic\.com\/v1\/claude_code\/routines\/trig_[A-Za-z0-9]+\/fire$/.test(url)) log(`::notice::ROUTINE_${key}_FIRE_URL does not look like a routine fire URL (expected https://api.anthropic.com/v1/claude_code/routines/<trig_id>/fire).`);
   const chain = depth + 1;
   const r = await fireRoutine({ url, token, text: kickText({ chain, from, card }), fetchImpl });
   if (r.ok) {
@@ -85,7 +98,8 @@ export async function kick({ routine, depth = 0, from, card, maxChain = DEFAULT_
     log(summary);
     return { ...r, chain, summary };
   }
-  const summary = `kick ${name} (chain ${chain}) failed: ${r.status ?? "network"} ${r.error ?? ""}`.trim();
+  const hint = r.status === 401 ? " (401: the token does not match this routine, or is not the bare sk-ant-oat01 value; regenerate it on the routine's API trigger and paste it without a Bearer prefix or quotes)" : "";
+  const summary = `kick ${name} (chain ${chain}) failed: ${r.status ?? "network"} ${r.error ?? ""}${hint}`.trim();
   log(`::warning::${summary}`);
   return { ...r, chain, summary };
 }

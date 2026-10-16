@@ -1,7 +1,7 @@
 // node --test scripts/fire-routine.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseChain, kickText, routineEnv, fireRoutine, kick } from "./fire-routine.mjs";
+import { parseChain, kickText, routineEnv, fireRoutine, kick, cleanToken } from "./fire-routine.mjs";
 
 const okFetch = (calls) => async (url, init) => {
   calls.push({ url, init });
@@ -81,4 +81,32 @@ test("kick sends depth + 1, skips at max_chain, skips unconfigured routines with
   const failed = await kick({ routine: "design", depth: 0, from: "approver", maxChain: 12, env, fetchImpl: async () => ({ ok: false, status: 500, text: async () => "boom" }), log });
   assert.equal(failed.ok, false);
   assert.ok(logs.some((l) => l.startsWith("::warning::") && /ap-design/.test(l) && /500/.test(l)));
+});
+
+test("routineEnv tolerates a pasted Bearer prefix, quotes and whitespace", () => {
+  assert.equal(cleanToken("sk-ant-oat01-abc"), "sk-ant-oat01-abc");
+  assert.equal(cleanToken("Bearer sk-ant-oat01-abc"), "sk-ant-oat01-abc");
+  assert.equal(cleanToken(" \"sk-ant-oat01-abc\" "), "sk-ant-oat01-abc");
+  assert.equal(cleanToken("'Bearer sk-ant-oat01-abc'"), "sk-ant-oat01-abc");
+  assert.equal(cleanToken(""), "");
+  const env = { ROUTINE_BUILD_FIRE_URL: " \"https://api.anthropic.com/v1/claude_code/routines/trig_01X/fire\" ", ROUTINE_BUILD_FIRE_TOKEN: "Bearer sk-ant-oat01-abc" };
+  assert.deepEqual(routineEnv("build", env), { url: "https://api.anthropic.com/v1/claude_code/routines/trig_01X/fire", token: "sk-ant-oat01-abc" });
+  assert.deepEqual(routineEnv("build", { ROUTINE_BUILD_FIRE_URL: "x", ROUTINE_BUILD_FIRE_TOKEN: "  " }), { url: "x", token: undefined });
+});
+
+test("kick sends the cleaned token, warns about odd-looking values, and explains a 401", async () => {
+  const calls = [];
+  const logs = [];
+  const log = (l) => logs.push(l);
+  const env = { ROUTINE_BUILD_FIRE_URL: "https://api.anthropic.com/v1/claude_code/routines/trig_01X/fire", ROUTINE_BUILD_FIRE_TOKEN: "Bearer sk-ant-oat01-abc" };
+  await kick({ routine: "build", depth: 0, from: "t", maxChain: 12, env, fetchImpl: okFetch(calls), log });
+  assert.equal(calls[0].init.headers.Authorization, "Bearer sk-ant-oat01-abc");
+  assert.ok(!logs.some((l) => /does not look like/.test(l)));
+
+  const odd = { ROUTINE_BUILD_FIRE_URL: "https://example.com/fire", ROUTINE_BUILD_FIRE_TOKEN: "sk-ant-api03-abc" };
+  const denied = await kick({ routine: "build", depth: 0, from: "t", maxChain: 12, env: odd, fetchImpl: async () => ({ ok: false, status: 401, text: async () => JSON.stringify({ error: { message: "Authentication failed" } }) }), log });
+  assert.ok(logs.some((l) => /ROUTINE_BUILD_FIRE_TOKEN does not look like/.test(l)));
+  assert.ok(logs.some((l) => /ROUTINE_BUILD_FIRE_URL does not look like/.test(l)));
+  assert.match(denied.summary, /401/);
+  assert.match(denied.summary, /Bearer prefix or quotes/);
 });
