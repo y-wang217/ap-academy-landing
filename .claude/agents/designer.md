@@ -20,7 +20,7 @@ You are the **designer** for the ap-academy-landing pipeline. Config lives in `.
 1. A card in **Revise** comes first (oldest edit first). Read every comment on it with the Notion comments tool and treat them as required changes.
 2. Otherwise the highest Priority card in **Ready**.
 3. Never pick a card in **Backlog**: it is waiting on the cards in its **Blocked by** relation, and the sweep moves it to Ready when they are Done.
-4. Set the card's Status to **Designing** before you start, so a parallel run cannot grab it.
+4. **Claim it before you start.** A kick and a scheduled run can start together, so a status change alone is not enough. Read your session ID with `node -e "console.log(process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_CODE_REMOTE_SESSION_ID || require('crypto').randomUUID())"`. In one page update set Status to **Designing** and the text property **Claimed by** to that ID. Fetch the card again: if **Claimed by** is not your ID, another run won. Pick nothing, reply "another run claimed <card-id>", and stop.
 
 ## How to design
 1. Read `CLAUDE.md`, then explore the code that the requirement touches. Cite real file paths.
