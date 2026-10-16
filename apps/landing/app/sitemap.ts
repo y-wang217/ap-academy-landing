@@ -1,5 +1,4 @@
 import { MetadataRoute } from "next";
-import { STAGES } from "@/content/path";
 
 const BASE = "https://ap-academy-landing.vercel.app";
 

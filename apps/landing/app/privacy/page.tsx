@@ -39,12 +39,12 @@ export default function PrivacyPolicy() {
             Privacy Policy
           </h1>
           <p className="mt-3 text-[14px] text-text-muted">
-            Last updated: October 15, 2026
+            Last updated: October 16, 2026
           </p>
 
           <div className="mt-10 space-y-8 text-[16px] leading-[1.75] text-text-secondary">
             <p>
-              AP Academy ("AP Academy," "we," "us," or "our") is operated by Ambitious Pathways Life Coaching Inc. (e.g. Ambition Pathways Life Coaching Inc.), located in Ontario, Canada. This Privacy Policy explains what personal information we collect, how we use it, who we share it with, and the choices you have. We are committed to handling personal information in accordance with Canada's Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable Ontario law.
+              AP Academy (&quot;AP Academy,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) is operated by Ambitious Pathways Life Coaching Inc. (e.g. Ambition Pathways Life Coaching Inc.), located in Ontario, Canada. This Privacy Policy explains what personal information we collect, how we use it, who we share it with, and the choices you have. We are committed to handling personal information in accordance with Canada&apos;s Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable Ontario law.
             </p>
             <p>
               By using our website or enrolling in our programs, you agree to the practices described in this policy.
@@ -75,7 +75,7 @@ export default function PrivacyPolicy() {
               <p className="mb-3 font-semibold text-dark">Information collected automatically:</p>
               <ul className="ml-5 list-disc space-y-1.5">
                 <li>Basic usage and device data (such as IP address, browser type, pages visited, and referring source) collected through standard web technologies and analytics.</li>
-                <li>Cookies and similar tracking technologies, including advertising pixels (e.g. the Meta pixel) used to measure and improve our advertising. See "Cookies and tracking" below.</li>
+                <li>Cookies and similar tracking technologies, including advertising pixels (e.g. the Meta pixel) used to measure and improve our advertising. See &quot;Cookies and tracking&quot; below.</li>
               </ul>
             </section>
 
@@ -100,7 +100,7 @@ export default function PrivacyPolicy() {
               <h2 className="mb-4 font-serif text-[24px] text-dark">4. How we share your information</h2>
               <p className="mb-3">We do not sell your personal information. We share it only with:</p>
               <ul className="ml-5 list-disc space-y-1.5">
-                <li><strong>Service providers</strong> who help us operate, including: Stripe (payments), Meta/Facebook (advertising and lead forms), Google (email and related services), Zapier (workflow automation), Notion (records management), and {ANTHROPIC_PROVIDER_LINE}. These providers process information on our behalf and may store data on servers outside Canada, including in the United States.</li>
+                <li><strong>Service providers</strong> who help us operate, including: Supabase (our database and sign-in, hosted in the United States), Stripe (payments), Meta/Facebook (advertising and lead forms), Google (email and related services), Zapier (workflow automation), Notion (records management), and {ANTHROPIC_PROVIDER_LINE}. These providers process information on our behalf and may store data on servers outside Canada, including in the United States.</li>
                 <li><strong>Legal and safety</strong> recipients where required by law, or to protect our rights, users, or the public.</li>
               </ul>
             </section>
@@ -189,7 +189,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="mb-4 font-serif text-[24px] text-dark">12. Changes to this policy</h2>
               <p>
-                We may update this policy from time to time. We will post the updated version here and revise the "Last updated" date above.
+                We may update this policy from time to time. We will post the updated version here and revise the &quot;Last updated&quot; date above.
               </p>
             </section>
 
