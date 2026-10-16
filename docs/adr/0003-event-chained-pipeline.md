@@ -29,6 +29,11 @@ Three facts shaped the options:
 - The routine API trigger (`POST .../routines/<id>/fire`) and the routine
   GitHub trigger are in research preview, and a routine run only has
   `fire_trigger` when the Claude_Code_Remote connector is attached to it.
+  The routine edit form does not offer that connector, so the stage commands
+  can also fire through `scripts/fire-routine.mjs` with the fire URL and
+  token set as environment variables on a dedicated cloud environment; a
+  network secret cannot carry them, because the agent proxy never attaches
+  one to `api.anthropic.com`.
 
 ## Decision
 
