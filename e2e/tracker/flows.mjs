@@ -538,7 +538,8 @@ try {
   const booked = await form.waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false);
   check("the booking form closes after a keyboard submit", booked, booked ? "" : await form.getByRole("alert").textContent().catch(() => "no alert"));
   // The desktop grid is in the DOM but hidden at 375px, so look only at what is visible.
-  await teacher.getByText("Nobody Booked").locator("visible=true").first().waitFor({ timeout: 15000 });
+  // Wait for the class card, not the text: the save notice also names the student (REQ-28).
+  await teacher.getByRole("button", { name: /Nobody Booked/ }).locator("visible=true").first().waitFor({ timeout: 15000 });
   check("a booked class appears in the week after saving", await teacher.getByText("MPM2D").locator("visible=true").first().isVisible());
 
   // A clash is refused with the slot in the message and nothing is booked.
