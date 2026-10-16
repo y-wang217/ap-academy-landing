@@ -152,6 +152,23 @@ export const StudentInput = z.object({
 
 export const UnlinkInput = z.object({ email: StudentInput.shape.email });
 
+/** REQ-22: a parent the owner invites from the student page. */
+export const ParentInviteInput = z.object({ email: StudentInput.shape.email });
+
+/** The Students & Parents page that is this student, or "" to unlink it. */
+export const ScheduleRecordInput = z.object({ notionStudentId: z.union([z.literal(""), z.guid()]) });
+
+/** One row of tracker.my_children(): what a parent may know about a child. */
+export const ChildRow = z
+  .object({ id: z.guid(), org_id: z.guid(), first_name: z.string(), last_initial: z.string(), published: z.boolean() })
+  .transform((r) => ({ id: r.id, orgId: r.org_id, firstName: r.first_name, lastInitial: r.last_initial, published: r.published }));
+export type ChildRecord = z.output<typeof ChildRow>;
+
+export const ParentLinkRow = z
+  .object({ id: z.guid(), email: z.string(), claimed_at: z.string().nullable() })
+  .transform((r) => ({ id: r.id, email: r.email, claimedAt: r.claimed_at }));
+export type ParentLink = z.output<typeof ParentLinkRow>;
+
 export const GoalInput = z.object({
   school: text(120),
   program: text(120),

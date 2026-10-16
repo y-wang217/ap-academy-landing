@@ -4,7 +4,7 @@
 // project and `tracker` is exposed, regenerate database.generated.ts and
 // replace this file.
 
-export type MembershipRole = "owner" | "teacher" | "student";
+export type MembershipRole = "owner" | "teacher" | "student" | "parent";
 
 type LooseTable = {
   Row: Record<string, unknown>;
