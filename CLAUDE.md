@@ -94,7 +94,7 @@ Flow: Backlog (waiting on **Blocked by** cards) → Ready → Designing → Desi
 Side paths: Revise (human sent the design back), Changes Requested (reviewer sent the PR back), Blocked (needs a human).
 
 - Stage commands: `/design-next`, `/build-next`, `/pipeline-sweep`.
-- Design approver: `.github/workflows/design-approver.yml` runs `scripts/design-approver.mjs` hourly at :20. Claude judges each Needs Approval card against `.claude/agents/design-approver.md` and only returns JSON; the script moves the card to Approved or Revise with its own Notion integration token. It never approves High risk.
+- Design approver: `.github/workflows/design-approver.yml` runs `scripts/design-approver.mjs` hourly at :20. Claude judges each Needs Approval card against `.claude/agents/design-approver.md` and only returns JSON; the script moves the card to Approved or Revise with its own Notion integration token. It never approves High risk. After `max_attempts` revise rounds it approves anyway and leaves the open gaps on the card for the builder, unless the card is High risk, the judge fails C8 (risk understated) or flags an injection; those go to Charlie. It only skips an unchanged design when its last verdict was Needs Charlie, so moving a Revise card back to Needs Approval re-judges it.
 - Agent roles: `.claude/agents/designer.md`, `builder.md`, `reviewer.md`.
 - Every change ships on a `req/<card-id>-<slug>` branch through a PR. Nothing is pushed to `main` directly.
 - GitHub is the truth for card status: the sweep sets In Review, Changes Requested, Done or Blocked from the PR state, promotes Backlog cards whose blockers are Done, and is the only writer of "shipped" Work Log rows.

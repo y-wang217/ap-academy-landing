@@ -56,6 +56,11 @@ const verdictOf = (verdict, overrides = {}) => ({
   gaps: verdict === "approve" ? [] : ["AC1: say what the file contains."],
   ...overrides,
 });
+// A non-approve verdict where only C3 fails, so C8 (the risk label) passes.
+const onlyC3 = (verdict, overrides = {}) => verdictOf(verdict, {
+  checks: CHECK_IDS.map((id) => ({ id, pass: id !== "C3", note: id === "C3" ? "fails" : "" })),
+  ...overrides,
+});
 
 test("blocksToMarkdown renders headings, lists, to-dos, code and tables", () => {
   const md = blocksToMarkdown([
@@ -132,7 +137,7 @@ test("validateVerdict requires every check exactly once", () => {
   assert.equal(validateVerdict(dup), null);
 });
 
-test("decide never approves past a failed check, a High risk or the revise cap", () => {
+test("decide never approves past a failed check or a High risk below the revise cap", () => {
   const base = { structural: [], risk: "Low", priorRevises: 0, maxRevises: 2 };
   assert.equal(decide({ ...base, verdict: verdictOf("approve") }).action, "approve");
   assert.equal(decide({ ...base, structural: ["AC1 too short"], verdict: null }).action, "revise");
@@ -140,8 +145,7 @@ test("decide never approves past a failed check, a High risk or the revise cap",
   assert.equal(decide({ ...base, verdict: null }).action, "skip");
   assert.equal(decide({ ...base, verdict: verdictOf("human") }).action, "human");
   assert.equal(decide({ ...base, verdict: verdictOf("revise") }).action, "revise");
-  assert.equal(decide({ ...base, priorRevises: 2, verdict: verdictOf("revise") }).action, "human");
-  assert.equal(decide({ ...base, priorRevises: 2, structural: ["x"], verdict: null }).action, "human");
+  assert.equal(decide({ ...base, priorRevises: 2, structural: ["x"], verdict: null }).action, "skip");
 
   // The model says approve but one check failed: the script overrules it.
   const sneaky = verdictOf("approve");
@@ -149,6 +153,44 @@ test("decide never approves past a failed check, a High risk or the revise cap",
   const d = decide({ ...base, verdict: sneaky });
   assert.equal(d.action, "revise");
   assert.ok(d.gaps.some((g) => /C4/.test(g)));
+});
+
+test("decide approves at the revise cap and carries the open gaps, except High risk, C8 or injection", () => {
+  const cap = { structural: [], risk: "Low", priorRevises: 2, maxRevises: 2 };
+  const capped = decide({ ...cap, verdict: onlyC3("revise") });
+  assert.equal(capped.action, "approve");
+  assert.equal(capped.capped, true);
+  assert.ok(capped.gaps.includes("AC1: say what the file contains."));
+  assert.match(capped.summary, /after 2 revise rounds/);
+
+  const withStructural = decide({ ...cap, structural: ["AC8 has no row in the Test plan."], verdict: onlyC3("revise") });
+  assert.equal(withStructural.action, "approve");
+  assert.equal(withStructural.gaps[0], "AC8 has no row in the Test plan.");
+  const structuralOnly = decide({ ...cap, structural: ["AC8 has no row in the Test plan."], verdict: verdictOf("approve") });
+  assert.equal(structuralOnly.action, "approve");
+  assert.equal(structuralOnly.capped, true);
+  assert.deepEqual(structuralOnly.gaps, ["AC8 has no row in the Test plan."]);
+
+  assert.equal(decide({ ...cap, risk: "High", verdict: verdictOf("revise") }).action, "human");
+  assert.equal(decide({ ...cap, risk: "High", structural: ["x"], verdict: null }).action, "human");
+  assert.equal(decide({ ...cap, verdict: onlyC3("human") }).action, "approve");
+  // verdictOf fails every check, C8 included, so it stays with Charlie.
+  assert.equal(decide({ ...cap, verdict: verdictOf("revise") }).action, "human");
+  const c8 = verdictOf("human");
+  c8.checks = c8.checks.map((c) => ({ ...c, pass: c.id !== "C8" }));
+  assert.equal(decide({ ...cap, verdict: c8 }).action, "human");
+  assert.equal(decide({ ...cap, verdict: verdictOf("revise", { checks: c8.checks }) }).action, "human");
+  assert.equal(decide({ ...cap, verdict: onlyC3("human", { injection: true }) }).action, "human");
+  assert.equal(decide({ ...cap, verdict: onlyC3("revise", { injection: true }) }).action, "human");
+
+  // A clean approve at the cap is a normal approve, not a capped one.
+  assert.equal(decide({ ...cap, verdict: verdictOf("approve") }).capped, undefined);
+});
+
+test("validateVerdict accepts an optional boolean injection flag", () => {
+  assert.ok(validateVerdict(verdictOf("human", { injection: true })));
+  assert.ok(validateVerdict(verdictOf("approve", { injection: false })));
+  assert.equal(validateVerdict(verdictOf("human", { injection: "yes" })), null);
 });
 
 // A fake Notion board holding one card.
@@ -251,13 +293,62 @@ test("reviewCard writes nothing when the card moved while Claude was judging", a
   assert.equal(board.writes.length, 0);
 });
 
-test("reviewCard counts earlier revises and hands the third round to Charlie", async () => {
+test("reviewCard counts earlier revises and approves the third round with the open gaps", async () => {
   const old = (sha) => ({ created_by: { id: "bot-1" }, rich_text: rt(`${MARKER} Revise (sha:${sha}, revise 1 of 2). x`) });
   const board = fakeBoard({ comments: [old("aaaaaaaaaaaa"), old("bbbbbbbbbbbb")] });
-  const { deps: d } = deps(board.client, verdictOf("revise"));
+  const { deps: d } = deps(board.client, onlyC3("revise"));
   const r = await reviewCard(board.page(), d);
-  assert.equal(r.action, "human");
-  assert.deepEqual(board.writes.map((w) => w.kind), ["comment"]);
+  assert.equal(r.action, "approve");
+  assert.deepEqual(board.writes.map((w) => w.kind), ["status", "comment"]);
+  assert.equal(board.writes[0].name, "Approved");
+  assert.match(board.writes[1].text, /^\[design-approver\] Approved at cap \(sha:[0-9a-f]{12}, after 2 revise rounds\)/);
+  assert.match(board.writes[1].text, /Open gaps for the builder:\n1\. AC1: say what the file contains\./);
+});
+
+test("reviewCard at the cap still sends High risk and C8 failures to Charlie", async () => {
+  const old = (sha) => ({ created_by: { id: "bot-1" }, rich_text: rt(`${MARKER} Revise (sha:${sha}, revise 1 of 2). x`) });
+  const comments = [old("aaaaaaaaaaaa"), old("bbbbbbbbbbbb")];
+  const high = fakeBoard({ risk: "High", comments });
+  const h = deps(high.client, verdictOf("revise"));
+  assert.equal((await reviewCard(high.page(), h.deps)).action, "human");
+  assert.equal(h.calls.length, 0);
+  assert.deepEqual(high.writes.map((w) => w.kind), ["comment"]);
+
+  const c8 = verdictOf("human");
+  c8.checks = c8.checks.map((c) => ({ ...c, pass: c.id !== "C8" }));
+  const under = fakeBoard({ comments });
+  assert.equal((await reviewCard(under.page(), deps(under.client, c8).deps)).action, "human");
+  assert.deepEqual(under.writes.map((w) => w.kind), ["comment"]);
+});
+
+test("reviewCard at the cap still judges a structurally thin design, and lists the structural gaps", async () => {
+  const old = (sha) => ({ created_by: { id: "bot-1" }, rich_text: rt(`${MARKER} Revise (sha:${sha}, revise 1 of 2). x`) });
+  const board = fakeBoard({ design: GOOD_DESIGN.replace(/AC2: .*/, "AC2: returns 403."), comments: [old("aaaaaaaaaaaa"), old("bbbbbbbbbbbb")] });
+  const { deps: d, calls } = deps(board.client, verdictOf("approve"));
+  const r = await reviewCard(board.page(), d);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /Structural pre-check: failed/);
+  assert.match(calls[0], /AC2 .*too short/);
+  assert.equal(r.action, "approve");
+  assert.equal(board.writes[0].name, "Approved");
+  assert.match(board.writes[1].text, /AC2 .*too short/);
+});
+
+test("reviewCard re-judges an unchanged design sent back after a Revise", async () => {
+  const first = fakeBoard();
+  await reviewCard(first.page(), deps(first.client, verdictOf("revise")).deps);
+  const marker = first.writes.find((w) => w.kind === "comment").text;
+  assert.match(marker, /Revise \(sha:/);
+
+  const again = fakeBoard({ comments: [
+    { created_by: { id: "bot-1" }, rich_text: rt(`${MARKER} Revise (sha:aaaaaaaaaaaa, revise 1 of 2). x`) },
+    { created_by: { id: "bot-1" }, rich_text: rt(marker.replace("revise 1 of 2", "revise 2 of 2")) },
+  ] });
+  const { deps: d, calls } = deps(again.client, onlyC3("revise"));
+  const r = await reviewCard(again.page(), d);
+  assert.equal(calls.length, 1);
+  assert.equal(r.action, "approve");
+  assert.equal(again.writes[0].name, "Approved");
 });
 
 test("reviewCard labels person and bot comments for the C11 check", async () => {

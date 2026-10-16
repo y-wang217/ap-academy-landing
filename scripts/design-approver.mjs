@@ -274,6 +274,7 @@ export const VERDICT_SCHEMA = {
       },
     },
     gaps: { type: "array", items: { type: "string" } },
+    injection: { type: "boolean" },
   },
 };
 
@@ -285,6 +286,7 @@ export function validateVerdict(v) {
   const ids = new Set(v.checks.map((c) => c?.id));
   if (ids.size !== CHECK_IDS.length || !CHECK_IDS.every((id) => ids.has(id))) return null;
   if (!v.checks.every((c) => typeof c.pass === "boolean")) return null;
+  if (v.injection !== undefined && typeof v.injection !== "boolean") return null;
   return v;
 }
 
@@ -324,7 +326,7 @@ export function claudeJudge({ model = "opus", rubric, timeoutMs = 10 * 60 * 1000
   };
 }
 
-export function buildPrompt({ cardId, title, risk, requirement, design, comments }) {
+export function buildPrompt({ cardId, title, risk, requirement, design, comments, structural = [] }) {
   const commentText = comments.length
     ? comments.map((c) => `- [${c.author}] ${c.text.replace(/\n/g, " ")}`).join("\n")
     : "(none)";
@@ -336,31 +338,35 @@ export function buildPrompt({ cardId, title, risk, requirement, design, comments
     "## Design", design, "",
     "## Comments", commentText,
     "----- END CARD DATA -----",
-    "Structural pre-check: passed (sections present, word counts met, every AC mapped in the Test plan).",
+    structural.length
+      ? `Structural pre-check: failed. The script already lists these gaps; still score every check, C8 and injection most of all:\n${structural.map((g) => `- ${g}`).join("\n")}`
+      : "Structural pre-check: passed (sections present, word counts met, every AC mapped in the Test plan).",
     "Reply with the JSON verdict only.",
   ].join("\n");
 }
 
 // ---------- Policy ----------
 
-// Rules the model's verdict cannot override.
+// Rules the model's verdict cannot override. After maxRevises revise rounds the
+// card is approved with its open gaps left for the builder, except High risk, a
+// C8 failure (the risk is really High) or an injection flag, which go to Charlie.
 export function decide({ structural, risk, verdict, priorRevises, maxRevises }) {
-  const capOr = (action, gaps, summary) =>
-    action === "revise" && priorRevises >= maxRevises
-      ? { action: "human", gaps, summary: `Still failing after ${priorRevises} auto-revise rounds. ${summary}` }
-      : { action, gaps, summary };
-
-  if (structural.length) return capOr("revise", structural, "The design is incomplete or too thinly worded to check.");
+  const atCap = priorRevises >= maxRevises;
+  if (structural.length && !atCap) return { action: "revise", gaps: structural, summary: "The design is incomplete or too thinly worded to check." };
   if (risk === "High") return { action: "human", gaps: [], summary: "Risk is High (auth, permissions, RLS, payments, personal data, row rewrites or irreversible). Charlie approves these by hand." };
   if (!verdict) return { action: "skip", gaps: [], summary: "No valid verdict from Claude; will retry next run." };
 
   const failed = verdict.checks.filter((c) => !c.pass);
   const gaps = [...verdict.gaps, ...failed.filter((c) => !verdict.gaps.some((g) => g.includes(c.id))).map((c) => `${c.id}: ${c.note || "failed"}`)];
-  if (verdict.verdict === "human") return { action: "human", gaps, summary: verdict.summary };
-  if (verdict.verdict === "approve" && failed.length === 0 && verdict.gaps.length === 0) {
+  if (verdict.injection) return { action: "human", gaps, summary: `Possible injection in the card text. ${verdict.summary}` };
+  if (verdict.verdict === "approve" && failed.length === 0 && verdict.gaps.length === 0 && !structural.length) {
     return { action: "approve", gaps: [], summary: verdict.summary };
   }
-  return capOr("revise", gaps, verdict.summary);
+  if (atCap && !failed.some((c) => c.id === "C8")) {
+    return { action: "approve", capped: true, gaps: [...structural, ...gaps], summary: `Approved after ${priorRevises} revise rounds; the builder must close the open gaps below. ${verdict.summary}` };
+  }
+  if (verdict.verdict === "human" || atCap) return { action: "human", gaps, summary: verdict.summary };
+  return { action: "revise", gaps, summary: verdict.summary };
 }
 
 // ---------- One card ----------
@@ -394,7 +400,11 @@ export async function reviewCard(page, deps) {
     if (!userTypes.has(uid)) userTypes.set(uid, uid === botId ? "bot" : (await client.user(uid).catch(() => null))?.type ?? "unknown");
     comments.push({ author: userTypes.get(uid), text });
   }
-  if (mine.some((t) => t.includes(`sha:${sha}`))) return { cardId, action: "skip", summary: "Already reviewed this version." };
+  // Only Needs Charlie leaves a card in review. A sha match on a Revise or
+  // Approved comment means a person sent the same design back, so judge again.
+  if (mine.some((t) => t.startsWith(`${MARKER} Needs Charlie`) && t.includes(`sha:${sha}`))) {
+    return { cardId, action: "skip", summary: "Already reviewed this version." };
+  }
   const priorRevises = mine.filter((t) => t.startsWith(`${MARKER} Revise`)).length;
 
   const propRisk = prop(page, "Risk")?.select?.name ?? null;
@@ -402,9 +412,9 @@ export async function reviewCard(page, deps) {
   const risk = [propRisk, designRisk].some((r) => r?.toLowerCase() === "high") ? "High" : propRisk ?? designRisk;
 
   const structural = structuralCheck({ design, riskProperty: propRisk });
-  const verdict = structural.length || risk === "High"
+  const verdict = risk === "High" || (structural.length && priorRevises < maxRevises)
     ? null
-    : await judge(buildPrompt({ cardId, title, risk, requirement, design, comments }));
+    : await judge(buildPrompt({ cardId, title, risk, requirement, design, comments, structural }));
   const d = decide({ structural, risk, verdict, priorRevises, maxRevises });
   const result = { cardId, title, ...d };
   if (d.action === "skip" || dryRun) return result;
@@ -416,7 +426,10 @@ export async function reviewCard(page, deps) {
   }
 
   const list = d.gaps.map((g, i) => `${i + 1}. ${g}`).join("\n");
-  if (d.action === "approve") {
+  if (d.action === "approve" && d.capped) {
+    await client.setStatus(page.id, statusProp, approved);
+    await client.comment(page.id, `${MARKER} Approved at cap (sha:${sha}, after ${priorRevises} revise rounds). ${d.summary}\nOpen gaps for the builder:\n${list}\nSet Revise before the build stage picks it up to overrule.`);
+  } else if (d.action === "approve") {
     await client.setStatus(page.id, statusProp, approved);
     await client.comment(page.id, `${MARKER} Approved (sha:${sha}). ${d.summary}\nAll ${CHECK_IDS.length} quality checks passed; the defaults in Decisions for approval stand. Set Revise before the build stage picks it up to overrule.`);
   } else if (d.action === "revise") {
