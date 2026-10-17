@@ -224,7 +224,8 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
             <label className={field}>
               <span className="font-medium">Purpose</span>
               <select className={inputClass} value={purpose} onChange={(e) => { setPurpose(e.target.value as ClassPurpose | ""); setMakeupFor(""); }} required={mode.kind === "create"} data-field="purpose">
-                <option value="">{mode.kind === "edit" && !card?.purpose ? "Not set" : "Choose a purpose"}</option>
+                {mode.kind === "create" && <option value="">Choose a purpose</option>}
+                {mode.kind === "edit" && !card?.purpose && <option value="">Not set</option>}
                 <option value="makeup">Makeup</option>
                 <option value="trial">Trial</option>
                 <option value="extra">Extra</option>
