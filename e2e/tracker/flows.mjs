@@ -1144,6 +1144,48 @@ try {
   const timingRes = await timing.context().request.get(`${BASE}/api/scheduler/me`);
   const st = timingRes.headers()["server-timing"] ?? "";
   check("scheduler GET carries Server-Timing auth, db and total", timingRes.status() === 200 && /auth;dur=/.test(st) && /db;dur=/.test(st) && /total;dur=/.test(st), `${timingRes.status()} ${st}`);
+
+  // REQ-32 direct API: PostgREST with real JWTs, no UI, so RLS alone decides. Runs last because it revokes access.
+  const tokenOf = async (email) => {
+    const { cookieValue } = await (await fetch(`${MOCK}/__session?email=${encodeURIComponent(email)}`)).json();
+    return JSON.parse(Buffer.from(cookieValue.slice("base64-".length), "base64url").toString()).access_token;
+  };
+  const restAs = async (email, path, init = {}) => {
+    const r = await fetch(`${MOCK}/rest/v1/${path}`, {
+      ...init,
+      headers: { authorization: `Bearer ${await tokenOf(email)}`, "accept-profile": "tracker", "content-profile": "tracker", "content-type": "application/json", ...(init.headers ?? {}) },
+    });
+    const text = await r.text();
+    return { status: r.status, body: text ? JSON.parse(text) : null };
+  };
+  const RYAN_STAFF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001";
+  const isEmpty = (r) => r.status === 200 && Array.isArray(r.body) && r.body.length === 0;
+  const parentOwn = await restAs("parent@example.com", "students?select=id");
+  check("REQ-32: the parent reads their linked published child through PostgREST", parentOwn.status === 200 && parentOwn.body.some((s) => s.id === diId), JSON.stringify(parentOwn));
+  const cyReads = [
+    await restAs("parent@example.com", `students?id=eq.${cyId}`),
+    await restAs("parent@example.com", `class_series?notion_student_id=eq.${CY_NOTION}`),
+    await restAs("parent@example.com", `assessments?student_id=eq.${cyId}`),
+  ];
+  check("REQ-32: the parent gets [] for another family's students, class_series and assessments", cyReads.every(isEmpty), JSON.stringify(cyReads));
+  const ryanSeries = await restAs("ryan@example.com", "class_series?select=notion_staff_id");
+  check("REQ-32: Ryan reads only his own class_series", ryanSeries.status === 200 && ryanSeries.body.length > 0 && ryanSeries.body.every((s) => s.notion_staff_id === RYAN_STAFF), JSON.stringify(ryanSeries));
+  check("REQ-32: Ryan gets [] from students", isEmpty(await restAs("ryan@example.com", "students")));
+  const t2Before = await restAs("teacher2@example.com", "students?select=id");
+  check("REQ-32: teacher2 reads the org's students before removal", t2Before.status === 200 && t2Before.body.length > 0, JSON.stringify(t2Before));
+
+  // Revocation, then the next read by each returns [].
+  const revoke = await restAs("teacher@example.com", `staff_links?notion_staff_id=eq.${RYAN_STAFF}&revoked_at=is.null`, {
+    method: "PATCH", headers: { prefer: "return=representation" }, body: JSON.stringify({ revoked_at: new Date().toISOString() }),
+  });
+  check("REQ-32: the owner revokes Ryan's staff link through PostgREST", revoke.status === 200 && revoke.body.length === 1, JSON.stringify(revoke));
+  check("REQ-32: after revocation Ryan gets [] from class_series", isEmpty(await restAs("ryan@example.com", "class_series")));
+  const diLink = await restAs("teacher@example.com", `parent_links?student_id=eq.${diId}&select=id`);
+  const removed = await restAs("teacher@example.com", "rpc/remove_parent_link", { method: "POST", body: JSON.stringify({ link_id: diLink.body?.[0]?.id }) });
+  check("REQ-32: the owner removes the parent link through rpc/remove_parent_link", removed.status === 204 || removed.status === 200, JSON.stringify(removed));
+  check("REQ-32: after removal the parent gets [] for that child", isEmpty(await restAs("parent@example.com", `students?id=eq.${diId}`)));
+  psql("delete from tracker.memberships where user_id = (select id from auth.users where email = 'teacher2@example.com')");
+  check("REQ-32: after the membership is deleted teacher2 gets [] from students", isEmpty(await restAs("teacher2@example.com", "students")));
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {
