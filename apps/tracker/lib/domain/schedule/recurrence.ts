@@ -1,5 +1,7 @@
 import { addDays, daysBetween, isoWeekStart, isoWeekday, localToUtc, minutesOf, timeOf } from "./wallclock";
 
+/** Why a one-off class exists (REQ-31, ADR 0051). Null means not declared. */
+export type ClassPurpose = "makeup" | "trial" | "extra";
 /** A weekly or one-off class rule. Times are local wall-clock. */
 export type ClassSeries = {
   id: string;
@@ -11,9 +13,14 @@ export type ClassSeries = {
   startTime: string;
   durationMinutes: number;
   effectiveUntil: string | null;
+  /** One-offs only. */
+  purpose?: ClassPurpose | null;
+  /** The id of the cancelled exception a makeup replaces. A label, not a credit. */
+  makeupFor?: string | null;
 };
 /** One change to one occurrence, keyed by (seriesId, originalDate). */
 export type ClassException = {
+  id?: string;
   seriesId: string;
   originalDate: string;
   kind: "cancelled" | "moved";
@@ -35,6 +42,7 @@ export type Occurrence = {
   subject: string;
   status: "scheduled" | "cancelled" | "moved";
   kind: "one_off" | "weekly";
+  purpose: ClassPurpose | null;
 };
 
 const keyOf = (seriesId: string, originalDate: string) => `${seriesId}:${originalDate}`;
@@ -74,6 +82,7 @@ function build(s: ClassSeries, originalDate: string, date: string, startTime: st
     subject: s.subject,
     status,
     kind: s.kind,
+    purpose: s.purpose ?? null,
   };
 }
 

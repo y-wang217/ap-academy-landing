@@ -1,5 +1,5 @@
 import type { AvailabilityException, AvailabilityWindow } from "../domain/schedule/availability";
-import type { ClassException, ClassSeries } from "../domain/schedule/recurrence";
+import type { ClassException, ClassPurpose, ClassSeries } from "../domain/schedule/recurrence";
 
 export type WindowRecord = AvailabilityWindow & { id: string; staffId: string; updatedAt: string };
 export type AvailabilityExceptionRecord = AvailabilityException & { id: string; staffId: string; updatedAt: string };
@@ -33,7 +33,8 @@ export type LockedWriteArgs =
   | (Seen & { op: "cancel"; originalDate: string; expectedPosition: Position })
   | (Seen & {
     op: "edit_one_off"; originalDate: string; move: { newDate: string; newStartTime: string } | null;
-    fields: { staffId?: string; subject?: string; durationMinutes?: number }; expectedPosition: Position;
+    /** purpose and makeupFor: null clears, undefined leaves as is. */
+    fields: { staffId?: string; subject?: string; durationMinutes?: number; purpose?: ClassPurpose | null; makeupFor?: string | null }; expectedPosition: Position;
   })
   | (Seen & { op: "split"; fromDate: string; changes: SplitChanges })
   | (Seen & { op: "end_series"; lastDate: string });

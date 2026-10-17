@@ -18,7 +18,7 @@ const names = new Map([[SAM, "Sam Student"], [KIM, "Kim"]]);
 const link = (id: string, date: string) => `https://www.apacademy.ca/tracker/schedule?staffId=${id}&date=${date}`;
 let n = 0;
 const occ = (over: Partial<Occurrence>): Occurrence => ({
-  occurrenceKey: `k${++n}`, seriesId: "s", originalDate: DATE, date: DATE, startTime: "16:00", endTime: "17:00", durationMinutes: 60,
+  occurrenceKey: `k${++n}`, seriesId: "s", purpose: null, originalDate: DATE, date: DATE, startTime: "16:00", endTime: "17:00", durationMinutes: 60,
   startsAt: "", endsAt: "", staffId: RYAN, studentId: SAM, subject: "MHF4U", status: "scheduled", kind: "weekly", ...over,
 });
 const fixture = [occ({}), occ({ startTime: "18:00", endTime: "19:00", studentId: KIM, subject: "SPH3U", kind: "one_off" })];

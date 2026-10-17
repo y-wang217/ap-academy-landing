@@ -33,15 +33,18 @@ const SeriesRow = z.object({
   id: uuid, notion_staff_id: uuid, notion_student_id: uuid, subject: z.string(), kind: z.enum(["one_off", "weekly"]),
   start_date: z.string(), start_time: hhmm, duration_minutes: z.number(), effective_until: z.string().nullable(),
   split_from: uuid.nullable(), updated_at: ts,
+  // Migration 0019 (REQ-31).
+  purpose: z.enum(["makeup", "trial", "extra"]).nullish(), makeup_for: uuid.nullish(),
 }).transform((r): SeriesRecord => ({
   id: r.id, staffId: r.notion_staff_id, studentId: r.notion_student_id, subject: r.subject, kind: r.kind, startDate: r.start_date,
   startTime: r.start_time, durationMinutes: r.duration_minutes, effectiveUntil: r.effective_until, splitFrom: r.split_from, updatedAt: r.updated_at,
+  purpose: r.purpose ?? null, makeupFor: r.makeup_for ?? null,
 }));
 const ExceptionRow = z.object({
-  series_id: uuid, original_date: z.string(), kind: z.enum(["cancelled", "moved"]),
+  id: uuid, series_id: uuid, original_date: z.string(), kind: z.enum(["cancelled", "moved"]),
   new_date: z.string().nullable(), new_start_time: hhmm.nullable(),
 }).transform((r): ClassException => ({
-  seriesId: r.series_id, originalDate: r.original_date, kind: r.kind, newDate: r.new_date, newStartTime: r.new_start_time,
+  id: r.id, seriesId: r.series_id, originalDate: r.original_date, kind: r.kind, newDate: r.new_date, newStartTime: r.new_start_time,
 }));
 
 const SummaryRow = z.object({
@@ -93,6 +96,7 @@ function writeArgs(w: LockedWrite): Record<string, unknown> {
       return {
         staff_id: s.staffId, student_id: s.studentId, subject: s.subject, kind: s.kind, start_date: s.startDate,
         start_time: s.startTime, duration_minutes: s.durationMinutes, effective_until: s.effectiveUntil,
+        purpose: s.purpose ?? null, makeup_for: s.makeupFor ?? null,
       };
     }
     case "move":
@@ -106,8 +110,11 @@ function writeArgs(w: LockedWrite): Record<string, unknown> {
       return {
         series_id: w.seriesId, original_date: w.originalDate,
         ...(w.move ? { new_date: w.move.newDate, new_start_time: w.move.newStartTime } : {}),
-        fields: Object.fromEntries(Object.entries({ staff_id: w.fields.staffId, subject: w.fields.subject, duration_minutes: w.fields.durationMinutes })
-          .filter(([, v]) => v !== undefined)),
+        // undefined drops the key (unchanged); null stays and clears the column.
+        fields: Object.fromEntries(Object.entries({
+          staff_id: w.fields.staffId, subject: w.fields.subject, duration_minutes: w.fields.durationMinutes,
+          purpose: w.fields.purpose, makeup_for: w.fields.makeupFor,
+        }).filter(([, v]) => v !== undefined)),
         expected_updated_at: w.expectedUpdatedAt, expected_position: position(w.expectedPosition),
       };
     case "split": {

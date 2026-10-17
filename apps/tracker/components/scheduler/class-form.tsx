@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CardData } from "@/components/scheduler/class-card";
+import type { ClassPurpose } from "@/lib/domain/schedule/recurrence";
 import { Notice, buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import { isoWeekday } from "@/lib/domain/schedule/wallclock";
 import { api } from "@/lib/scheduler/api-client";
 import { formatDayHeading } from "@/lib/view/availability-text";
+import { clock, dayLabel } from "@/lib/view/calendar-text";
 import { saveErrorMessage } from "@/lib/view/booking-text";
 import { readSaveOutcome, type SaveOutcome } from "@/lib/view/save-notice";
 
@@ -26,6 +28,9 @@ type Props = {
 };
 
 const field = "flex min-w-0 flex-col gap-1 text-sm";
+type Cancellation = { exceptionId: string; date: string; startTime: string; subject: string };
+/** The cancellations loaded for one student; while none match the student shown, it is loading. */
+type Loaded = { studentId: string; list: Cancellation[] | null };
 
 /**
  * Book, edit or cancel one class in a native dialog. Fully usable by keyboard
@@ -47,6 +52,10 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
   const [duration, setDuration] = useState(String(card?.durationMinutes ?? 60));
   const [repeats, setRepeats] = useState(false);
   const [until, setUntil] = useState("");
+  // REQ-31: a one-off says why it exists. "" is not set: required on create, allowed to stay when editing a legacy row.
+  const [purpose, setPurpose] = useState<ClassPurpose | "">(card?.purpose ?? "");
+  const [makeupFor, setMakeupFor] = useState("");
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -54,6 +63,19 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
     const d = dialog.current;
     if (d && !d.open) d.showModal();
   }, []);
+
+  const asksPurpose = (mode.kind === "create" && !repeats) || (mode.kind === "edit" && card!.kind === "one_off");
+  const purposeStudent = mode.kind === "create" ? studentId : card?.studentId ?? "";
+  const wantsReplaces = asksPurpose && purpose === "makeup" && !!purposeStudent;
+  const replaces = loaded && loaded.studentId === purposeStudent ? loaded.list : undefined;
+  useEffect(() => {
+    if (!wantsReplaces) return;
+    let live = true;
+    api.get<{ cancellations: Cancellation[] }>(`/classes/cancellations?studentId=${encodeURIComponent(purposeStudent)}`).then((r) => {
+      if (live) setLoaded({ studentId: purposeStudent, list: r.ok ? r.data.cancellations : null });
+    });
+    return () => { live = false; };
+  }, [wantsReplaces, purposeStudent]);
 
   const teacherName = (id: string) => teachers.find((t) => t.id === id)?.name ?? "The teacher";
   // On a weekly class "this class only" can only move the date and time; teacher, subject and length belong to "this class and future".
@@ -73,9 +95,11 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
       if (!studentId) return setError("Choose a student.");
       if (!subject.trim()) return setError("Enter a subject.");
       if (!date) return setError("Choose a date.");
+      if (!repeats && !purpose) return setError("Choose a purpose.");
       const body = {
         staffId, studentId, subject: subject.trim(), kind: repeats ? "weekly" : "one_off", startDate: date, startTime,
         durationMinutes: minutes, effectiveUntil: repeats && until ? until : null,
+        ...(repeats ? {} : { purpose, makeupFor: purpose === "makeup" && makeupFor ? makeupFor : null }),
       };
       call = api.send("POST", "/classes", `create:${JSON.stringify(body)}`, body);
     } else {
@@ -94,6 +118,8 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
             if (staffId !== c.staffId) changes.staffId = staffId;
             if (subject.trim() !== c.subject) changes.subject = subject.trim();
             if (minutes !== c.durationMinutes) changes.durationMinutes = minutes;
+            if ((purpose || null) !== (c.purpose ?? null)) changes.purpose = purpose || null;
+            if (purpose === "makeup" && makeupFor) changes.makeupFor = makeupFor;
           }
         } else {
           if (isoWeekday(date) !== isoWeekday(c.date)) changes.weekday = isoWeekday(date);
@@ -190,6 +216,34 @@ export function ClassForm({ mode, teachers, students, defaultStaffId, today, onC
               </label>
             )}
             {!students && <Notice tone="warn">Student list could not be loaded.</Notice>}
+          </>
+        )}
+
+        {asksPurpose && (
+          <>
+            <label className={field}>
+              <span className="font-medium">Purpose</span>
+              <select className={inputClass} value={purpose} onChange={(e) => { setPurpose(e.target.value as ClassPurpose | ""); setMakeupFor(""); }} required={mode.kind === "create"} data-field="purpose">
+                <option value="">{mode.kind === "edit" && !card?.purpose ? "Not set" : "Choose a purpose"}</option>
+                <option value="makeup">Makeup</option>
+                <option value="trial">Trial</option>
+                <option value="extra">Extra</option>
+              </select>
+            </label>
+            {wantsReplaces && (
+              <label className={field}>
+                <span className="font-medium">Replaces (optional)</span>
+                {replaces === undefined && <span className="text-xs text-text-muted">Loading cancelled classes</span>}
+                {replaces === null && <Notice tone="warn">Cancelled classes could not load.</Notice>}
+                {replaces && (
+                  <select className={inputClass} value={makeupFor} onChange={(e) => setMakeupFor(e.target.value)} data-field="replaces">
+                    {/* An edit does not know the current link; leaving this alone keeps it. */}
+                    <option value="">{mode.kind === "edit" ? "No change" : "None"}</option>
+                    {replaces.map((x) => (<option key={x.exceptionId} value={x.exceptionId}>{`${dayLabel(x.date)} · ${x.subject} ${clock(x.startTime)}`}</option>))}
+                  </select>
+                )}
+              </label>
+            )}
           </>
         )}
 

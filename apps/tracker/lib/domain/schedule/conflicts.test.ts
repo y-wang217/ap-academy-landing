@@ -13,7 +13,7 @@ const win = (weekday: number, startTime: string, endTime: string): AvailabilityW
   weekday, startTime, endTime, effectiveFrom: "2026-01-01", effectiveUntil: null,
 });
 const occ = (date: string, startTime: string, endTime: string, over: Partial<Occurrence> = {}): Occurrence => ({
-  occurrenceKey: `k-${date}-${startTime}`, seriesId: "s", originalDate: date, date, startTime, endTime, durationMinutes: 60,
+  occurrenceKey: `k-${date}-${startTime}`, seriesId: "s", purpose: null, originalDate: date, date, startTime, endTime, durationMinutes: 60,
   startsAt: "", endsAt: "", staffId: A, studentId: "st", subject: "MHF4U", status: "scheduled", kind: "weekly", ...over,
 });
 const avail = (staff: string, windows: AvailabilityWindow[], exceptions: AvailabilityException[] = []) =>

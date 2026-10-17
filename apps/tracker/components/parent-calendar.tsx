@@ -5,25 +5,27 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, Empty, Notice } from "@/components/ui";
 import type { ChildHeader } from "@/lib/data/parent-calendar";
 import type { CalendarClass, ClassState, Day, MonthView } from "@/lib/domain/schedule/month";
-import { STATE_LABEL, cellLabel, clock, dayDots, dayLabel, fullDate, monthLabel, movedNote, summaryLine } from "@/lib/view/calendar-text";
+import { STATE_LABEL, cellLabel, clock, dayDots, dayLabel, fullDate, makeupNote, monthLabel, movedNote, summaryLine } from "@/lib/view/calendar-text";
 
-// Tones per ADR 0047: Scheduled ok, Moved warn, Makeup neutral, Cancelled error (struck and muted). Never per course.
+// Tones per ADR 0047 and 0051: Scheduled ok, Moved warn, the one-off words (Makeup, Trial, Extra, Class) neutral,
+// Cancelled error (struck and muted). Never per course.
+const oneOff = (neutral: string) => ({ makeup: neutral, trial: neutral, extra: neutral, class: neutral });
 const DOT: Record<ClassState, string> = {
   scheduled: "bg-ok",
   moved: "bg-warn",
-  makeup: "border border-text-primary bg-surface",
+  ...oneOff("border border-text-primary bg-surface"),
   cancelled: "bg-error",
 };
 const BLOCK: Record<ClassState, string> = {
   scheduled: "bg-ok-bg text-ok",
   moved: "bg-warn-bg text-warn",
-  makeup: "border border-border bg-surface text-text-primary",
+  ...oneOff("border border-border bg-surface text-text-primary"),
   cancelled: "bg-error-bg text-text-muted line-through",
 };
 const PILL: Record<ClassState, string> = {
   scheduled: "bg-ok-bg text-ok",
   moved: "bg-warn-bg text-warn",
-  makeup: "border border-border bg-surface text-text-primary",
+  ...oneOff("border border-border bg-surface text-text-primary"),
   cancelled: "bg-error-bg text-error",
 };
 const WEEK_HEAD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -163,6 +165,7 @@ function ClassRow({ c, teacher, showDay }: { c: CalendarClass; teacher: string; 
           <p className="text-sm">{`${c.subject} · ${teacher}`}</p>
         </div>
         {c.state === "moved" && <p className="text-xs text-text-muted">{movedNote(c)}</p>}
+        {c.makeupFor && <p className="text-xs text-text-muted" data-makeup-note>{makeupNote(c)}</p>}
       </div>
       <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PILL[c.state]}`}>{STATE_LABEL[c.state]}</span>
     </li>

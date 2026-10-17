@@ -78,3 +78,7 @@ Three corrections the designer applies; the mocks are not resent:
 1. Calendar, 375px: the dots use a different colour per course. Dots carry state (scheduled, moved, cancelled), the same tones as the 720px blocks and the week list. Never a per-course hue.
 2. Billing: the sample data nets the Oct 3 credit off the October invoice. Under the ops rule (OPS SYSTEM, "Missed sessions and credits", 2026-10-15) an Open credit nets off the next invoice. The design shows it on November.
 3. Grades: the line under the numbers repeats "Average of 4 graded courses. 1.8 below target." That slot is the story line (ADR 0032), not a restatement.
+
+---
+
+Amendment 2026-10-17 (REQ-31, tracker ADR 0051). The text above is kept as written. Since REQ-31 the Calendar summary reads "N classes this month · P past · U upcoming" (past, not done: it only says the end time has passed), and a one-off class shows the purpose the owner declared (Makeup, Trial or Extra, or "Class" when none is set) instead of always "Makeup". A makeup that names the class it replaces shows "Makeup for Tue Oct 13".

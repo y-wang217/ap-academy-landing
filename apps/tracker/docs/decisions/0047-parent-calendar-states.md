@@ -1,5 +1,5 @@
 # 0047: Parent Calendar states, makeups and the not-available rule
-Status: accepted
+Status: accepted in part; States (makeup) and Counts superseded by 0051
 Date: 2026-10-16
 
 ## Context

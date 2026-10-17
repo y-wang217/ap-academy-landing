@@ -191,7 +191,7 @@ describe("AC10, AC11: class writes refresh today's task", () => {
     // Today's class so the fingerprint differs and a Notion call is needed.
     w.daily.occurrencesOn = async () => [{
       occurrenceKey: "k", seriesId: "s", originalDate: TODAY, date: TODAY, startTime: "16:00", endTime: "17:00", durationMinutes: 60, startsAt: "", endsAt: "",
-      staffId: A, studentId: STUDENT, subject: "MHF4U", status: "scheduled", kind: "weekly",
+      staffId: A, studentId: STUDENT, subject: "MHF4U", status: "scheduled", kind: "weekly", purpose: null,
     }];
     const res = await handleCreateClass(deps(admin, store, w.daily), newClass());
     expect(res.status).toBe(201);
