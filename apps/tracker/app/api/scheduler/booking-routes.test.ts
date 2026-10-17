@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  handleCancelOccurrence, handleCreateClass, handleEditOccurrence, handleOccurrences,
+  handleCancelOccurrence, handleCreateClass, handleEditOccurrence, handleOccurrences, handleStudentCancellations,
 } from "../../../lib/scheduler/schedule-handlers";
-import type { ScheduleStore, SeriesRecord } from "../../../lib/scheduler/schedule-store";
+import type { LockedWrite, ScheduleStore, SeriesRecord } from "../../../lib/scheduler/schedule-store";
 import { fixture, KUBY, MIA, REQ, RYAN, S1, S2, teacher, WRITES } from "./booking-world.fake";
 
 const json = async (r: Response) => ({ status: r.status, body: await r.json() });
@@ -431,4 +431,179 @@ describe("REQ-30 AC14: storage refuses the write", () => {
       expect(f.exceptions).toHaveLength(before.exceptions);
     });
   }
+});
+
+describe("REQ-31 AC9: one-off purpose and makeup link on create", () => {
+  const X = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1";
+  /** S2's weekly class with Kuby, cancelled on Wed 2026-10-21, as exception X. */
+  const withCancel = async () => {
+    const f = await fixture();
+    f.exceptions.push({ id: X, seriesId: f.s2.id, originalDate: "2026-10-21", kind: "cancelled", newDate: null, newStartTime: null, requestId: REQ(900) });
+    return f;
+  };
+  it("stores each purpose, and null when none is sent", async () => {
+    const f = await fixture();
+    for (const [i, purpose] of (["makeup", "trial", "extra", null] as const).entries()) {
+      const r = await json(await handleCreateClass(f.deps(), create({ requestId: REQ(200 + i), startDate: "2026-10-20", startTime: `1${5 + i}:00`, ...(purpose ? { purpose } : {}) })));
+      expect(r.status).toBe(201);
+      expect(r.body.series).toMatchObject({ purpose, makeupFor: null });
+      expect((await f.store.getSeries(r.body.series.id))!.purpose ?? null).toBe(purpose);
+    }
+  });
+  it("a purpose on a weekly class is 400 and writes nothing", async () => {
+    const f = await fixture();
+    f.begin();
+    expect((await handleCreateClass(f.deps(), create({ kind: "weekly", purpose: "trial", startTime: "19:00" }))).status).toBe(400);
+    expect(f.writes).toEqual([]);
+  });
+  it("a valid link to the student's cancellation is 201 and stored", async () => {
+    const f = await withCancel();
+    const r = await json(await handleCreateClass(f.deps(), create({ purpose: "makeup", makeupFor: X })));
+    expect(r.status).toBe(201);
+    expect(r.body.series).toMatchObject({ purpose: "makeup", makeupFor: X });
+    expect((await f.store.getSeries(r.body.series.id))!.makeupFor).toBe(X);
+  });
+  it("a link with purpose trial is 422 invalid_makeup_for and writes nothing", async () => {
+    const f = await withCancel();
+    f.begin();
+    expect(await json(await handleCreateClass(f.deps(), create({ purpose: "trial", makeupFor: X })))).toMatchObject({ status: 422, body: { error: "invalid_makeup_for" } });
+    expect(await json(await handleCreateClass(f.deps(), create({ requestId: REQ(2), makeupFor: X })))).toMatchObject({ status: 422, body: { error: "invalid_makeup_for" } });
+    expect(f.writes).toEqual([]);
+  });
+  it("a link to another student's cancellation is 422", async () => {
+    const f = await withCancel();
+    f.begin();
+    // X is S2's; this makeup is for S1 (with Ryan on Tue).
+    expect(await json(await handleCreateClass(f.deps(), create({ studentId: S1, purpose: "makeup", makeupFor: X })))).toMatchObject({ status: 422, body: { error: "invalid_makeup_for" } });
+    expect(f.writes).toEqual([]);
+  });
+  it("a link to a moved exception, or to no exception, is 422", async () => {
+    const f = await withCancel();
+    f.exceptions[0] = { ...f.exceptions[0], kind: "moved", newDate: "2026-10-22", newStartTime: "17:00" };
+    f.begin();
+    expect(await json(await handleCreateClass(f.deps(), create({ purpose: "makeup", makeupFor: X })))).toMatchObject({ status: 422, body: { error: "invalid_makeup_for" } });
+    expect(await json(await handleCreateClass(f.deps(), create({ requestId: REQ(3), purpose: "makeup", makeupFor: REQ(999) })))).toMatchObject({ status: 422, body: { error: "invalid_makeup_for" } });
+    expect(f.writes).toEqual([]);
+  });
+});
+
+describe("REQ-31 AC10: purpose and link on a one-off edit", () => {
+  const X = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1";
+  /** S2's Wed 2026-10-21 cancellation X, and a Thu 18:00 one-off makeup for S2 linked to it. */
+  const linked = async () => {
+    const f = await fixture();
+    f.exceptions.push({ id: X, seriesId: f.s2.id, originalDate: "2026-10-21", kind: "cancelled", newDate: null, newStartTime: null, requestId: REQ(900) });
+    const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00", purpose: "makeup", makeupFor: X });
+    const sent: LockedWrite[] = [];
+    const deps = f.deps();
+    deps.store = { ...f.store, lockedWrite: async (w: LockedWrite) => { sent.push(w); return f.store.lockedWrite(w); } } as ScheduleStore;
+    return { ...f, one, sent, d: deps };
+  };
+  it("saves a purpose and a link through the one-off write", async () => {
+    const f = await fixture();
+    f.exceptions.push({ id: X, seriesId: f.s2.id, originalDate: "2026-10-21", kind: "cancelled", newDate: null, newStartTime: null, requestId: REQ(900) });
+    const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00" });
+    const r = await json(await handleEditOccurrence(f.deps(), one.id, "2026-10-22", edit(one, { changes: { purpose: "makeup", makeupFor: X } })));
+    expect(r.status).toBe(200);
+    expect(r.body.series).toMatchObject({ purpose: "makeup", makeupFor: X });
+    expect(await f.store.getSeries(one.id)).toMatchObject({ purpose: "makeup", makeupFor: X });
+  });
+  it("is stale-checked", async () => {
+    const f = await fixture();
+    const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00" });
+    f.begin();
+    expect(await json(await handleEditOccurrence(f.deps(), one.id, "2026-10-22", { requestId: REQ(55), expectedUpdatedAt: "2020-01-01T00:00:00.000Z", changes: { purpose: "trial" } })))
+      .toMatchObject({ status: 409, body: { error: "stale" } });
+    expect(f.writes).toEqual([]);
+  });
+  it("either field on a weekly series is 400", async () => {
+    const f = await fixture();
+    f.begin();
+    for (const changes of [{ purpose: "trial" }, { purpose: null }, { makeupFor: X }]) {
+      expect(await json(await handleEditOccurrence(f.deps(), f.s1.id, "2026-10-26", edit(f.s1, { changes })))).toMatchObject({ status: 400, body: { error: "one_off_only" } });
+      expect(await json(await handleEditOccurrence(f.deps(), f.s1.id, "2026-10-26", edit(f.s1, { scope: "future", changes })))).toMatchObject({ status: 400, body: { error: "one_off_only" } });
+    }
+    expect(f.writes).toEqual([]);
+  });
+  it("purpose null on a linked makeup clears the link in the same single write", async () => {
+    const f = await linked();
+    const r = await json(await handleEditOccurrence(f.d, f.one.id, "2026-10-22", edit(f.one, { changes: { purpose: null } })));
+    expect(r.status).toBe(200);
+    expect(f.sent).toHaveLength(1);
+    expect(f.sent[0]).toMatchObject({ op: "edit_one_off", fields: { purpose: null, makeupFor: null } });
+    expect(await f.store.getSeries(f.one.id)).toMatchObject({ purpose: null, makeupFor: null });
+  });
+  it("purpose trial on a linked makeup clears the link in the same single write", async () => {
+    const f = await linked();
+    const r = await json(await handleEditOccurrence(f.d, f.one.id, "2026-10-22", edit(f.one, { changes: { purpose: "trial" } })));
+    expect(r.status).toBe(200);
+    expect(f.sent).toHaveLength(1);
+    expect(f.sent[0]).toMatchObject({ op: "edit_one_off", fields: { purpose: "trial", makeupFor: null } });
+  });
+  it("purpose extra with a link is 422 and writes nothing", async () => {
+    const f = await linked();
+    f.begin();
+    expect(await json(await handleEditOccurrence(f.d, f.one.id, "2026-10-22", edit(f.one, { changes: { purpose: "extra", makeupFor: X } }))))
+      .toMatchObject({ status: 422, body: { error: "invalid_makeup_for" } });
+    expect(f.sent).toEqual([]);
+  });
+  it("a link on a series whose purpose is not makeup is 422", async () => {
+    const f = await fixture();
+    f.exceptions.push({ id: X, seriesId: f.s2.id, originalDate: "2026-10-21", kind: "cancelled", newDate: null, newStartTime: null, requestId: REQ(900) });
+    const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00", purpose: "trial" });
+    f.begin();
+    expect(await json(await handleEditOccurrence(f.deps(), one.id, "2026-10-22", edit(one, { changes: { makeupFor: X } }))))
+      .toMatchObject({ status: 422, body: { error: "invalid_makeup_for" } });
+    expect(f.writes).toEqual([]);
+  });
+});
+
+describe("REQ-31 AC11: the student's cancellations", () => {
+  // Today is 2026-10-19: the window is 2026-08-24 (day -56) to 2026-11-16 (day +28).
+  const seedCancels = async () => {
+    const f = await fixture();
+    const id = (n: number) => `eeeeeeee-eeee-4eee-8eee-${String(n).padStart(12, "0")}`;
+    const at = (n: number, seriesId: string, date: string, kind: "cancelled" | "moved" = "cancelled") =>
+      f.exceptions.push({ id: id(n), seriesId, originalDate: date, kind, newDate: kind === "moved" ? "2026-10-30" : null, newStartTime: kind === "moved" ? "18:00" : null, requestId: REQ(900 + n) });
+    // S1's weekly class is Mondays from 2026-10-19; an older S1 series gives the past dates.
+    const old = await f.seed({ startDate: "2026-08-03", effectiveUntil: "2026-10-12", subject: "SCH4U", startTime: "15:00" });
+    at(1, old.id, "2026-08-24"); // day -56: in
+    at(2, old.id, "2026-08-17"); // day -63 (-57 is not a Monday): out
+    at(3, f.s1.id, "2026-11-16"); // day +28: in
+    at(4, f.s1.id, "2026-11-23"); // day +35 (+29 is not a Monday): out
+    at(5, f.s1.id, "2026-10-26", "moved"); // a move: never listed
+    at(6, f.s2.id, "2026-10-21"); // S2's: never in S1's list
+    return { f, id };
+  };
+  const ask = (deps: Parameters<typeof handleStudentCancellations>[0], studentId: string) =>
+    handleStudentCancellations(deps, new URLSearchParams({ studentId }));
+  it("returns the window's cancellations, newest first, with date, start time and subject", async () => {
+    const { f, id } = await seedCancels();
+    const r = await json(await ask(f.deps(), S1));
+    expect(r.status).toBe(200);
+    expect(r.body.cancellations).toEqual([
+      { exceptionId: id(3), date: "2026-11-16", startTime: "16:00", subject: "MHF4U" },
+      { exceptionId: id(1), date: "2026-08-24", startTime: "15:00", subject: "SCH4U" },
+    ]);
+  });
+  it("keeps the edges exactly: day -56 and +28 in, -57 and +29 out", async () => {
+    const f = await fixture();
+    const one = (date: string) => f.seed({ kind: "one_off", startDate: date, startTime: "09:00" });
+    const dates = ["2026-08-23", "2026-08-24", "2026-11-16", "2026-11-17"];
+    for (const [i, date] of dates.entries()) {
+      const s = await one(date);
+      f.exceptions.push({ id: `eeeeeeee-eeee-4eee-8eee-00000000010${i}`, seriesId: s.id, originalDate: date, kind: "cancelled", newDate: null, newStartTime: null, requestId: REQ(950 + i) });
+    }
+    const got = (await json(await ask(f.deps(), S1))).body.cancellations.map((c: { date: string }) => c.date);
+    expect(got).toEqual(["2026-11-16", "2026-08-24"]);
+  });
+  it("is admin only: a teacher gets 403", async () => {
+    const { f } = await seedCancels();
+    expect((await ask(f.deps(teacher), S1)).status).toBe(403);
+  });
+  it("a bad studentId is 400", async () => {
+    const { f } = await seedCancels();
+    expect((await ask(f.deps(), "nope")).status).toBe(400);
+    expect((await handleStudentCancellations(f.deps(), new URLSearchParams())).status).toBe(400);
+  });
 });

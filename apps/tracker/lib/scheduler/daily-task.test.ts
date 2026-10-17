@@ -16,7 +16,7 @@ const DATE = "2026-10-19";
 const mk = (id: string, name: string, over: Partial<StaffRecord> = {}): StaffRecord => ({ id, name, email: null, functions: ["Teacher"], status: "Active", subjects: [], ...over });
 const STAFF = [mk(RYAN, "Ryan Test"), mk(KUBY, "Kuby Test"), mk(SARA, "Sara", { functions: ["Setter"] }), mk(OLU, "Olu", { status: "Inactive" })];
 const occ = (over: Partial<Occurrence>): Occurrence => ({
-  occurrenceKey: Math.random().toString(), seriesId: "s", originalDate: DATE, date: DATE, startTime: "16:00", endTime: "17:00", durationMinutes: 60, startsAt: "", endsAt: "",
+  occurrenceKey: Math.random().toString(), seriesId: "s", purpose: null, originalDate: DATE, date: DATE, startTime: "16:00", endTime: "17:00", durationMinutes: 60, startsAt: "", endsAt: "",
   staffId: RYAN, studentId: SAM, subject: "MHF4U", status: "scheduled", kind: "weekly", ...over,
 });
 

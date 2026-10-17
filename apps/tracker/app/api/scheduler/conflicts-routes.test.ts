@@ -113,7 +113,7 @@ describe("GET conflicts (AC8)", () => {
     expect(res.status).toBe(200);
     expect(res.body.conflicts.length).toBeGreaterThan(0);
     expect(Object.keys(res.body.conflicts[0]).sort()).toEqual([
-      "date", "durationMinutes", "endTime", "endsAt", "kind", "occurrenceKey", "originalDate", "reason", "seriesId",
+      "date", "durationMinutes", "endTime", "endsAt", "kind", "occurrenceKey", "originalDate", "purpose", "reason", "seriesId",
       "staffId", "startTime", "startsAt", "status", "studentId", "subject",
     ]);
     expect(JSON.stringify(res.body)).not.toMatch(/seriesUpdatedAt|notEntered|example\.com/);

@@ -2,11 +2,12 @@ import { expandOccurrences, type ClassException, type ClassSeries, type Occurren
 import { addDays, isoWeekday } from "./wallclock";
 
 /**
- * One month of a child's classes for the parent Calendar tab (REQ-24, ADR 0047).
+ * One month of a child's classes for the parent Calendar tab (REQ-24, ADR 0047;
+ * states and counts as amended by REQ-31, ADR 0051).
  * Pure: `today` (YYYY-MM-DD, Toronto) and `now` (an ISO instant) are arguments.
  * Months are `YYYY-MM`. Weeks run Sunday to Saturday.
  */
-export type ClassState = "scheduled" | "moved" | "cancelled" | "makeup";
+export type ClassState = "scheduled" | "moved" | "cancelled" | "makeup" | "trial" | "extra" | "class";
 export type CalendarClass = {
   key: string;
   date: string;
@@ -17,11 +18,13 @@ export type CalendarClass = {
   state: ClassState;
   /** Where a moved class came from; null for every other state. */
   original: { date: string; startTime: string } | null;
-  /** The end time has passed. */
-  done: boolean;
+  /** The end time has passed. Says nothing about whether the lesson was taught. */
+  past: boolean;
+  /** For a makeup: the original date of the cancelled class it replaces, while that exception is still a cancellation. */
+  makeupFor: string | null;
 };
 export type Day = { date: string; inMonth: boolean; isToday: boolean; classes: CalendarClass[] };
-export type MonthSummary = { total: number; done: number; upcoming: number };
+export type MonthSummary = { total: number; past: number; upcoming: number };
 export type MonthView = {
   month: string;
   prev: string;
@@ -57,16 +60,19 @@ export function sundayWeekOf(date: string): { from: string; to: string } {
   return { from, to: addDays(from, 6) };
 }
 
-/** Decision 3: a scheduled occurrence of a one-off series is a makeup; a moved one stays Moved. */
-export function classState(o: Pick<Occurrence, "status" | "kind">): ClassState {
+/** ADR 0051: a scheduled one-off says its declared purpose, or "class" when none is set; moved and cancelled win. */
+export function classState(o: Pick<Occurrence, "status" | "kind" | "purpose">): ClassState {
   if (o.status === "cancelled") return "cancelled";
   if (o.status === "moved") return "moved";
-  return o.kind === "one_off" ? "makeup" : "scheduled";
+  if (o.kind === "weekly") return "scheduled";
+  return o.purpose ?? "class";
 }
 
 export function buildMonth(input: { series: ClassSeries[]; exceptions: ClassException[]; month: string; today: string; now: string }): MonthView {
   const { series, exceptions, month, today, now } = input;
   const startOf = new Map(series.map((s) => [s.id, s.startTime]));
+  const linkOf = new Map(series.map((s) => [s.id, s.makeupFor ?? null]));
+  const cancelledOn = new Map(exceptions.filter((e) => e.id && e.kind === "cancelled").map((e) => [e.id!, e.originalDate]));
   const nowMs = Date.parse(now);
   const toClass = (o: Occurrence): CalendarClass => {
     const state = classState(o);
@@ -79,7 +85,8 @@ export function buildMonth(input: { series: ClassSeries[]; exceptions: ClassExce
       staffId: o.staffId,
       state,
       original: state === "moved" ? { date: o.originalDate, startTime: startOf.get(o.seriesId) ?? o.startTime } : null,
-      done: Date.parse(o.endsAt) <= nowMs,
+      past: Date.parse(o.endsAt) <= nowMs,
+      makeupFor: state === "makeup" ? (cancelledOn.get(linkOf.get(o.seriesId) ?? "") ?? null) : null,
     };
   };
   const byTime = (a: CalendarClass, b: CalendarClass) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.key.localeCompare(b.key);
@@ -98,7 +105,7 @@ export function buildMonth(input: { series: ClassSeries[]; exceptions: ClassExce
   }
 
   const live = classes.filter((c) => c.state !== "cancelled");
-  const done = live.filter((c) => c.done).length;
+  const past = live.filter((c) => c.past).length;
   const thisWeek = expandOccurrences(series, exceptions, sundayWeekOf(today)).map(toClass).sort(byTime);
 
   return {
@@ -107,7 +114,7 @@ export function buildMonth(input: { series: ClassSeries[]; exceptions: ClassExce
     next: shiftMonth(month, 1),
     today,
     weeks,
-    summary: { total: live.length, done, upcoming: live.length - done },
+    summary: { total: live.length, past, upcoming: live.length - past },
     thisWeek,
   };
 }

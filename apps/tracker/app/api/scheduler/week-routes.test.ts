@@ -139,6 +139,17 @@ describe("GET week: admin (AC3, AC4)", () => {
     expect(text).not.toContain("seriesUpdatedAt");
     expect(text).not.toContain("Weekly Schedule");
   });
+  it("occurrences carry purpose in both shapes (REQ-31 AC14)", async () => {
+    const r = rows();
+    r.series[1] = { ...r.series[1], purpose: "makeup" };
+    for (const who of [admin, teacher]) {
+      const res = await get(deps(who, fakeStore(r).store), `date=2026-10-19&staffId=${A}`);
+      expect(res.status).toBe(200);
+      const occ = res.body.teachers[0].occurrences as { kind: string; purpose: string | null }[];
+      expect(occ.find((o) => o.kind === "one_off")!.purpose).toBe("makeup");
+      expect(occ.filter((o) => o.kind === "weekly").every((o) => o.purpose === null)).toBe(true);
+    }
+  });
   it("strict schemas reject extra fields", () => {
     const t = {
       weekStart: "2026-10-19", today: "2026-10-19", namesLoaded: true,

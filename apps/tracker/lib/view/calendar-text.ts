@@ -1,20 +1,34 @@
 import { greetingName } from "../domain/schedule/daily-texts";
 import { sundayWeekOf, type CalendarClass, type ClassState, type MonthSummary } from "../domain/schedule/month";
+import type { ClassPurpose } from "../domain/schedule/recurrence";
 
-// Words and tones for the parent Calendar tab (REQ-24, ADR 0047). Pure.
+// Words and tones for the parent Calendar tab (REQ-24, ADR 0047, ADR 0051). Pure.
+
+export const PURPOSE_LABEL: Record<ClassPurpose, string> = {
+  makeup: "Makeup",
+  trial: "Trial",
+  extra: "Extra",
+};
+
+/** A one-off's word: its declared purpose, or "Class", never "Makeup" by default. */
+export const oneOffLabel = (purpose: ClassPurpose | null | undefined) => (purpose ? PURPOSE_LABEL[purpose] : "Class");
 
 export const STATE_LABEL: Record<ClassState, string> = {
   scheduled: "Scheduled",
   moved: "Moved",
   cancelled: "Cancelled",
-  makeup: "Makeup",
+  ...PURPOSE_LABEL,
+  class: "Class",
 };
 
-/** Decision 5: every state also has its word, so colour is never the only signal. */
+/** Decision 5: every state also has its word, so colour is never the only signal. The one-off states share neutral. */
 export const STATE_TONE: Record<ClassState, "ok" | "warn" | "neutral" | "error"> = {
   scheduled: "ok",
   moved: "warn",
   makeup: "neutral",
+  trial: "neutral",
+  extra: "neutral",
+  class: "neutral",
   cancelled: "error",
 };
 
@@ -27,7 +41,7 @@ const parts = (date: string) => {
 
 export function summaryLine(s: MonthSummary): string {
   if (s.total === 0) return "No classes this month.";
-  return `${s.total} ${s.total === 1 ? "class" : "classes"} this month · ${s.done} done · ${s.upcoming} upcoming`;
+  return `${s.total} ${s.total === 1 ? "class" : "classes"} this month · ${s.past} past · ${s.upcoming} upcoming`;
 }
 
 /** "17:30" -> "5:30 PM". */
@@ -60,6 +74,11 @@ export function movedNote(c: CalendarClass): string {
   const sameWeek = sundayWeekOf(c.original.date).from === sundayWeekOf(c.date).from;
   const day = sameWeek ? dayLabel(c.original.date).slice(0, 3) : `${dayLabel(c.original.date)},`;
   return `Moved from ${day} ${clock(c.original.startTime)}`;
+}
+
+/** "Makeup for Tue Oct 13" when the makeup names the class it replaces. Only a label (ADR 0051). */
+export function makeupNote(c: CalendarClass): string {
+  return c.makeupFor ? `Makeup for ${dayLabel(c.makeupFor)}` : "";
 }
 
 export const teacherFirstName = (name: string) => greetingName(name);

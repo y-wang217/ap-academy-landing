@@ -16,7 +16,7 @@ const week = [1, 2, 3, 4, 5].map((d) => win(d));
 const avail = (staff: string, windows: AvailabilityWindow[], exceptions: AvailabilityException[] = []): Map<string, StaffAvailability> =>
   new Map([[staff, { days: computeAvailability(windows, exceptions, RANGE), exceptions }]]);
 const occ = (date: string, startTime: string, endTime: string, over: Partial<Occurrence> = {}): Occurrence => ({
-  occurrenceKey: `k-${over.staffId ?? RYAN}-${date}-${startTime}`, seriesId: "s", originalDate: date, date, startTime, endTime,
+  occurrenceKey: `k-${over.staffId ?? RYAN}-${date}-${startTime}`, seriesId: "s", purpose: null, originalDate: date, date, startTime, endTime,
   durationMinutes: 60, startsAt: "", endsAt: "", staffId: RYAN, studentId: S1, subject: "MHF4U", status: "scheduled", kind: "weekly", ...over,
 });
 const base = { checkAvailability: true, today: TODAY };
