@@ -30,7 +30,7 @@ describe("buildMonth dates (AC1)", () => {
 });
 
 describe("states (AC2)", () => {
-  it("cancelled, moved with original slot, makeup and scheduled", () => {
+  it("cancelled, moved with original slot, one-off and scheduled", () => {
     const one = series({ id: "s-one", kind: "one_off", startDate: "2026-10-22", startTime: "18:00" });
     const exc: ClassException[] = [
       { seriesId: "s-tue", originalDate: "2026-10-06", kind: "cancelled", newDate: null, newStartTime: null },
@@ -41,7 +41,7 @@ describe("states (AC2)", () => {
     expect(byDate["2026-10-15"].state).toBe("moved");
     expect(byDate["2026-10-15"].original).toEqual({ date: "2026-10-13", startTime: "17:30" });
     expect(byDate["2026-10-15"].startTime).toBe("16:00");
-    expect(byDate["2026-10-22"].state).toBe("makeup");
+    expect(byDate["2026-10-22"].state).toBe("class");
     expect(byDate["2026-10-22"].original).toBeNull();
     expect(byDate["2026-10-20"].state).toBe("scheduled");
   });
@@ -53,11 +53,54 @@ describe("states (AC2)", () => {
     expect(c.date).toBe("2026-10-23");
   });
   it("classState maps each occurrence shape", () => {
-    const o = (status: Occurrence["status"], kind: Occurrence["kind"]) => ({ status, kind }) as Occurrence;
+    const o = (status: Occurrence["status"], kind: Occurrence["kind"], purpose: Occurrence["purpose"] = null) => ({ status, kind, purpose }) as Occurrence;
     expect(classState(o("cancelled", "one_off"))).toBe("cancelled");
     expect(classState(o("moved", "weekly"))).toBe("moved");
-    expect(classState(o("scheduled", "one_off"))).toBe("makeup");
     expect(classState(o("scheduled", "weekly"))).toBe("scheduled");
+  });
+});
+
+describe("one-off purpose (REQ-31 AC4, AC5)", () => {
+  const o = (status: Occurrence["status"], kind: Occurrence["kind"], purpose: Occurrence["purpose"]) => ({ status, kind, purpose }) as Occurrence;
+  it("a scheduled one-off is labelled by its purpose, and Class when none is set", () => {
+    expect(classState(o("scheduled", "one_off", null))).toBe("class");
+    expect(classState(o("scheduled", "one_off", "makeup"))).toBe("makeup");
+    expect(classState(o("scheduled", "one_off", "trial"))).toBe("trial");
+    expect(classState(o("scheduled", "one_off", "extra"))).toBe("extra");
+  });
+  it("cancelled and moved win over any purpose", () => {
+    for (const p of [null, "makeup", "trial", "extra"] as const) {
+      expect(classState(o("cancelled", "one_off", p))).toBe("cancelled");
+      expect(classState(o("moved", "one_off", p))).toBe("moved");
+    }
+  });
+  it("buildMonth carries the series purpose to the class", () => {
+    const trial = series({ id: "s-trial", kind: "one_off", startDate: "2026-10-22", purpose: "trial" });
+    const legacy = series({ id: "s-legacy", kind: "one_off", startDate: "2026-10-23" });
+    const byDate = Object.fromEntries(monthClasses(build([trial, legacy])).map((c) => [c.date, c]));
+    expect(byDate["2026-10-22"].state).toBe("trial");
+    expect(byDate["2026-10-23"].state).toBe("class");
+  });
+});
+
+describe("makeup link (REQ-31 AC7)", () => {
+  const cancelled: ClassException = { id: "x-1", seriesId: "s-tue", originalDate: "2026-10-13", kind: "cancelled", newDate: null, newStartTime: null };
+  const makeup = series({ id: "s-mk", kind: "one_off", startDate: "2026-10-22", purpose: "makeup", makeupFor: "x-1" });
+  const find = (v: ReturnType<typeof build>) => monthClasses(v).find((c) => c.key.startsWith("s-mk"))!;
+  it("names the original date of the cancellation it replaces", () => {
+    const c = find(build([tue, makeup], [cancelled]));
+    expect(c.state).toBe("makeup");
+    expect(c.makeupFor).toBe("2026-10-13");
+  });
+  it("is null when the exception is not in the input", () => {
+    expect(find(build([tue, makeup], [])).makeupFor).toBeNull();
+  });
+  it("is null when the exception is now a move", () => {
+    const moved: ClassException = { ...cancelled, kind: "moved", newDate: "2026-10-14", newStartTime: "17:30" };
+    expect(find(build([tue, makeup], [moved])).makeupFor).toBeNull();
+  });
+  it("is null on every class that is not a makeup", () => {
+    expect(monthClasses(build([tue], [cancelled])).every((c) => c.makeupFor === null)).toBe(true);
   });
 });
 
@@ -74,12 +117,23 @@ describe("moved across months (AC3)", () => {
   });
 });
 
-describe("summary (AC4)", () => {
-  it("counts non-cancelled classes, done at the end time", () => {
+describe("summary (AC4, REQ-31 AC1)", () => {
+  it("counts non-cancelled classes, past at the end time", () => {
     const exc: ClassException[] = [{ seriesId: "s-tue", originalDate: "2026-10-20", kind: "cancelled", newDate: null, newStartTime: null }];
     // Oct 13 17:30-18:30 Toronto (EDT) ends 22:30Z.
-    expect(build([tue], exc, "2026-10", "2026-10-13", "2026-10-13T22:30:00.000Z").summary).toEqual({ total: 3, done: 2, upcoming: 1 });
-    expect(build([tue], exc, "2026-10", "2026-10-13", "2026-10-13T22:29:00.000Z").summary).toEqual({ total: 3, done: 1, upcoming: 2 });
+    expect(build([tue], exc, "2026-10", "2026-10-13", "2026-10-13T22:30:00.000Z").summary).toEqual({ total: 3, past: 2, upcoming: 1 });
+    expect(build([tue], exc, "2026-10", "2026-10-13", "2026-10-13T22:29:00.000Z").summary).toEqual({ total: 3, past: 1, upcoming: 2 });
+  });
+});
+
+describe("no done field (REQ-31 AC1)", () => {
+  it("summary and classes carry past, never done", () => {
+    const v = build([tue], [], "2026-10", "2026-10-13", "2026-10-13T22:30:00.000Z");
+    expect(Object.keys(v.summary).sort()).toEqual(["past", "total", "upcoming"]);
+    const c13 = monthClasses(v).find((c) => c.date === "2026-10-13")!;
+    expect(c13.past).toBe(true);
+    expect(monthClasses(v).find((c) => c.date === "2026-10-20")!.past).toBe(false);
+    for (const c of monthClasses(v)) expect(c).not.toHaveProperty("done");
   });
 });
 

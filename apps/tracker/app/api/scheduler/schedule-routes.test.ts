@@ -145,10 +145,21 @@ describe("classes: occurrences (AC12, AC13, AC16)", () => {
     expect(r.status).toBe(200);
     expect(r.body.occurrences.map((o: { staffId: string }) => o.staffId)).toEqual([A, A]);
     expect(Object.keys(r.body.occurrences[0]).sort()).toEqual([
-      "date", "durationMinutes", "endTime", "endsAt", "kind", "occurrenceKey", "originalDate", "seriesId",
+      "date", "durationMinutes", "endTime", "endsAt", "kind", "occurrenceKey", "originalDate", "purpose", "seriesId",
       "staffId", "startTime", "startsAt", "status", "studentId", "subject",
     ]);
     expect(JSON.stringify(r.body)).not.toMatch(/seriesUpdatedAt|example\.com|ffffffff/);
+  });
+  it("every occurrence carries purpose: the one-off's, null on weekly (REQ-31 AC14)", async () => {
+    const f = fakeStore({ open: true });
+    await handleCreateClass(deps(admin, f.store), newClass({ kind: "one_off", purpose: "trial" }));
+    await handleCreateClass(deps(admin, f.store), newClass({ requestId: REQ(3), kind: "weekly", startTime: "19:00" }));
+    for (const who of [admin, teacher]) {
+      const r = await json(await handleOccurrences(deps(who, f.store), q("from=2026-10-19&to=2026-10-26")));
+      expect(r.status).toBe(200);
+      expect(r.body.occurrences.map((o: { kind: string; purpose: string | null }) => [o.kind, o.purpose]))
+        .toEqual(expect.arrayContaining([["one_off", "trial"], ["weekly", null]]));
+    }
   });
   it("a teacher naming another staffId is 403", async () => {
     const { store } = await seed();
