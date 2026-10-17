@@ -535,6 +535,12 @@ try {
   check("the booking form fits a 375px screen", await teacher.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
   await form.getByLabel("Duration in minutes").focus();
   await teacher.keyboard.press("Enter");
+  // REQ-31: a one-off needs a purpose before it is sent.
+  await form.getByRole("alert").waitFor({ timeout: 5000 });
+  check("a one-off without a purpose is not sent and says Choose a purpose", (await form.getByRole("alert").textContent()).includes("Choose a purpose.") && await form.isVisible());
+  await form.getByLabel("Purpose").selectOption({ label: "Trial" });
+  await form.getByLabel("Duration in minutes").focus();
+  await teacher.keyboard.press("Enter");
   const booked = await form.waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false);
   check("the booking form closes after a keyboard submit", booked, booked ? "" : await form.getByRole("alert").textContent().catch(() => "no alert"));
   // The desktop grid is in the DOM but hidden at 375px, so look only at what is visible.
@@ -549,10 +555,60 @@ try {
   await clash.getByLabel("Subject").fill("MHF4U");
   await clash.getByLabel("Date").fill(wed);
   await clash.getByLabel("Start time").fill("13:30");
+  await clash.getByLabel("Purpose").selectOption({ label: "Extra" });
   await clash.getByRole("button", { name: "Book class" }).click();
   await clash.getByRole("alert").waitFor({ timeout: 15000 });
   check("a double-booked teacher is refused with a plain message", /already has a class/.test(await clash.getByRole("alert").textContent()));
   await teacher.keyboard.press("Escape");
+
+  // REQ-31: a legacy one-off for Sam (no purpose) on Thursday 08:00, and Sam's weekly class cancelled two Mondays on.
+  const SAM = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001";
+  psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), '${RYAN_ID}', '${SAM}', 'ICS4U', 'one_off', '${plus(classDay, 3)}', '08:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
+  const samCancel = psql(`insert into tracker.class_exceptions (org_id, request_id, series_id, original_date, kind, created_by) select org_id, gen_random_uuid(), id, '${plus(classDay, 14)}', 'cancelled', created_by from tracker.class_series where notion_student_id = '${SAM}' and kind = 'weekly' returning id`).split("\n")[0];
+  await teacher.setViewportSize({ width: 1200, height: 900 });
+  await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${classDay}`);
+  const purposeOf = async (cardName) => {
+    await teacher.getByRole("button", { name: cardName }).locator("visible=true").first().click();
+    const d = teacher.getByRole("dialog").filter({ has: teacher.getByRole("link", { name: "Open student record" }) }).locator("visible=true");
+    await d.first().waitFor({ timeout: 5000 });
+    const row = d.getByTestId("class-purpose");
+    const value = (await row.count()) ? await row.textContent() : null;
+    return { value, dialog: d.first() };
+  };
+  const legacyCard = /Sam Student.*ICS4U/s;
+  await teacher.getByRole("button", { name: legacyCard }).first().waitFor({ timeout: 15000 });
+  const legacy = await purposeOf(legacyCard);
+  check("a one-off with no purpose shows Purpose Class in its dialog", legacy.value === "Class", String(legacy.value));
+  await teacher.keyboard.press("Escape");
+  const trial = await purposeOf(/Nobody Booked.*MPM2D/s);
+  check("the one-off booked as a trial shows Purpose Trial", trial.value === "Trial", String(trial.value));
+  await teacher.keyboard.press("Escape");
+  const weeklyDialog = await purposeOf(/Sam Student.*MHF4U/s);
+  check("a weekly class's dialog has no Purpose row", weeklyDialog.value === null, String(weeklyDialog.value));
+  await teacher.keyboard.press("Escape");
+  const again = await purposeOf(legacyCard);
+  await again.dialog.getByRole("button", { name: "Edit" }).click();
+  const editForm = teacher.getByRole("dialog", { name: "Edit class" });
+  await editForm.waitFor({ timeout: 5000 });
+  const purposeSelect = editForm.getByLabel("Purpose");
+  check("editing a legacy one-off shows Purpose Not set", (await purposeSelect.locator("option:checked").textContent()) === "Not set");
+  await purposeSelect.selectOption({ label: "Makeup" });
+  const replaces = editForm.getByLabel("Replaces (optional)");
+  await replaces.waitFor({ timeout: 15000 });
+  const cancelLabel = `${heading(plus(classDay, 14))} · MHF4U 10:00 AM`;
+  const offered = await replaces.locator("option").allTextContents();
+  check("Makeup offers the student's cancelled classes to replace", offered.includes(cancelLabel), offered.join(" | "));
+  await replaces.selectOption({ label: cancelLabel });
+  await editForm.getByRole("button", { name: "Save changes" }).click();
+  const editSaved = await editForm.waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false);
+  const stored = psql(`select coalesce(purpose, '-') || ' ' || coalesce(makeup_for::text, '-') from tracker.class_series where notion_student_id = '${SAM}' and subject = 'ICS4U'`);
+  check("the edit saved purpose makeup and the link to that cancellation", editSaved && stored === `makeup ${samCancel}`, `${editSaved} ${stored} want ${samCancel}`);
+  await teacher.reload();
+  await teacher.getByRole("button", { name: legacyCard }).first().waitFor({ timeout: 15000 });
+  const after = await purposeOf(legacyCard);
+  check("after a reload the dialog shows Purpose Makeup", after.value === "Makeup", String(after.value));
+  await teacher.keyboard.press("Escape");
+  await teacher.setViewportSize({ width: 375, height: 800 });
 
   // Teachers cannot book or move: no controls, and the server says 403.
   await ryan.setViewportSize({ width: 1200, height: 900 });
@@ -865,17 +921,21 @@ try {
 
   // REQ-24: the Calendar tab. Ada gets a scheduler link and, with Ryan on today's Toronto date, one class in each
   // state (MHF4U 15:00 scheduled, MCV4U 17:00 cancelled, a one-off SPH4U 18:00, MPM2D moved 16:00 to 19:00). Cy gets Kuby's SCH4U.
+  // REQ-31: SPH4U is a makeup for the MCV4U cancellation; an ENG4U trial at 20:00 and an ICS4U one-off with no purpose at 21:00.
   const today = isoIn(0);
   const ADA_NOTION = "dddddddd-dddd-4ddd-8ddd-dddddddd0001";
   const CY_NOTION = "dddddddd-dddd-4ddd-8ddd-dddddddd0002";
   psql(`update tracker.students set notion_student_id = '${ADA_NOTION}' where id = '${adaId}'`);
   psql(`update tracker.students set notion_student_id = '${CY_NOTION}' where id = '${cyId}'`);
   const addSeries = (student, staff, subject, kind, time) => psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('${ORG}', gen_random_uuid(), '${staff}', '${student}', '${subject}', '${kind}', '${today}', '${time}', 60, '00000000-0000-0000-0000-00000000aaaa') returning id`).split("\n")[0];
-  const addException = (seriesId, kind, newTime) => psql(`insert into tracker.class_exceptions (org_id, request_id, series_id, original_date, kind, new_date, new_start_time, created_by) values ('${ORG}', gen_random_uuid(), '${seriesId}', '${today}', '${kind}', ${newTime ? `'${today}'` : "null"}, ${newTime ? `'${newTime}'` : "null"}, '00000000-0000-0000-0000-00000000aaaa')`);
+  const addException = (seriesId, kind, newTime) => psql(`insert into tracker.class_exceptions (org_id, request_id, series_id, original_date, kind, new_date, new_start_time, created_by) values ('${ORG}', gen_random_uuid(), '${seriesId}', '${today}', '${kind}', ${newTime ? `'${today}'` : "null"}, ${newTime ? `'${newTime}'` : "null"}, '00000000-0000-0000-0000-00000000aaaa') returning id`).split("\n")[0];
+  const setPurpose = (seriesId, purpose, makeupFor = null) => psql(`update tracker.class_series set purpose = '${purpose}', makeup_for = ${makeupFor ? `'${makeupFor}'` : "null"} where id = '${seriesId}'`);
   addSeries(ADA_NOTION, RYAN_ID, "MHF4U", "weekly", "15:00");
-  addException(addSeries(ADA_NOTION, RYAN_ID, "MCV4U", "weekly", "17:00"), "cancelled", null);
-  addSeries(ADA_NOTION, RYAN_ID, "SPH4U", "one_off", "18:00");
+  const mcvCancel = addException(addSeries(ADA_NOTION, RYAN_ID, "MCV4U", "weekly", "17:00"), "cancelled", null);
+  setPurpose(addSeries(ADA_NOTION, RYAN_ID, "SPH4U", "one_off", "18:00"), "makeup", mcvCancel);
   addException(addSeries(ADA_NOTION, RYAN_ID, "MPM2D", "weekly", "16:00"), "moved", "19:00");
+  setPurpose(addSeries(ADA_NOTION, RYAN_ID, "ENG4U", "one_off", "20:00"), "trial");
+  addSeries(ADA_NOTION, RYAN_ID, "ICS4U", "one_off", "21:00");
   addSeries(CY_NOTION, KUBY, "SCH4U", "weekly", "15:00");
   const calendarTablesBefore = process.env.PG_URL ? snapshot() : null;
   const calendarJournalStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
@@ -888,18 +948,22 @@ try {
   const todayCell = parent.locator(`[data-date="${today}"]`);
   await todayCell.waitFor({ timeout: 15000 });
   const summaryText = await parent.locator("[data-summary]").innerText();
-  check("the calendar summary line reads N classes this month · D done · U upcoming", /^\d+ classes? this month · \d+ done · \d+ upcoming$/.test(summaryText), summaryText);
+  check("the calendar summary line reads N classes this month · P past · U upcoming", /^\d+ classes? this month · \d+ past · \d+ upcoming$/.test(summaryText), summaryText);
   const weekText = await section(parent, "This week").innerText();
-  check("This week shows the course, the teacher and every state with the moved note",
-    ["MCV4U", "Ryan", "Cancelled", "Makeup", "Scheduled", "Moved from"].every((w) => weekText.includes(w)), weekText.replaceAll("\n", " | "));
+  check("This week shows the course, the teacher and every state with the moved and makeup notes",
+    ["MCV4U", "Ryan", "Cancelled", "Makeup", "Scheduled", "Moved from", `Makeup for ${heading(today)}`, "Trial", "Class"].every((w) => weekText.includes(w)), weekText.replaceAll("\n", " | "));
+  const rowState = async (subject) => parent.locator("[data-this-week] li").filter({ hasText: subject }).first().getAttribute("data-state");
+  check("each one-off is labelled by its declared purpose: SPH4U makeup, ENG4U trial, ICS4U class",
+    (await rowState("SPH4U")) === "makeup" && (await rowState("ENG4U")) === "trial" && (await rowState("ICS4U")) === "class");
+  check("the Calendar tab never says done", !/\bdone\b/i.test(await parent.locator("main").innerText()));
   const dotStates = await todayCell.locator("[data-dots] [data-state]").evaluateAll((els) => els.map((e) => e.getAttribute("data-state")));
-  check("today's cell shows 3 dots and +1, each toned by a state",
-    dotStates.length === 3 && dotStates.every((s) => ["scheduled", "cancelled", "makeup", "moved"].includes(s)) && (await todayCell.locator("[data-dots]").innerText()).includes("+1"), JSON.stringify(dotStates));
+  check("today's cell shows 3 dots and +3, each toned by a state",
+    dotStates.length === 3 && dotStates.every((s) => ["scheduled", "cancelled", "makeup", "moved", "trial", "extra", "class"].includes(s)) && (await todayCell.locator("[data-dots]").innerText()).includes("+3"), JSON.stringify(dotStates));
   const cellName = (await todayCell.getAttribute("aria-label")) ?? "";
-  check("today's cell is named with the full date and all four state words",
-    cellName.startsWith(fullDate(today)) && ["Scheduled", "Cancelled", "Makeup", "Moved"].every((w) => cellName.includes(w)), cellName);
+  check("today's cell is named with the full date and every state word",
+    cellName.startsWith(fullDate(today)) && ["Scheduled", "Cancelled", "Makeup", "Moved", "Trial", "Class"].every((w) => cellName.includes(w)), cellName);
   await todayCell.click();
-  check("tapping today lists its 4 classes", (await parent.locator("[data-day-list] li").count()) === 4);
+  check("tapping today lists its 6 classes", (await parent.locator("[data-day-list] li").count()) === 6);
   check("another student's class and teacher never appear", (await parent.getByText("SCH4U").count()) === 0 && !(await parent.content()).includes("Kuby"));
   check("the Calendar tab has no input, textarea or select", (await parent.locator("input, textarea, select").count()) === 0);
   check("the Calendar tab does not scroll sideways at 375px", await parent.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -937,12 +1001,13 @@ try {
     const cs = getComputedStyle(e);
     return { state: e.getAttribute("data-state"), text: e.textContent, visible: e.getBoundingClientRect().width > 0, bg: cs.backgroundColor, line: cs.textDecorationLine, color: cs.color };
   }));
-  check("at 720px today's blocks show and the dots are hidden", blocks.length === 4 && blocks.every((b) => b.visible) && await todayCell.locator("[data-dots]").isHidden());
+  check("at 720px today's blocks show and the dots are hidden", blocks.length === 6 && blocks.every((b) => b.visible) && await todayCell.locator("[data-dots]").isHidden());
   check("a block shows time, course and teacher first name", blocks.some((b) => b.text.includes("PM") && b.text.includes("MCV4U") && b.text.includes("Ryan")));
-  check("each block carries its own state", JSON.stringify(blocks.map((b) => [b.state, b.text.match(/[A-Z]{3}\dU|MPM2D/)?.[0]])) === JSON.stringify([["scheduled", "MHF4U"], ["cancelled", "MCV4U"], ["makeup", "SPH4U"], ["moved", "MPM2D"]]), JSON.stringify(blocks.map((b) => b.state)));
+  check("each block carries its own state", JSON.stringify(blocks.map((b) => [b.state, b.text.match(/[A-Z]{3}\dU|MPM2D/)?.[0]])) === JSON.stringify([["scheduled", "MHF4U"], ["cancelled", "MCV4U"], ["makeup", "SPH4U"], ["moved", "MPM2D"], ["trial", "ENG4U"], ["class", "ICS4U"]]), JSON.stringify(blocks.map((b) => b.state)));
   const cancelledBlock = blocks.find((b) => b.state === "cancelled");
   check("the cancelled block is struck through and muted", cancelledBlock?.line === "line-through" && cancelledBlock?.color === "rgb(110, 101, 91)", `${cancelledBlock?.line} ${cancelledBlock?.color}`);
-  check("the four blocks have four different tints", new Set(blocks.map((b) => b.bg)).size === 4, JSON.stringify(blocks.map((b) => b.bg)));
+  check("the blocks have four tints, one per tone, and the one-off words share neutral", new Set(blocks.map((b) => b.bg)).size === 4
+    && new Set(blocks.filter((b) => ["makeup", "trial", "class"].includes(b.state)).map((b) => b.bg)).size === 1, JSON.stringify(blocks.map((b) => b.bg)));
   await parent.setViewportSize({ width: 375, height: 800 });
 
   // AC14: browsing the Calendar asked Notion for nothing but Staff and changed no tracker table.

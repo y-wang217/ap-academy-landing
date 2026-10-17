@@ -2,7 +2,7 @@ import { z } from "zod";
 import { computeAvailability } from "../domain/schedule/availability";
 import { bookingWindow, checkBooking, MAX_PROBLEMS } from "../domain/schedule/booking";
 import { checkClassShape, checkNotPast, checkOccurrenceEditable } from "../domain/schedule/edits";
-import { expandOccurrences, isPatternDate, planSplit, type ClassException, type ClassSeries, type Occurrence } from "../domain/schedule/recurrence";
+import { expandOccurrences, isPatternDate, planSplit, type ClassException, type ClassPurpose, type ClassSeries, type Occurrence } from "../domain/schedule/recurrence";
 import { addDays, daysBetween, isoWeekday, minutesOf } from "../domain/schedule/wallclock";
 import { weekOf, weekTotals } from "../domain/schedule/week";
 import { isActiveTeachingStaff } from "../domain/staff";
@@ -11,7 +11,7 @@ import { assertStaffAccess, requireScheduler, toAdminStaff, toTeacherStaff, type
 import type { HandlerDeps } from "./handlers";
 import { findConflicts, type StaffAvailability } from "../domain/schedule/conflicts";
 import {
-  AvailabilityExceptionResponse, AvailabilityResponse, BookingConflictResponse, ConflictsResponseAdmin, ConflictsResponseTeacher, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WeekResponseAdmin, WeekResponseTeacher, WindowResponse,
+  AvailabilityExceptionResponse, AvailabilityResponse, BookingConflictResponse, CancellationsResponse, ConflictsResponseAdmin, ConflictsResponseTeacher, OccurrencesResponseAdmin, OccurrencesResponseTeacher, SeriesResponse, WeekResponseAdmin, WeekResponseTeacher, WindowResponse,
 } from "./schemas";
 import type { BookingKey, BookingStamp, ScheduleStore, SeriesRecord, StoreError, StoreResult, WriteOp } from "./schedule-store";
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
@@ -65,10 +65,13 @@ const ExceptionBody = z.strictObject({
   startTime: Hhmm.nullable().default(null), endTime: Hhmm.nullable().default(null),
 }).refine((b) => (b.startTime === null) === (b.endTime === null) && (b.kind === "time_off" || b.startTime !== null)
   && (b.startTime === null || minutesOf(b.endTime!) > minutesOf(b.startTime)));
+const Purpose = z.enum(["makeup", "trial", "extra"]);
 const ClassBody = z.strictObject({
   requestId: Guid, staffId: Guid, studentId: Guid, subject: z.string().trim().min(1).max(80), kind: z.enum(["one_off", "weekly"]),
   startDate: IsoDate, startTime: Hhmm, durationMinutes: z.number().int(), effectiveUntil: IsoDate.nullable().default(null),
-}).refine((b) => b.kind === "weekly" || b.effectiveUntil === null);
+  // REQ-31: one-offs only. The form requires a purpose; the API still accepts null for scripts and old clients.
+  purpose: Purpose.nullable().default(null), makeupFor: Guid.nullable().default(null),
+}).refine((b) => b.kind === "weekly" || b.effectiveUntil === null).refine((b) => b.kind === "one_off" || (b.purpose === null && b.makeupFor === null));
 // expectedDate / expectedStartTime: where the client last saw the occurrence. A move writes no series
 // version, so this is what makes two tabs moving one occurrence a 409 instead of a silent overwrite.
 const Seen = { expectedDate: IsoDate.optional(), expectedStartTime: Hhmm.optional() };
@@ -77,6 +80,7 @@ const EditBody = z.strictObject({
   changes: z.strictObject({
     date: IsoDate.optional(), startTime: Hhmm.optional(), staffId: Guid.optional(), studentId: Guid.optional(),
     subject: z.string().trim().min(1).max(80).optional(), durationMinutes: z.number().int().optional(), weekday: z.number().int().min(1).max(7).optional(),
+    purpose: Purpose.nullable().optional(), makeupFor: Guid.nullable().optional(),
   }).default({}),
 });
 const CancelBody = z.strictObject({ requestId: Guid, expectedUpdatedAt: Token, scope: z.enum(["this", "future"]).default("this"), ...Seen });
@@ -349,8 +353,54 @@ const seriesBody = (s: SeriesRecord, summarySync?: SyncResult, dailyTask?: Daily
   series: {
     id: s.id, staffId: s.staffId, studentId: s.studentId, subject: s.subject, kind: s.kind, startDate: s.startDate,
     startTime: s.startTime, durationMinutes: s.durationMinutes, effectiveUntil: s.effectiveUntil, splitFrom: s.splitFrom, updatedAt: s.updatedAt,
+    purpose: s.purpose ?? null, makeupFor: s.makeupFor ?? null,
   },
 });
+
+/**
+ * A makeup may name the class it replaces only if that is a cancellation of one
+ * of the same student's series (REQ-31). The database cannot check the student,
+ * so this does. Returns the 422 to send, or null when the link is fine or absent.
+ */
+async function checkMakeupFor(deps: ScheduleDeps, studentId: string, purpose: ClassPurpose | null, makeupFor: string | null): Promise<Response | null> {
+  if (makeupFor === null) return null;
+  const invalid = send(422, { error: "invalid_makeup_for" });
+  if (purpose !== "makeup") return invalid;
+  let exceptions: ClassException[];
+  try {
+    exceptions = (await deps.store.listSeriesForStudent(studentId)).exceptions;
+  } catch {
+    return unavailable();
+  }
+  return exceptions.some((e) => e.id === makeupFor && e.kind === "cancelled") ? null : invalid;
+}
+
+/** The owner's "Replaces" choices: a window around today, so an old or far-off cancellation is not offered. */
+const CANCELLATIONS_BACK_DAYS = 56;
+const CANCELLATIONS_AHEAD_DAYS = 28;
+
+/** GET: one student's cancelled classes in that window, newest first. Admin only. */
+export async function handleStudentCancellations(deps: ScheduleDeps, q: URLSearchParams): Promise<Response> {
+  const g = await gate(deps, ["admin"]);
+  if (isResponse(g)) return g;
+  const studentId = q.get("studentId");
+  if (!studentId || !Guid.safeParse(studentId).success) return bad();
+  const today = deps.today();
+  const from = addDays(today, -CANCELLATIONS_BACK_DAYS);
+  const to = addDays(today, CANCELLATIONS_AHEAD_DAYS);
+  let data;
+  try {
+    data = await deps.store.listSeriesForStudent(studentId);
+  } catch {
+    return unavailable();
+  }
+  const byId = new Map(data.series.map((s) => [s.id, s]));
+  const cancellations = data.exceptions
+    .filter((e) => e.id && e.kind === "cancelled" && e.originalDate >= from && e.originalDate <= to && byId.has(e.seriesId))
+    .map((e) => ({ exceptionId: e.id!, date: e.originalDate, startTime: byId.get(e.seriesId)!.startTime, subject: byId.get(e.seriesId)!.subject }))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
+  return send(200, CancellationsResponse.parse({ cancellations }));
+}
 
 export async function handleOccurrences(deps: ScheduleDeps, q: URLSearchParams): Promise<Response> {
   const g = await gate(deps, ["admin", "teacher"]);
@@ -393,6 +443,8 @@ export async function handleCreateClass(deps: ScheduleDeps, body: unknown): Prom
       checkAvailability: true,
     });
     if (blocked) return blocked;
+    const link = await checkMakeupFor(deps, fields.studentId, fields.purpose, fields.makeupFor);
+    if (link) return link;
     const ready = await prepareStudent(deps, fields.studentId);
     if (isRes(ready)) return ready;
     return deps.store.lockedWrite({ op: "create", requestId, stamps, series: fields });
@@ -579,6 +631,8 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
   if (!series) return send(404, { error: "not_found" });
   const c = p.data.changes;
   const { requestId, expectedUpdatedAt } = p.data;
+  const purposeSent = c.purpose !== undefined || c.makeupFor !== undefined;
+  if (purposeSent && (series.kind === "weekly" || p.data.scope === "future")) return bad("one_off_only");
 
   if (p.data.scope === "future") {
     // A retried split finds its first result before the pattern-date check, which would 404 now that the old series ends before this date.
@@ -615,10 +669,19 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
     if (newDate < deps.today()) return send(422, { error: "past_occurrence" });
 
     const moves = newDate !== now.date || newStart !== now.startTime;
+    // A link stays only on a makeup: any other resulting purpose clears it in the same write, so the database check never fails.
+    const purpose = c.purpose !== undefined ? c.purpose : (series.purpose ?? null);
+    const makeupFor = c.makeupFor !== undefined ? c.makeupFor : purpose === "makeup" ? (series.makeupFor ?? null) : null;
+    if (c.makeupFor !== undefined) {
+      const link = await checkMakeupFor(deps, series.studentId, purpose, c.makeupFor);
+      if (link) return link;
+    }
     const fields = {
       ...(c.staffId && c.staffId !== series.staffId ? { staffId: c.staffId } : {}),
       ...(c.subject && c.subject !== series.subject ? { subject: c.subject } : {}),
       ...(c.durationMinutes && c.durationMinutes !== series.durationMinutes ? { durationMinutes: c.durationMinutes } : {}),
+      ...(purpose !== (series.purpose ?? null) ? { purpose } : {}),
+      ...(makeupFor !== (series.makeupFor ?? null) ? { makeupFor } : {}),
     };
     if (!moves && Object.keys(fields).length === 0) return send(200, SeriesResponse.parse(seriesBody(series)));
     const exception: ClassException = { seriesId, originalDate: date, kind: "moved", newDate, newStartTime: newStart };

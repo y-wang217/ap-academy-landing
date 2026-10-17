@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { cardStatus, notionStudentUrl } from "@/lib/view/week-text";
+import type { ClassPurpose } from "@/lib/domain/schedule/recurrence";
+import { cardStatus, notionStudentUrl, purposeRow } from "@/lib/view/week-text";
 import { formatDayHeading } from "@/lib/view/availability-text";
 
 export type CardData = {
@@ -15,6 +16,8 @@ export type CardData = {
   endTime: string;
   durationMinutes: number;
   kind: "one_off" | "weekly";
+  /** One-offs: the declared purpose; null shows "Class" (ADR 0051). */
+  purpose?: ClassPurpose | null;
   status: "scheduled" | "cancelled" | "moved";
   conflict: "outside_availability" | "time_off" | null;
   teacherName?: string;
@@ -43,6 +46,7 @@ export function ClassCard({ card, className = "", style, drag, saving, today, on
   const dialog = useRef<HTMLDialogElement>(null);
   const { onClick: afterDrag, ...dragRest } = drag ?? {};
   const badges = cardStatus(card);
+  const purpose = purposeRow(card);
   const cancelled = card.status === "cancelled";
   const name = card.studentName ?? "Student";
   const border = card.conflict ? "border-dashed border-warn" : "border-solid border-accent";
@@ -78,6 +82,7 @@ export function ClassCard({ card, className = "", style, drag, saving, today, on
           <dt className="text-text-muted">Time</dt><dd>{card.startTime}-{card.endTime}</dd>
           <dt className="text-text-muted">Duration</dt><dd>{card.durationMinutes} min</dd>
           <dt className="text-text-muted">Type</dt><dd>{card.kind === "weekly" ? "Weekly" : "One-off"}</dd>
+          {purpose && (<><dt className="text-text-muted">{purpose.term}</dt><dd data-testid="class-purpose">{purpose.value}</dd></>)}
           <dt className="text-text-muted">Status</dt>
           <dd>{badges.map((b) => `${b.icon} ${b.label}`).join(" · ")}</dd>
           {card.status === "moved" && (<><dt className="text-text-muted">Original date</dt><dd>{formatDayHeading(card.originalDate)}</dd></>)}

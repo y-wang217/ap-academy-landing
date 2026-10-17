@@ -46,6 +46,7 @@ export const OccurrenceTeacher = z.strictObject({
   subject: z.string(),
   status: z.enum(["scheduled", "cancelled", "moved"]),
   kind: z.enum(["one_off", "weekly"]),
+  purpose: z.enum(["makeup", "trial", "extra"]).nullable(),
 });
 /** Admin also gets the series' version token, needed to send an edit. */
 export const OccurrenceAdmin = OccurrenceTeacher.extend({ seriesUpdatedAt: z.string() }).strict();
@@ -109,7 +110,14 @@ export const SeriesResponse = z.strictObject({
     effectiveUntil: IsoDate.nullable(),
     splitFrom: z.guid().nullable(),
     updatedAt: z.string(),
+    purpose: z.enum(["makeup", "trial", "extra"]).nullable(),
+    makeupFor: z.guid().nullable(),
   }),
+});
+
+/** A student's recent and upcoming cancelled classes, for the owner's "Replaces" choice (REQ-31). Admin only. */
+export const CancellationsResponse = z.strictObject({
+  cancellations: z.array(z.strictObject({ exceptionId: z.guid(), date: IsoDate, startTime: Hhmm, subject: z.string() })),
 });
 
 const Window = z.strictObject({

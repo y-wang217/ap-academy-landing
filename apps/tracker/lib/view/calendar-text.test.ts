@@ -1,17 +1,37 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarClass, ClassState } from "../domain/schedule/month";
-import { STATE_LABEL, cellLabel, clock, dayDots, dayLabel, monthLabel, movedNote, summaryLine, teacherFirstName } from "./calendar-text";
+import { PURPOSE_LABEL, STATE_LABEL, STATE_TONE, cellLabel, clock, dayDots, dayLabel, makeupNote, monthLabel, movedNote, oneOffLabel, summaryLine, teacherFirstName } from "./calendar-text";
 
 const cls = (startTime: string, state: ClassState, over: Partial<CalendarClass> = {}): CalendarClass => ({
   key: `k-${startTime}`, date: "2026-10-13", startTime, endTime: "23:00", subject: "MHF4U",
-  staffId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001", state, original: null, done: false, ...over,
+  staffId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001", state, original: null, past: false, makeupFor: null, ...over,
 });
 
-describe("summaryLine (AC4)", () => {
-  it("plural, singular and empty", () => {
-    expect(summaryLine({ total: 8, done: 2, upcoming: 6 })).toBe("8 classes this month · 2 done · 6 upcoming");
-    expect(summaryLine({ total: 1, done: 0, upcoming: 1 })).toBe("1 class this month · 0 done · 1 upcoming");
-    expect(summaryLine({ total: 0, done: 0, upcoming: 0 })).toBe("No classes this month.");
+describe("summaryLine (AC4, REQ-31 AC2)", () => {
+  it("plural, singular and empty, with past instead of done", () => {
+    expect(summaryLine({ total: 8, past: 2, upcoming: 6 })).toBe("8 classes this month · 2 past · 6 upcoming");
+    expect(summaryLine({ total: 1, past: 0, upcoming: 1 })).toBe("1 class this month · 0 past · 1 upcoming");
+    expect(summaryLine({ total: 0, past: 0, upcoming: 0 })).toBe("No classes this month.");
+  });
+});
+
+describe("makeupNote (REQ-31 AC7)", () => {
+  it("names the replaced class's date", () => {
+    expect(makeupNote(cls("15:00", "makeup", { makeupFor: "2026-10-13" }))).toBe("Makeup for Tue Oct 13");
+  });
+  it("is empty without a link", () => {
+    expect(makeupNote(cls("15:00", "makeup"))).toBe("");
+    expect(makeupNote(cls("15:00", "scheduled"))).toBe("");
+  });
+});
+
+describe("one-off words (REQ-31 AC4, AC6)", () => {
+  it("purpose words, and Class when none is set", () => {
+    expect(PURPOSE_LABEL).toEqual({ makeup: "Makeup", trial: "Trial", extra: "Extra" });
+    expect(oneOffLabel(null)).toBe("Class");
+    expect(oneOffLabel("makeup")).toBe("Makeup");
+    expect(oneOffLabel("trial")).toBe("Trial");
+    expect(oneOffLabel("extra")).toBe("Extra");
   });
 });
 
@@ -43,7 +63,16 @@ describe("labels", () => {
     expect(teacherFirstName("Ryan Test")).toBe("Ryan");
   });
   it("every state has a word", () => {
-    expect(STATE_LABEL).toEqual({ scheduled: "Scheduled", moved: "Moved", cancelled: "Cancelled", makeup: "Makeup" });
+    expect(STATE_LABEL).toEqual({
+      scheduled: "Scheduled", moved: "Moved", cancelled: "Cancelled",
+      makeup: "Makeup", trial: "Trial", extra: "Extra", class: "Class",
+    });
+  });
+  it("the one-off states share the neutral tone (REQ-31 AC6)", () => {
+    expect(STATE_TONE).toEqual({
+      scheduled: "ok", moved: "warn", cancelled: "error",
+      makeup: "neutral", trial: "neutral", extra: "neutral", class: "neutral",
+    });
   });
 });
 
@@ -61,13 +90,19 @@ describe("dayDots and cellLabel (AC7)", () => {
   });
 });
 
-describe("copy", () => {
-  it("has no em-dash", () => {
+describe("copy (REQ-31 AC3)", () => {
+  it("has no em-dash and never says done", () => {
+    const states = Object.keys(STATE_LABEL) as ClassState[];
     const out = [
-      summaryLine({ total: 2, done: 1, upcoming: 1 }), summaryLine({ total: 0, done: 0, upcoming: 0 }),
+      summaryLine({ total: 2, past: 1, upcoming: 1 }), summaryLine({ total: 1, past: 1, upcoming: 0 }), summaryLine({ total: 0, past: 0, upcoming: 0 }),
       movedNote(cls("16:00", "moved", { date: "2026-10-19", original: { date: "2026-10-13", startTime: "17:30" } })),
-      cellLabel({ date: "2026-10-13", classes: [cls("15:00", "makeup")] }), ...Object.values(STATE_LABEL),
+      makeupNote(cls("15:00", "makeup", { makeupFor: "2026-10-13" })),
+      ...states.map((st) => cellLabel({ date: "2026-10-13", classes: [cls("15:00", st)] })),
+      ...Object.values(STATE_LABEL), ...Object.values(PURPOSE_LABEL), oneOffLabel(null),
     ];
-    for (const s of out) expect(s).not.toMatch(/—/);
+    for (const s of out) {
+      expect(s).not.toMatch(/—/);
+      expect(s).not.toMatch(/\bdone\b/i);
+    }
   });
 });
