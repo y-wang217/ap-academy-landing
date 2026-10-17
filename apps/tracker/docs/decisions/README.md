@@ -37,7 +37,7 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0030](0030-assessment-kind-and-date.md) | An assessment is an assignment with a due date or a test with a held date | accepted |
 | [0031](0031-grade-history-and-trend-pills.md) | Grade history is replayed on the assessment date; the pill follows four rules | accepted |
 | [0032](0032-story-line.md) | The story line is a fact chosen by rule, never a forecast | accepted |
-| [0033](0033-scheduler-staff-identity.md) | Scheduler teachers are linked to Notion Staff by approval, not given a membership | accepted in part; the live Notion read and five-minute recheck are superseded by workspace ADR 0004 once REQ-38 ships |
+| [0033](0033-scheduler-staff-identity.md) | Scheduler teachers are linked to Notion Staff by approval, not given a membership | accepted in part; the live Notion read and five-minute recheck are superseded by workspace ADR 0004 once REQ-38 ships; audit log readers amended by 0052 |
 | [0034](0034-scheduler-recurrence-model.md) | Occurrences are computed from a series plus one exception row each | accepted |
 | [0035](0035-weekly-schedule-import-and-summary.md) | Weekly Schedule import is all or nothing per student, and the text field becomes a generated summary | accepted |
 | [0036](0036-availability-conflicts-computed.md) | Availability conflicts are computed on read, and a teacher with nothing entered is not flagged | accepted |
@@ -49,10 +49,11 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0042](0042-origin-check-for-scheduler-api.md) | The proxy refuses cross-site writes to the scheduler API | accepted |
 | [0043](0043-daily-text-greeting-name.md) | The daily text greets a teacher by honorific and name | accepted |
 | [0044](0044-server-timing-on-scheduler-get.md) | Server-Timing on the scheduler GET routes | accepted |
-| [0045](0045-parent-accounts-read-only.md) | Parent accounts are read-only | accepted |
+| [0045](0045-parent-accounts-read-only.md) | Parent accounts are read-only | accepted; "Staff wins" amended by 0052 |
 | [0046](0046-parent-email-minimal-pii.md) | A parent's email is the only new personal field | accepted |
 | [0047](0047-parent-calendar-states.md) | Parent Calendar states, makeups and the not-available rule | accepted in part; States (makeup) and Counts superseded by 0051 |
 | [0048](0048-notion-link-owner-only.md) | Only an owner can change a student's Notion record link | accepted |
 | [0049](0049-parent-billing-from-notion.md) | Parent Billing reads from Notion, gated on the child's Notion link | accepted |
 | [0050](0050-locked-booking-writes.md) | Class writes are revalidated under a lock | accepted |
 | [0051](0051-class-purpose-and-past.md) | One-off classes say their purpose, and the parent calendar says past, not done | accepted |
+| [0052](0052-permission-matrix.md) | One permission matrix for every role, proven cell by cell | accepted |
