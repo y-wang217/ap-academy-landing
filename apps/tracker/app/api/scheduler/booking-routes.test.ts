@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   handleCancelOccurrence, handleCreateClass, handleEditOccurrence, handleOccurrences,
 } from "../../../lib/scheduler/schedule-handlers";
-import type { SeriesRecord } from "../../../lib/scheduler/schedule-store";
-import { fixture, KUBY, MIA, REQ, RYAN, S1, S2, teacher } from "./booking-world.fake";
+import type { ScheduleStore, SeriesRecord } from "../../../lib/scheduler/schedule-store";
+import { fixture, KUBY, MIA, REQ, RYAN, S1, S2, teacher, WRITES } from "./booking-world.fake";
 
 const json = async (r: Response) => ({ status: r.status, body: await r.json() });
 const create = (over: Record<string, unknown> = {}) => ({
@@ -144,7 +144,7 @@ describe("a store outage on a retried split", () => {
   it("is 503 scheduler_unavailable, not a thrown error", async () => {
     const f = await fixture();
     const deps = f.deps();
-    deps.store = { ...f.store, getSeriesByRequest: async () => { throw new Error("down"); } } as never;
+    deps.store = { ...f.store, readWriteContext: async () => { throw new Error("down"); } } as never;
     expect((await json(await handleEditOccurrence(deps, f.s1.id, "2026-11-09", edit(f.s1, { scope: "future", changes: { startTime: "17:00" } })))).status).toBe(503);
   });
 });
@@ -274,4 +274,161 @@ describe("AC14: the Weekly Schedule summary", () => {
     await handleEditOccurrence(f.deps(), one.id, "2026-10-22", edit(one, { requestId: REQ(92), changes: { subject: "SCH4U" } }));
     expect(f.notionWrites).toEqual([]);
   });
+});
+
+// REQ-30: two conflicting bookings cannot both succeed (tracker ADR 0050). ------------------
+
+/** The class writes of the design's call-sequence table, each from a fresh fixture. */
+const OPS = {
+  create: async (f: Awaited<ReturnType<typeof fixture>>) => handleCreateClass(f.deps(), create()),
+  move: async (f: Awaited<ReturnType<typeof fixture>>) =>
+    handleEditOccurrence(f.deps(), f.s1.id, "2026-10-26", edit(f.s1, { requestId: REQ(201), changes: { date: "2026-10-27", startTime: "16:00" } })),
+  oneOff: async (f: Awaited<ReturnType<typeof fixture>>, one: SeriesRecord) =>
+    handleEditOccurrence(f.deps(), one.id, "2026-10-22", edit(one, { requestId: REQ(202), changes: { staffId: KUBY, startTime: "19:00" } })),
+  split: async (f: Awaited<ReturnType<typeof fixture>>) =>
+    handleEditOccurrence(f.deps(), f.s1.id, "2026-11-09", edit(f.s1, { requestId: REQ(203), scope: "future", changes: { startTime: "17:00" } })),
+  cancel: async (f: Awaited<ReturnType<typeof fixture>>) =>
+    handleCancelOccurrence(f.deps(), f.s1.id, "2026-10-26", { requestId: REQ(204), expectedUpdatedAt: f.s1.updatedAt, scope: "this" }),
+  endSeries: async (f: Awaited<ReturnType<typeof fixture>>) =>
+    handleCancelOccurrence(f.deps(), f.s1.id, "2026-11-09", { requestId: REQ(205), expectedUpdatedAt: f.s1.updatedAt, scope: "future" }),
+};
+type Op = keyof typeof OPS;
+async function run(op: Op) {
+  const f = await fixture();
+  const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00" });
+  f.begin();
+  const res = await OPS[op](f, one);
+  return { f, one, res: await json(res), again: () => OPS[op](f, one) };
+}
+
+describe("REQ-30 AC4: a change between the check and the write", () => {
+  it("re-reads, re-checks and returns the real clash as 422 booking_conflict", async () => {
+    const f = await fixture();
+    f.begin();
+    // Another tab books Ryan at 16:30 on 2026-10-20 after this create was checked.
+    f.raceNext(() => { void f.seed({ studentId: S1, kind: "one_off", startDate: "2026-10-20", startTime: "16:30" }); });
+    const r = await json(await handleCreateClass(f.deps(), create()));
+    expect(r).toMatchObject({ status: 422, body: { error: "booking_conflict", problems: [{ date: "2026-10-20", reason: "teacher_busy" }] } });
+    expect(f.calls.filter((c) => c === "readWriteContext")).toHaveLength(2);
+    expect(f.series.size).toBe(3); // s1, s2 and the other tab's class
+  });
+  it("a change that is not a clash: the second attempt writes", async () => {
+    const f = await fixture();
+    f.begin();
+    f.raceNext(() => f.bump({ kind: "staff", id: RYAN }));
+    expect((await json(await handleCreateClass(f.deps(), create()))).status).toBe(201);
+    expect(f.calls.filter((c) => c === "lockedWrite")).toHaveLength(2);
+  });
+  it("a second change in a row is 409 stale and nothing is written", async () => {
+    const f = await fixture();
+    f.begin();
+    f.raceNext(() => {
+      f.bump({ kind: "staff", id: RYAN });
+      f.raceNext(() => f.bump({ kind: "student", id: S2 }));
+    });
+    expect(await json(await handleCreateClass(f.deps(), create()))).toMatchObject({ status: 409, body: { error: "stale" } });
+    expect(f.series.size).toBe(2);
+  });
+  it("AC8b: the same request landing first in another tab is 200 with that series", async () => {
+    const f = await fixture();
+    f.begin();
+    const { requestId, ...fields } = create();
+    f.raceNext(async () => {
+      const ctx = await f.store.readWriteContext(requestId, [{ kind: "staff", id: RYAN }, { kind: "student", id: S2 }]);
+      await f.store.lockedWrite({ op: "create", requestId, stamps: ctx.stamps, series: fields as never });
+    });
+    const r = await json(await handleCreateClass(f.deps(), create()));
+    expect(r.status).toBe(200);
+    expect(f.series.size).toBe(3);
+    expect(r.body.series.id).toBe(f.log.get(requestId)!.result.id);
+  });
+});
+
+describe("REQ-30 AC5: the locked write is the only class write", () => {
+  it("the store's writes are exactly lockedWrite, adoptStudent and markSummary", () => {
+    expect([...WRITES]).toEqual(["lockedWrite", "adoptStudent", "markSummary"]);
+    type Has<K extends string> = K extends keyof ScheduleStore ? true : false;
+    const removed: [Has<"createSeries">, Has<"upsertException">, Has<"split">, Has<"endSeries">, Has<"updateSeriesFields">, Has<"getSeriesByRequest">] =
+      [false, false, false, false, false, false];
+    expect(removed.every((x) => x === false)).toBe(true);
+  });
+});
+
+describe("REQ-30 AC6 and AC12b: the write context comes first, and the call sequence", () => {
+  const AFTER: Record<Op, string[]> = {
+    create: ["readWriteContext", "listSeries", "listSeriesForStudent", "listWindows", "listAvailabilityExceptions", "getSummary", "lockedWrite"],
+    move: ["getSeries", "readWriteContext", "listSeries", "listSeries", "listSeriesForStudent", "listWindows", "listAvailabilityExceptions", "lockedWrite"],
+    oneOff: ["getSeries", "readWriteContext", "listSeries", "listSeries", "listSeriesForStudent", "listWindows", "listAvailabilityExceptions", "lockedWrite"],
+    split: ["getSeries", "readWriteContext", "listSeries", "listSeriesForStudent", "listSeries", "listSeriesForStudent", "listWindows", "listAvailabilityExceptions", "lockedWrite"],
+    cancel: ["getSeries", "readWriteContext", "listSeries", "lockedWrite"],
+    endSeries: ["getSeries", "readWriteContext", "listSeries", "lockedWrite"],
+  };
+  const READS = ["listSeries", "listSeriesForStudent", "listWindows", "listAvailabilityExceptions"];
+  for (const op of Object.keys(OPS) as Op[]) {
+    it(`${op}: exact store calls up to the write, context before every read, its stamps passed unchanged`, async () => {
+      const { f, res } = await run(op);
+      expect(res.status).toBeLessThan(300);
+      const upTo = f.calls.slice(0, f.calls.indexOf("lockedWrite") + 1);
+      expect(upTo).toEqual(AFTER[op]);
+      const ctx = upTo.indexOf("readWriteContext");
+      upTo.forEach((c, i) => { if (READS.includes(c)) expect(i).toBeGreaterThan(ctx); });
+      expect(f.stampsSeen.written).toEqual([f.stampsSeen.read[0]]);
+    });
+  }
+});
+
+describe("REQ-30 AC7: a stale position found under the lock", () => {
+  it("is 409 stale and writes nothing", async () => {
+    const f = await fixture();
+    f.begin();
+    // Another tab moved the occurrence without touching any stamp: only the position check under the lock sees it.
+    f.raceNext(() => { f.exceptions.push({ seriesId: f.s1.id, originalDate: "2026-10-26", kind: "moved", newDate: "2026-10-28", newStartTime: "16:00", requestId: REQ(299) }); });
+    const r = await json(await handleCancelOccurrence(f.deps(), f.s1.id, "2026-10-26", { requestId: REQ(206), expectedUpdatedAt: f.s1.updatedAt, scope: "this" }));
+    expect(r).toMatchObject({ status: 409, body: { error: "stale" } });
+    expect(f.log.has(REQ(206))).toBe(false);
+  });
+});
+
+describe("REQ-30 AC8a and AC9: retries", () => {
+  for (const op of Object.keys(OPS) as Op[]) {
+    it(`${op}: a retry after it finished is 200 with the first series and writes nothing`, async () => {
+      const { f, res, again } = await run(op);
+      f.begin();
+      const size = f.series.size;
+      const exceptions = JSON.stringify(f.exceptions);
+      const r = await json(await again());
+      expect(r.status).toBe(200);
+      expect(r.body.series.id).toBe(res.body.series.id);
+      // A create's retry re-runs its summary sync (markSummary), as before; no class write happens.
+      expect(f.writes.filter((w) => w !== "markSummary")).toEqual([]);
+      expect(f.series.size).toBe(size);
+      expect(JSON.stringify(f.exceptions)).toBe(exceptions);
+    });
+  }
+  it("the same requestId for another operation or another series is 400 invalid_request", async () => {
+    const { f } = await run("create");
+    f.begin();
+    const other = await json(await handleCancelOccurrence(f.deps(), f.s1.id, "2026-10-26", { requestId: REQ(1), expectedUpdatedAt: f.s1.updatedAt, scope: "this" }));
+    expect(other).toMatchObject({ status: 400, body: { error: "invalid_request" } });
+    await OPS.cancel(f);
+    f.begin();
+    const elsewhere = await json(await handleCancelOccurrence(f.deps(), f.s2.id, "2026-10-28", { requestId: REQ(204), expectedUpdatedAt: f.s2.updatedAt, scope: "this" }));
+    expect(elsewhere).toMatchObject({ status: 400, body: { error: "invalid_request" } });
+    expect(f.writes).toEqual([]);
+  });
+});
+
+describe("REQ-30 AC14: storage refuses the write", () => {
+  for (const op of Object.keys(OPS) as Op[]) {
+    it(`${op}: 503 scheduler_unavailable and nothing written`, async () => {
+      const f = await fixture();
+      const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00" });
+      const before = { series: JSON.stringify([...f.series.values()]), exceptions: f.exceptions.length };
+      const down = { ...f.deps(), store: { ...f.store, lockedWrite: async () => ({ ok: false as const, status: 503 as const, error: "unavailable" as const }) } };
+      const r = await json(await OPS[op]({ ...f, deps: () => down }, one));
+      expect(r).toEqual({ status: 503, body: { error: "scheduler_unavailable" } });
+      expect(JSON.stringify([...f.series.values()])).toBe(before.series);
+      expect(f.exceptions).toHaveLength(before.exceptions);
+    });
+  }
 });

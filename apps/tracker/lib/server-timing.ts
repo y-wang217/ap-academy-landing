@@ -34,7 +34,7 @@ export const timedFetch: typeof fetch = async (input, init) => {
   }
 };
 
-/** Wraps a GET route handler so its response carries a Server-Timing header. */
+/** Wraps a route handler so its response carries a Server-Timing header. */
 export function withServerTiming<A extends unknown[]>(
   fn: (...args: A) => Promise<Response>,
   now: () => number = () => performance.now(),

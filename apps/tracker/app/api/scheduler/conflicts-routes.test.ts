@@ -47,7 +47,8 @@ function fakeStore() {
       return { ok: true as const, value: rec, created: true };
     },
     listSeries: async (_r: unknown, staffId?: string) => ({ series: [...series.values()].filter((s) => !staffId || s.staffId === staffId), exceptions: [] }),
-    createSeries: async (input: Omit<SeriesRecord, "id" | "updatedAt" | "splitFrom"> & { requestId: string }) => {
+    // Test-only: classes written outside the handlers.
+    seedSeries: async (input: Omit<SeriesRecord, "id" | "updatedAt" | "splitFrom"> & { requestId: string }) => {
       const { requestId, ...fields } = input;
       const rec: SeriesRecord = { ...fields, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z", splitFrom: null };
       series.set(rec.id, rec);
@@ -77,7 +78,7 @@ const cls = (staffId: string, over: Record<string, unknown> = {}) => ({
 });
 
 /** Classes that are deliberately outside availability are seeded straight into the store: the handler now refuses them. */
-const seedClass = (store: ScheduleStore, body: ReturnType<typeof cls>) => store.createSeries(body as never);
+const seedClass = (store: ScheduleStore, body: ReturnType<typeof cls>) => (store as unknown as { seedSeries: (b: unknown) => Promise<unknown> }).seedSeries(body);
 
 async function seed() {
   const f = fakeStore();
@@ -207,7 +208,7 @@ describe("source scan (AC9, AC13)", () => {
     expect(files.length).toBeGreaterThan(1);
     for (const f of files) {
       const src = readFileSync(f, "utf8");
-      expect(src, f).not.toMatch(/createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|class_series|class_exceptions|writeWeeklySchedule|lessons|payout|from\("students"\)/i);
+      expect(src, f).not.toMatch(/lockedWrite|createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|class_series|class_exceptions|writeWeeklySchedule|lessons|payout|from\("students"\)/i);
       expect(src, f).not.toMatch(/api\.notion\.com|fetch\(["'`]https?:/);
     }
   });
@@ -216,6 +217,6 @@ describe("source scan (AC9, AC13)", () => {
     const section = src.slice(src.indexOf("// Availability ---"), src.indexOf("// Classes ---"));
     expect(section).toContain("handleCreateWindow");
     expect(section).toContain("loadConflicts");
-    expect(section).not.toMatch(/store\.(createSeries|upsertException|split|adoptStudent|markSummary)/);
+    expect(section).not.toMatch(/store\.(lockedWrite|createSeries|upsertException|split|adoptStudent|markSummary)/);
   });
 });

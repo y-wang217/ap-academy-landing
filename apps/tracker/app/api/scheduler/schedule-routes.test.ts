@@ -2,7 +2,6 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ClassException } from "../../../lib/domain/schedule/recurrence";
-import { addDays } from "../../../lib/domain/schedule/wallclock";
 import type { StaffRecord } from "../../../lib/notion/staff";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import {
@@ -10,7 +9,7 @@ import {
   handleOccurrences, handlePatchWindow, type ScheduleDeps,
 } from "../../../lib/scheduler/schedule-handlers";
 import type { ScheduleStore, SeriesRecord, StoreResult, WindowRecord } from "../../../lib/scheduler/schedule-store";
-import { seriesWrites } from "./series-writes.fake";
+import { lockedWrites } from "./series-writes.fake";
 
 const ORG = "10000000-0000-4000-8000-000000000001";
 const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -39,6 +38,14 @@ function fakeStore(opts: { open?: boolean } = {}) {
   const windows = new Map<string, WindowRecord>();
   const byRequest = new Map<string, string>();
   let n = 100;
+  const locked = lockedWrites({ series, exceptions, newId: () => REQ(++n) });
+  /** A class written outside the handlers, as setup. */
+  const seed = (input: Omit<SeriesRecord, "id" | "updatedAt" | "splitFrom">) => {
+    const rec: SeriesRecord = { ...input, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z", splitFrom: null };
+    series.set(rec.id, rec);
+    locked.bump({ kind: "staff", id: rec.staffId }, { kind: "student", id: rec.studentId });
+    return rec;
+  };
   const store: ScheduleStore = {
     // REQ-7: classes are checked against availability, so created windows stay, and `open: true` makes Ryan and Kuby free all week.
     listWindows: async (staffId) => [...windows.values(), ...(opts.open ? [A, B].flatMap(openWeek) : [])].filter((w) => w.staffId === staffId),
@@ -70,38 +77,7 @@ function fakeStore(opts: { open?: boolean } = {}) {
       exceptions,
     }),
     getSeries: async (id) => series.get(id) ?? null,
-    createSeries: async (input) => {
-      const existing = byRequest.get(input.requestId);
-      if (existing) return { ok: true, value: series.get(existing)!, created: false };
-      const fields = withoutRequestId(input);
-      const rec: SeriesRecord = { ...fields, id: REQ(++n), updatedAt: "2026-10-14T12:00:00.000Z", splitFrom: null };
-      series.set(rec.id, rec);
-      byRequest.set(input.requestId, rec.id);
-      return { ok: true, value: rec, created: true };
-    },
-    upsertException: async (input) => {
-      const i = exceptions.findIndex((e) => e.seriesId === input.seriesId && e.originalDate === input.originalDate);
-      if (i >= 0) exceptions[i] = input;
-      else exceptions.push(input);
-      return { ok: true, value: input, created: i < 0 };
-    },
-    getSeriesByRequest: async (requestId) => {
-      const id = byRequest.get(requestId);
-      return id ? series.get(id) ?? null : null;
-    },
-    split: async (input): Promise<StoreResult<SeriesRecord>> => {
-      const done = byRequest.get(input.requestId);
-      if (done) return { ok: true, value: series.get(done)!, created: false };
-      const old = series.get(input.seriesId);
-      if (!old) return { ok: false, status: 404, error: "not_found" };
-      if (old.updatedAt !== input.expectedUpdatedAt) return { ok: false, status: 409, error: "stale" };
-      const rec: SeriesRecord = { ...old, ...input.changes, id: REQ(++n), startDate: input.fromDate, splitFrom: old.id, updatedAt: "2026-10-14T14:00:00.000Z" };
-      series.set(rec.id, rec);
-      old.effectiveUntil = addDays(input.fromDate, -1);
-      byRequest.set(input.requestId, rec.id);
-      return { ok: true, value: rec, created: true };
-    },
-    ...seriesWrites(series),
+    ...locked.methods,
     // Summary storage arrives in REQ-4; these tests never adopt a student.
     listSeriesForStudent: async () => ({ series: [], exceptions: [] }),
     getSummary: async () => null,
@@ -109,7 +85,7 @@ function fakeStore(opts: { open?: boolean } = {}) {
     adoptStudent: async () => ({ ok: false, status: 503, error: "unavailable" }),
     markSummary: async () => false,
   };
-  return { store, series, exceptions };
+  return { store, series, exceptions, seed };
 }
 
 const deps = (identity: SchedulerIdentity, store: ScheduleStore, staff: StaffRecord[] = [ryan, kuby, inactive]): ScheduleDeps => ({
@@ -242,10 +218,8 @@ describe("classes: edits (AC3, AC4, AC5, AC7, AC9)", () => {
   });
   it("AC7: a past occurrence is 422 and writes nothing", async () => {
     // Classes can no longer be created in the past, so this one is seeded into the store.
-    const { store, series, exceptions } = fakeStore({ open: true });
-    const seeded = await store.createSeries({ ...newClass({ startDate: "2026-10-05" }), requestId: REQ(2) } as never);
-    if (!seeded.ok) throw new Error("seed failed");
-    const { id, updatedAt: stamp } = seeded.value;
+    const { store, series, exceptions, seed } = fakeStore({ open: true });
+    const { id, updatedAt: stamp } = seed(withoutRequestId(newClass({ startDate: "2026-10-05" })) as never);
     const r = await json(await handleCancelOccurrence(deps(admin, store), id, "2026-10-12", body(stamp)));
     expect(r).toMatchObject({ status: 422, body: { error: "past_occurrence" } });
     const f = await json(await handleEditOccurrence(deps(admin, store), id, "2026-10-12", body(stamp, { scope: "future", changes: {} })));
