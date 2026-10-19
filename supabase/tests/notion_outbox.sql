@@ -55,6 +55,9 @@ $$;
 create function nt.set_status(p_id uuid, p_status text) returns void language sql security definer set search_path = '' as $$
   update tracker.notion_outbox set status = p_status where id = p_id
 $$;
+create function nt.push_back(p_id uuid) returns void language sql security definer set search_path = '' as $$
+  update tracker.notion_outbox set next_attempt_at = now() + interval '1 hour' where id = p_id
+$$;
 create function nt.expire(p_id uuid) returns void language sql security definer set search_path = '' as $$
   update tracker.notion_outbox set lease_until = now() - interval '1 minute' where id = p_id
 $$;
@@ -361,6 +364,15 @@ begin
   perform nt.set_status(pending_id, 'uncertain');
   select * into r from tracker.retry_notion_outbox(pending_id);
   assert r.id = pending_id and r.status = 'pending', 'retry: uncertain row not retried';
+
+  -- A pending row waiting for its next attempt is made due now
+  perform nt.close_all();
+  perform tracker.enqueue_summary_sync('10000000-0000-0000-0000-000000000001', array['f0000000-0000-4000-8000-000000000002']::uuid[]);
+  pending_id := nt.id_of(f2, 'pending');
+  perform nt.push_back(pending_id);
+  select * into r from tracker.retry_notion_outbox(pending_id);
+  assert r.id = pending_id and r.status = 'pending' and r.superseded_by is null, format('retry of pending: got %s', r);
+  assert (select next_attempt_at <= now() from tracker.notion_outbox where id = pending_id), 'retry of pending: not due now';
 
   -- AC12: a done row is not retryable
   perform nt.close_all();

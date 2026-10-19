@@ -220,6 +220,7 @@ grant execute on function tracker.claim_notion_outbox(uuid, uuid[], integer, int
 -- The operator's Retry on a failed or uncertain row. With no pending row on the
 -- key, the row goes back to pending, due now. With one, the retried row is
 -- superseded by it and the pending row is made due now; its id is returned.
+-- A pending row waiting for its next attempt is made due now ("Retry now").
 -- Raises P0002 'not_found' when the caller cannot see the row and
 -- 'not_retryable' for any other state. Security invoker: RLS and the column
 -- grants apply.
@@ -237,6 +238,11 @@ begin
   select * into r from tracker.notion_outbox o where o.id = p_id for update;
   if not found then
     raise exception 'not_found' using errcode = 'P0002';
+  end if;
+  if r.status = 'pending' then
+    update tracker.notion_outbox o set next_attempt_at = now() where o.id = p_id;
+    return query select p_id, 'pending'::text, null::uuid;
+    return;
   end if;
   if r.status not in ('failed', 'uncertain') then
     raise exception 'not_retryable';
