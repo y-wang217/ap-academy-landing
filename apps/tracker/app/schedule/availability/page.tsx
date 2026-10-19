@@ -1,3 +1,4 @@
+import { PeopleFreshness } from "@/components/people-freshness";
 import { AvailabilityEditor } from "@/components/scheduler/availability-editor";
 import { TeacherPicker } from "@/components/scheduler/teacher-picker";
 import { Card, Notice, Page } from "@/components/ui";
@@ -17,7 +18,10 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
   const shell = (body: React.ReactNode, title = "Availability") => (
     <>
       {email && <TopBar email={email} />}
-      <Page title={title} back={{ href: "/", label: "Home" }}>{body}</Page>
+      <Page title={title} back={{ href: "/", label: "Home" }}>
+        {(who.scope === "admin" || who.scope === "teacher") && <PeopleFreshness load={deps.peopleSyncedAt} />}
+        {body}
+      </Page>
     </>
   );
 

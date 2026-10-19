@@ -64,12 +64,15 @@ const sameSecret = (a: string, b: string) => timingSafeEqual(digest(a), digest(b
  * session, database or Notion call: no secret configured is 503, a missing or
  * wrong bearer is 401. Until DAILY_TASK_TIME local (default 06:00) it does
  * nothing, so an hourly caller covers any time of day and any DST shift.
+ * The people sync (REQ-38) runs on every authorised call, before that check,
+ * so it is hourly; its result goes in the body and never changes the status.
  */
 export async function handleDailyTaskRun(input: {
   authorization: string | null;
   env: RunEnv;
   build: (orgId: string) => DailyTaskDeps | null;
   now?: () => Date;
+  syncPeople?: (orgId: string) => Promise<"ok" | "failed" | "not_configured">;
 }): Promise<Response> {
   const { secret, orgId } = input.env;
   if (!secret) return send(503, { error: "scheduler_not_configured" });
@@ -78,8 +81,18 @@ export async function handleDailyTaskRun(input: {
   const configured = input.env.time && /^([01]\d|2[0-3]):[0-5]\d$/.test(input.env.time) ? input.env.time : "06:00";
   if (!orgId || !z.guid().safeParse(orgId).success) return send(503, { error: "scheduler_not_configured" });
 
+  let people: "ok" | "failed" | "not_configured" | undefined;
+  if (input.syncPeople) {
+    try {
+      people = await input.syncPeople(orgId);
+    } catch {
+      people = "failed";
+    }
+  }
+  const extra = people ? { people } : {};
+
   const now = (input.now ?? (() => new Date()))();
-  if (!isDue(localHhmm(now), configured)) return send(200, { result: "not_yet" });
+  if (!isDue(localHhmm(now), configured)) return send(200, { result: "not_yet", ...extra });
   const deps = input.build(orgId);
   if (!deps) return send(503, { error: "scheduler_not_configured" });
   const date = todayIso(now);
@@ -91,5 +104,5 @@ export async function handleDailyTaskRun(input: {
     // Reported without a status row.
   }
   // A failure is a 502 so the calling workflow shows red; the next hourly run retries.
-  return send(result === "failed" ? 502 : 200, DailyTaskRunResponse.parse({ result, status: statusOf(row) }));
+  return send(result === "failed" ? 502 : 200, DailyTaskRunResponse.parse({ result, status: statusOf(row), ...extra }));
 }

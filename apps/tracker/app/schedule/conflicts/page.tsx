@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PeopleFreshness } from "@/components/people-freshness";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Notice, Page } from "@/components/ui";
 import { addDays } from "@/lib/domain/schedule/wallclock";
@@ -31,6 +32,7 @@ export default async function ConflictsPage() {
     <>
       {email && <TopBar email={email} />}
       <Page title="Classes outside availability" back={{ href: "/", label: "Home" }}>
+        <PeopleFreshness load={deps.peopleSyncedAt} />
         {!result ? (
           <Notice tone="error">Could not load conflicts. Try again shortly.</Notice>
         ) : (

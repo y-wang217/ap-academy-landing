@@ -252,3 +252,34 @@ describe("AC9, AC13: source scans of the new files", () => {
     expect(importers).toEqual(["app/api/scheduler/daily-task/run/route.ts"]);
   });
 });
+
+describe("REQ-38 AC7: the run route syncs people first, every hour", () => {
+  const SECRET = "s3cret-value";
+  const run = (w: ReturnType<typeof dailyWorld>, now: string, syncPeople?: (orgId: string) => Promise<"ok" | "failed" | "not_configured">, auth = `Bearer ${SECRET}`) =>
+    handleDailyTaskRun({ authorization: auth, env: { secret: SECRET, orgId: ORG, time: undefined }, build: () => w.daily, now: () => new Date(now), syncPeople });
+  it("syncs before the isDue check and reports it on a not_yet reply", async () => {
+    const w = dailyWorld();
+    const orgs: string[] = [];
+    const res = await run(w, "2026-10-19T09:30:00Z", async (org) => { orgs.push(org); return "ok"; });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ result: "not_yet", people: "ok" });
+    expect(orgs).toEqual([ORG]);
+    expect(w.notionCalls).toEqual([]);
+  });
+  it("a failed or throwing sync does not stop the daily task, and status codes are unchanged", async () => {
+    for (const sync of [async () => "failed" as const, async () => { throw new Error("boom"); }]) {
+      const w = dailyWorld();
+      const res = await run(w, "2026-10-19T10:05:00Z", sync);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ result: "created", people: "failed" });
+    }
+  });
+  it("not configured is reported, and a bad bearer never syncs", async () => {
+    const w = dailyWorld();
+    expect(await (await run(w, "2026-10-19T09:30:00Z", async () => "not_configured")).json()).toEqual({ result: "not_yet", people: "not_configured" });
+    let called = 0;
+    const denied = await run(w, "2026-10-19T10:05:00Z", async () => { called++; return "ok"; }, "Bearer wrong");
+    expect(denied.status).toBe(401);
+    expect(called).toBe(0);
+  });
+});

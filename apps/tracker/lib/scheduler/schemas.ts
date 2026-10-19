@@ -211,4 +211,6 @@ export const DailyTaskStatusResponse = z.strictObject({
 export const DailyTaskRunResponse = z.strictObject({
   result: z.enum(["created", "updated", "unchanged", "skipped", "busy", "failed"]),
   status: DailyTaskStatusResponse,
+  /** The hourly people sync's result (REQ-38 AC7), on the run route only. */
+  people: z.enum(["ok", "failed", "not_configured"]).optional(),
 });
