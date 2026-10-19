@@ -1,5 +1,5 @@
 # 0045: Parent accounts are read-only
-Status: accepted
+Status: accepted; the "Staff wins" landing line amended by 0052
 Date: 2026-10-16
 
 ## Context
@@ -12,7 +12,7 @@ Date: 2026-10-16
 - **Published children only.** `is_my_linked_student` is true only while the child is published, so a parent who claims early sees "Not ready yet" and no rows.
 - **Teacher-only tables stay hidden.** Flags, AI drafts, the audit log, staff links, availability and the scheduler's summaries and daily tasks have no parent policy.
 - **Landing is by page, not by `proxy.ts`.** `app/page.tsx` sends a parent to `/parent`, and every `/parent` page sends anyone else back to `/`. The proxy does no data lookups today and a membership read on every request would add one.
-- **Staff wins.** A login with a staff or student record never sees the parent shell. A parent address equal to a student address in the org is refused, because the student claim would take that login first.
+- **Staff wins.** A login with a staff or student record never sees the parent shell. A parent address equal to a student address in the org is refused, because the student claim would take that login first. (Amended by 0052: a staff link is not a membership, so a staff link + parent login lands on the parent shell; access is the union.)
 
 ## Alternatives considered
 - A parent seeing the student's own dashboard. Rejected: the student view carries flags and write controls.

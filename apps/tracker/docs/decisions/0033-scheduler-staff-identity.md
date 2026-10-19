@@ -1,5 +1,5 @@
 # 0033: Scheduler teachers are linked to Notion Staff by approval, not given a membership
-Status: accepted in part; the live Notion read and five-minute recheck are superseded by workspace ADR 0004 once REQ-38 ships
+Status: accepted in part; the live Notion read and five-minute recheck are superseded by workspace ADR 0004 once REQ-38 ships; audit log readers amended by 0052
 Date: 2026-10-14
 ## Context
 The Scheduler (REQ-2 to REQ-9) needs to know on every request whether the caller is Charlie (admin) or a specific teacher, and which Notion Staff record they are. `tracker.is_org_staff()` treats `owner` and `teacher` memberships alike and every grade-tracker policy uses it, so a scheduler teacher with a `teacher` membership would read every student's grades. Staff.Email in Notion is mostly empty, so matching logins to Staff by Notion email would map nobody.
@@ -15,4 +15,4 @@ The Scheduler (REQ-2 to REQ-9) needs to know on every request whether the caller
 - Auto-matching by Notion email: maps nobody today.
 - A separate `scheduler` schema: the scheduler is a tracker module and reuses `tracker.orgs`, `is_org_owner` and the audit log. The workspace rule asks new products for their own schema; this is not a new product.
 ## Consequences
-The audit log records link changes and so holds staff emails; it is readable by org staff only. Operator setup: create a Notion internal integration with read access to the Staff database only, set `NOTION_TOKEN` in the tracker Vercel project, apply 0009 after Charlie's sign-off, then run the seed script once per teacher.
+The audit log records link changes and so holds staff emails; it is readable by org staff only. (Amended by 0052: the owner only; a grade teacher reads grade-table rows only.) Operator setup: create a Notion internal integration with read access to the Staff database only, set `NOTION_TOKEN` in the tracker Vercel project, apply 0009 after Charlie's sign-off, then run the seed script once per teacher.
