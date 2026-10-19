@@ -1,6 +1,6 @@
 # Scheduler: operator guide
 
-Four jobs keep the scheduler running. Background for each is in the ADR linked beside it.
+Five jobs keep the scheduler running. Background for each is in the ADR linked beside it.
 
 ## 1. Change the time of the daily task
 Background: [0039](decisions/0039-daily-teacher-texts-task.md).
@@ -30,3 +30,10 @@ Background: [0036](decisions/0036-availability-conflicts-computed.md).
 2. Read the reason beside each class, for example Outside available hours.
 3. Either move the class on `/tracker/schedule` (drag it, or open it and edit), or ask the teacher to change their hours on `/tracker/schedule/availability`.
 4. Reload the conflicts page. The entry disappears once the class fits; conflicts are computed on each visit, nothing needs clearing.
+
+## 5. Check what is still missing
+Background: [0053](decisions/0053-owner-setup-checklist.md).
+1. Open [`/tracker/scheduler/setup`](https://www.apacademy.ca/tracker/scheduler/setup) (owners only; also linked as Setup on the home page and Setup checklist on `/tracker/schedule`).
+2. Each row shows Done, Partial, Missing or Not checked, a count, who is affected while it is missing, and a link to where it is fixed.
+3. Not checked with "Could not read Notion" means Notion did not answer; reload in a minute. It never means zero.
+4. The page only reads. Fix each row on the screen its link opens, then reload the page.
