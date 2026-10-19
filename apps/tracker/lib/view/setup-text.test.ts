@@ -9,7 +9,7 @@ const base: SetupInput = {
   schedules: { adopted: 0, scheduled: 0, failedSync: 0 },
   parents: { students: 2, claimed: 0, invitedOnly: 0, anyLink: false, missing: [{ id: "a", name: "Ada L." }, { id: "c", name: "Cy M." }] },
   notionRecords: { students: 2, linked: 0, missing: [{ id: "a", name: "Ada L." }, { id: "c", name: "Cy M." }] },
-  dailyTask: { missingConfig: [{ name: "SCHEDULER_CRON_SECRET", problem: "not_set" }], readyDates: [] },
+  dailyTask: { missingConfig: [{ name: "cron_secret", problem: "not_set" }], readyDates: [] },
   guard: { ok: true },
 };
 const line = (input: SetupInput, key: string) => text.countLine(buildSetupStatus(input, TODAY).find((r) => r.key === key)!);
@@ -46,9 +46,9 @@ describe("setup copy (AC2, AC4, AC11)", () => {
     expect(line(base, "notionRecords")).toBe("0 of 2 students linked to Notion.");
     expect(line({ ...base, notionRecords: { students: 0, linked: 0, missing: [] } }, "notionRecords")).toBe("No students yet.");
     expect(line(base, "dailyTask")).toBe("Not set: SCHEDULER_CRON_SECRET.");
-    expect(line({ ...base, dailyTask: { missingConfig: [{ name: "NOTION_TOKEN", problem: "not_set" }, { name: "DAILY_TASK_ORG_ID", problem: "not_set" }], readyDates: [] } }, "dailyTask"))
+    expect(line({ ...base, dailyTask: { missingConfig: [{ name: "notion_token", problem: "not_set" }, { name: "org_id", problem: "not_set" }], readyDates: [] } }, "dailyTask"))
       .toBe("Not set: NOTION_TOKEN, DAILY_TASK_ORG_ID.");
-    expect(line({ ...base, dailyTask: { missingConfig: [{ name: "DAILY_TASK_ORG_ID", problem: "other_org" }], readyDates: [] } }, "dailyTask"))
+    expect(line({ ...base, dailyTask: { missingConfig: [{ name: "org_id", problem: "other_org" }], readyDates: [] } }, "dailyTask"))
       .toBe("DAILY_TASK_ORG_ID is set to another org.");
     expect(line({ ...base, dailyTask: { missingConfig: [], readyDates: [] } }, "dailyTask")).toBe("Set up. No task is ready for today or yesterday.");
     expect(line({ ...base, dailyTask: { missingConfig: [], readyDates: [TODAY] } }, "dailyTask")).toBe("Set up. A task is ready.");

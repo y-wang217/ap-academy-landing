@@ -106,7 +106,7 @@ describe("loadSetupInput", () => {
     const { db } = fakeDb(good);
     const input = await loadSetupInput(db, ORG, "2026-10-16", readers(), { workConfigured: false, cronSecretSet: false, orgIdEnv: SECRET });
     expect(input.dailyTask).toEqual({
-      missingConfig: [{ name: "NOTION_TOKEN", problem: "not_set" }, { name: "SCHEDULER_CRON_SECRET", problem: "not_set" }, { name: "DAILY_TASK_ORG_ID", problem: "other_org" }],
+      missingConfig: [{ name: "notion_token", problem: "not_set" }, { name: "cron_secret", problem: "not_set" }, { name: "org_id", problem: "other_org" }],
       readyDates: ["2026-10-16"],
     });
     expect(JSON.stringify(input)).not.toContain(SECRET);

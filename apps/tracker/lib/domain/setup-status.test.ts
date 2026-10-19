@@ -18,7 +18,7 @@ const zero: SetupInput = {
   schedules: { adopted: 0, scheduled: 0, failedSync: 0 },
   parents: { students: 0, claimed: 0, invitedOnly: 0, anyLink: false, missing: [] },
   notionRecords: { students: 0, linked: 0, missing: [] },
-  dailyTask: { missingConfig: [{ name: "DAILY_TASK_ORG_ID", problem: "not_set" }], readyDates: [] },
+  dailyTask: { missingConfig: [{ name: "org_id", problem: "not_set" }], readyDates: [] },
   guard: { ok: false },
 };
 const stateOf = (rows: SetupRow[], key: SetupRow["key"]) => rows.find((r) => r.key === key)!.state;
@@ -91,16 +91,16 @@ describe("dailyTaskConfig and the Daily task row (AC6)", () => {
     expect(dailyTaskConfig(env, ORG)).toEqual([]);
   });
   it("names each failing check", () => {
-    expect(dailyTaskConfig({ ...env, workConfigured: false }, ORG)).toEqual([{ name: "NOTION_TOKEN", problem: "not_set" }]);
-    expect(dailyTaskConfig({ ...env, cronSecretSet: false }, ORG)).toEqual([{ name: "SCHEDULER_CRON_SECRET", problem: "not_set" }]);
-    expect(dailyTaskConfig({ ...env, orgIdEnv: undefined }, ORG)).toEqual([{ name: "DAILY_TASK_ORG_ID", problem: "not_set" }]);
-    expect(dailyTaskConfig({ ...env, orgIdEnv: "" }, ORG)).toEqual([{ name: "DAILY_TASK_ORG_ID", problem: "not_set" }]);
-    expect(dailyTaskConfig({ ...env, orgIdEnv: "10000000-0000-0000-0000-000000000002" }, ORG)).toEqual([{ name: "DAILY_TASK_ORG_ID", problem: "other_org" }]);
+    expect(dailyTaskConfig({ ...env, workConfigured: false }, ORG)).toEqual([{ name: "notion_token", problem: "not_set" }]);
+    expect(dailyTaskConfig({ ...env, cronSecretSet: false }, ORG)).toEqual([{ name: "cron_secret", problem: "not_set" }]);
+    expect(dailyTaskConfig({ ...env, orgIdEnv: undefined }, ORG)).toEqual([{ name: "org_id", problem: "not_set" }]);
+    expect(dailyTaskConfig({ ...env, orgIdEnv: "" }, ORG)).toEqual([{ name: "org_id", problem: "not_set" }]);
+    expect(dailyTaskConfig({ ...env, orgIdEnv: "10000000-0000-0000-0000-000000000002" }, ORG)).toEqual([{ name: "org_id", problem: "other_org" }]);
   });
   const daily = (v: Extract<SetupInput["dailyTask"], { readyDates: string[] }>, today = TODAY) =>
     stateOf(buildSetupStatus({ ...ok, dailyTask: v }, today), "dailyTask");
   it("any failing check is Missing, even with a ready task", () => {
-    expect(daily({ missingConfig: [{ name: "SCHEDULER_CRON_SECRET", problem: "not_set" }], readyDates: [TODAY] })).toBe("missing");
+    expect(daily({ missingConfig: [{ name: "cron_secret", problem: "not_set" }], readyDates: [TODAY] })).toBe("missing");
   });
   it("all set with no ready row is Partial; ready today or yesterday is Done; two days ago is Partial", () => {
     expect(daily({ missingConfig: [], readyDates: [] })).toBe("partial");

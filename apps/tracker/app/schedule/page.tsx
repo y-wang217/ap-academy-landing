@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AllTeachersWeek } from "@/components/scheduler/all-teachers-week";
 import { DailyTaskStatus, type DailyTaskView } from "@/components/scheduler/daily-task-status";
@@ -5,7 +6,7 @@ import { WeekControls } from "@/components/scheduler/week-controls";
 import { WeekEditor } from "@/components/scheduler/week-editor";
 import { WeekGrid } from "@/components/scheduler/week-grid";
 import { TopBar } from "@/components/top-bar";
-import { Card, Empty, Notice, Page } from "@/components/ui";
+import { Card, Empty, Notice, Page, linkClass } from "@/components/ui";
 import { isActiveTeachingStaff } from "@/lib/domain/staff";
 import { getViewer } from "@/lib/data/queries";
 import { realScheduleDeps } from "@/lib/scheduler/deps";
@@ -79,6 +80,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   return shell(
     <>
+      {who.scope === "admin" && (
+        <Link href="/scheduler/setup" className={`${linkClass} text-sm`}>
+          Setup checklist
+        </Link>
+      )}
       {daily && <DailyTaskStatus key={daily.state} date={body.today} time={process.env.DAILY_TASK_TIME || "06:00"} initial={daily} />}
       <WeekControls weekStart={body.weekStart} today={body.today} staffId={shown?.staff.id} all={all} teachers={teachers} />
       <h2 className="text-lg font-medium">Week of {formatDayHeading(body.weekStart)}, {body.weekStart.slice(0, 4)}</h2>
