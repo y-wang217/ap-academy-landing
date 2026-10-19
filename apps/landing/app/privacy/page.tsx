@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CONTACT } from "../config";
 import { AI_DRAFTING_SECTION, ANTHROPIC_PROVIDER_LINE } from "./ai-drafting";
+import { IRIS_SECTION, GOOGLE_PROVIDER_LINE } from "./iris";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — AP Academy",
@@ -39,7 +40,7 @@ export default function PrivacyPolicy() {
             Privacy Policy
           </h1>
           <p className="mt-3 text-[14px] text-text-muted">
-            Last updated: October 16, 2026
+            Last updated: October 19, 2026
           </p>
 
           <div className="mt-10 space-y-8 text-[16px] leading-[1.75] text-text-secondary">
@@ -100,7 +101,7 @@ export default function PrivacyPolicy() {
               <h2 className="mb-4 font-serif text-[24px] text-dark">4. How we share your information</h2>
               <p className="mb-3">We do not sell your personal information. We share it only with:</p>
               <ul className="ml-5 list-disc space-y-1.5">
-                <li><strong>Service providers</strong> who help us operate, including: Supabase (our database and sign-in, hosted in the United States), Stripe (payments), Meta/Facebook (advertising and lead forms), Google (email and related services), Zapier (workflow automation), Notion (records management), and {ANTHROPIC_PROVIDER_LINE}. These providers process information on our behalf and may store data on servers outside Canada, including in the United States.</li>
+                <li><strong>Service providers</strong> who help us operate, including: Supabase (our database and sign-in, hosted in the United States), Stripe (payments), Meta/Facebook (advertising and lead forms), {GOOGLE_PROVIDER_LINE}, Zapier (workflow automation), Notion (records management), and {ANTHROPIC_PROVIDER_LINE}. These providers process information on our behalf and may store data on servers outside Canada, including in the United States.</li>
                 <li><strong>Legal and safety</strong> recipients where required by law, or to protect our rights, users, or the public.</li>
               </ul>
             </section>
@@ -127,7 +128,16 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">6. A note about students and minors</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">6. {IRIS_SECTION.heading}</h2>
+              {IRIS_SECTION.paragraphs.map((text) => (
+                <p key={text} className="mb-3">{text}</p>
+              ))}
+            </section>
+
+            <hr className="border-border" />
+
+            <section>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">7. A note about students and minors</h2>
               <p>
                 Many of our students are under the age of 18. Where we collect information about a minor, we rely on a parent or guardian to provide it or to consent to its collection and use for tutoring purposes. If you are under 18, please involve a parent or guardian before submitting information to us. If you believe a minor has provided us information without appropriate consent, contact us at y.wang217@gmail.com and we will address it.
               </p>
@@ -136,7 +146,7 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">7. Data retention</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">8. Data retention</h2>
               <p>
                 We keep personal information only as long as needed for the purposes described here, to provide our services, and to meet legal and accounting requirements, after which we delete or anonymize it.
               </p>
@@ -145,7 +155,7 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">8. Your choices and rights</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">9. Your choices and rights</h2>
               <p className="mb-3">Subject to applicable law, you may:</p>
               <ul className="mb-4 ml-5 list-disc space-y-1.5">
                 <li>Request access to, or correction of, the personal information we hold about you.</li>
@@ -160,7 +170,7 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">9. Cookies and tracking</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">10. Cookies and tracking</h2>
               <p>
                 We use cookies and similar technologies to run the site, understand usage, and measure advertising. This includes advertising pixels that let platforms like Meta show and measure ads. You can control cookies through your browser settings; disabling some may affect how the site works.
               </p>
@@ -169,7 +179,7 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">10. Security</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">11. Security</h2>
               <p>
                 We take reasonable administrative and technical measures to protect personal information. No method of transmission or storage is completely secure, so we cannot guarantee absolute security.
               </p>
@@ -178,7 +188,7 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">11. Third-party links</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">12. Third-party links</h2>
               <p>
                 Our site and ads may link to third-party sites and services (such as Stripe checkout). Their privacy practices are governed by their own policies, not this one.
               </p>
@@ -187,7 +197,7 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">12. Changes to this policy</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">13. Changes to this policy</h2>
               <p>
                 We may update this policy from time to time. We will post the updated version here and revise the &quot;Last updated&quot; date above.
               </p>
@@ -196,7 +206,7 @@ export default function PrivacyPolicy() {
             <hr className="border-border" />
 
             <section>
-              <h2 className="mb-4 font-serif text-[24px] text-dark">13. Contact us</h2>
+              <h2 className="mb-4 font-serif text-[24px] text-dark">14. Contact us</h2>
               <p className="mb-2">
                 Questions or requests about this policy or your personal information:
               </p>
