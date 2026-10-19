@@ -7,6 +7,7 @@ import { drainOutbox, MAX_ATTEMPTS, nextAttemptAt, SPACING_MS, type DrainDeps } 
 import { fakeOutbox } from "./outbox.fake";
 import type { ScheduleStore, SeriesRecord, SummaryPatch, SummaryRecord } from "./schedule-store";
 import { isAmbiguous, isRetryable } from "./notion-errors";
+import { RenderError } from "./summary-sync";
 
 const ORG = "10000000-0000-4000-8000-000000000001";
 const S1 = "11111111-1111-4111-8111-111111111111";
@@ -72,10 +73,12 @@ describe("nextAttemptAt and error classes (AC4)", () => {
     expect((Date.parse(nextAttemptAt(1, new Date(T0), 120)) - T0) / 1000).toBe(120);
     expect((Date.parse(nextAttemptAt(3, new Date(T0), 5)) - T0) / 1000).toBe(120);
   });
-  it("429, 5xx and no status are retryable; 400, 401, 403, 404 and non-Notion errors are not", () => {
+  it("429, 5xx, no status and non-Notion errors are retryable; 400, 401, 403, 404 and render errors are not", () => {
     for (const s of [429, 500, 502, 503, 504, undefined]) expect(isRetryable(new NotionError("x", s))).toBe(true);
     for (const s of [400, 401, 403, 404]) expect(isRetryable(new NotionError("x", s))).toBe(false);
-    expect(isRetryable(new Error("boom"))).toBe(false);
+    expect(isRetryable(new Error("db down"))).toBe(true);
+    expect(isRetryable(new RenderError())).toBe(false);
+    expect(isAmbiguous(new Error("db down"))).toBe(false);
     expect(isAmbiguous(new NotionError("x", 429))).toBe(false);
     expect(isAmbiguous(new NotionError("x", 504))).toBe(true);
     expect(isAmbiguous(new NotionError("x"))).toBe(true);
@@ -116,6 +119,30 @@ describe("drainOutbox: summaries", () => {
     h.plan.push(new NotionError("Notion returned 503", 503));
     await drainOutbox(h.deps);
     expect(h.out.row(b)).toMatchObject({ status: "failed", attempts: MAX_ATTEMPTS });
+  });
+  it("AC4: a store error reading the summary row is retried, not failed", async () => {
+    const h = harness();
+    const id = h.out.enqueue("summary", S1);
+    const getSummary = h.deps.summary!.store.getSummary;
+    h.deps.summary!.store.getSummary = async () => { throw new Error("db down"); };
+    expect(await drainOutbox(h.deps)).toMatchObject([{ id, status: "pending", result: "failed" }]);
+    expect(h.out.row(id)).toMatchObject({ status: "pending", attempts: 1, lastError: "The Weekly Schedule could not be sent" });
+    h.deps.summary!.store.getSummary = getSummary;
+    h.advance(30_000);
+    expect((await drainOutbox(h.deps))[0]).toMatchObject({ id, status: "done" });
+  });
+  it("a delivery that throws (markSummary rejects after the write) never escapes the drain, and the row is retried", async () => {
+    const h = harness();
+    const id = h.out.enqueue("summary", S1);
+    const store = h.deps.summary!.store;
+    const markSummary = store.markSummary;
+    store.markSummary = async () => { throw new Error("db down"); };
+    expect(await drainOutbox(h.deps, { ids: [id] })).toMatchObject([{ id, status: "pending", result: "failed" }]);
+    expect(h.out.row(id)).toMatchObject({ status: "pending", attempts: 1 });
+    store.markSummary = markSummary;
+    h.advance(30_000);
+    expect((await drainOutbox(h.deps))[0]).toMatchObject({ id, status: "done" });
+    expect(h.writes).toEqual([S1]); // the retry read equal text and wrote nothing
   });
   it("AC4: a render problem is not retried", async () => {
     const h = harness();

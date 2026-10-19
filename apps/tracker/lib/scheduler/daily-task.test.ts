@@ -3,7 +3,7 @@ import type { StoredTeacher } from "../domain/schedule/daily-texts";
 import type { Occurrence } from "../domain/schedule/recurrence";
 import { NotionError, type StaffRecord } from "../notion/staff";
 import type { TaskPage, TeacherRender } from "../notion/work";
-import { ensureDailyTask, type DailyNotion } from "./daily-task";
+import { ensureDailyTask, UNCERTAIN_TASK, type DailyNotion } from "./daily-task";
 import type { DailyTaskPatch, DailyTaskRow, DailyTaskStore } from "./daily-task-store";
 
 const RYAN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -100,7 +100,7 @@ function harness(opts: { notionFails?: () => boolean; error?: () => Error; saveF
     sessionLink: "https://www.apacademy.ca/tracker/schedule",
   });
   return {
-    run: (mode: "create" | "refresh_only" = "create") => ensureDailyTask(deps(), { date: DATE, mode }),
+    run: (mode: "create" | "refresh_only" = "create", ownerRetry?: boolean) => ensureDailyTask(deps(), { date: DATE, mode, ownerRetry }),
     get row() { return row; }, pages, logs, calls, teachers,
     tick: (name: string, checked: boolean) => { for (const p of pages.values()) for (const b of p.blocks) if (b.staffName.startsWith(name)) { b.checked = checked; b.edited = ++clock; } },
     setOccurrences: (o: Occurrence[]) => { occurrences = o; },
@@ -287,6 +287,38 @@ describe("ensureDailyTask", () => {
       const { h, arm } = setup("createLog", () => new NotionError("Notion returned 504", 504));
       arm();
       expect(await h.run()).toBe("uncertain");
+    });
+    it("after an uncertain append, later runs and drains append nothing and stay uncertain", async () => {
+      const { h, arm } = setup("append", () => new NotionError("Notion returned 504", 504));
+      await h.run();
+      h.teachers.clear();
+      arm();
+      expect(await h.run("refresh_only")).toBe("uncertain");
+      h.calls.length = 0;
+      expect(await h.run("create")).toBe("uncertain"); // the hourly run
+      expect(await h.run("refresh_only")).toBe("uncertain"); // a later class save's drain
+      expect(count(h.calls, "append")).toBe(0);
+      expect(h.calls).toEqual([]);
+      expect(h.row).toMatchObject({ state: "failed", lastError: UNCERTAIN_TASK });
+    });
+    it("after an uncertain createLog, the next run creates no second Work Log entry", async () => {
+      const { h, arm } = setup("createLog", () => new NotionError("Notion returned 504", 504));
+      arm();
+      expect(await h.run()).toBe("uncertain");
+      h.calls.length = 0;
+      expect(await h.run()).toBe("uncertain");
+      expect(count(h.calls, "createLog")).toBe(0);
+      expect(h.logs.size).toBe(0);
+    });
+    it("the owner's retry runs again after checking Notion and clears the uncertain state", async () => {
+      let armed = true;
+      const h: ReturnType<typeof harness> = harness({ notionFails: () => armed && h.calls.at(-1) === "createLog", error: () => new NotionError("Notion returned 504", 504) });
+      expect(await h.run()).toBe("uncertain");
+      armed = false;
+      expect(await h.run("create", true)).toBe("unchanged");
+      expect(h.logs.size).toBe(1);
+      expect(h.row).toMatchObject({ state: "ready", lastError: null });
+      expect(await h.run()).toBe("unchanged");
     });
     it("update throwing a 504 stays a plain failure: rewriting a block is safe to repeat", async () => {
       const { h, arm } = setup("update", () => new NotionError("Notion returned 504", 504));

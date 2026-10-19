@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Occurrence } from "../../../lib/domain/schedule/recurrence";
 import { config as proxyConfig } from "../../../proxy";
 import type { StaffRecord } from "../../../lib/notion/staff";
-import type { DailyNotion, DailyTaskDeps } from "../../../lib/scheduler/daily-task";
+import { UNCERTAIN_TASK, type DailyNotion, type DailyTaskDeps } from "../../../lib/scheduler/daily-task";
 import { handleDailyTaskCreate, handleDailyTaskRun, handleDailyTaskStatus } from "../../../lib/scheduler/daily-task-handlers";
 import type { DailyTaskRow, DailyTaskStore } from "../../../lib/scheduler/daily-task-store";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
@@ -164,6 +164,15 @@ describe("AC4: time of day, with an injected clock", () => {
   it("a failed run is a 502 so the workflow shows red", async () => {
     const w = dailyWorld({ notionDown: true });
     expect((await run(w, "2026-10-19T12:15:00Z")).status).toBe(502);
+  });
+  it("REQ-35 AC7: an uncertain task is a 502 too, and the hourly run adds nothing to Notion", async () => {
+    const w = dailyWorld({ page: true });
+    const row = { ...(await w.daily.store.get(TODAY))!, state: "failed" as const, lastError: UNCERTAIN_TASK };
+    w.daily.store = { ...w.daily.store, get: async () => row, claim: async () => row };
+    const res = await run(w, "2026-10-19T12:15:00Z");
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ result: "uncertain" });
+    expect(w.notionCalls).toEqual([]);
   });
   it("a bad configured time falls back to 06:00", async () => {
     const w = dailyWorld();
