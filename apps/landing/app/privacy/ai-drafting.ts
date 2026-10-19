@@ -12,4 +12,4 @@ export const AI_DRAFTING_SECTION = {
   termsLabel: "Anthropic's commercial terms",
 };
 
-export const ANTHROPIC_PROVIDER_LINE = "Anthropic (AI drafting in the Student Tracker, see section 5)";
+export const ANTHROPIC_PROVIDER_LINE = "Anthropic (AI drafting in the Student Tracker, see section 5, and Iris, see section 6)";
