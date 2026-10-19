@@ -379,6 +379,20 @@ delete either raises `42501` or touches no row.
 | staff link + parent link | none. Neither role reads it |
 | grade teacher + parent link | none. Neither role reads it |
 
+### `notion_outbox`
+
+| role | access |
+|---|---|
+| owner | read, write: update of the status columns only, `enqueue_summary_sync`, `claim_notion_outbox`, `retry_notion_outbox` (org). Rows are inserted only by the class-write trigger and those functions. `owner reads notion outbox`, `owner edits notion outbox` |
+| grade teacher | none. owner-only policies |
+| scheduling-only teacher | none. owner-only policies |
+| student | none. owner-only policies |
+| parent | none. owner-only policies |
+| owner + staff link | read, write: the union of the `owner` and `scheduling-only teacher` rows |
+| grade teacher + staff link | none. Neither role reads it |
+| staff link + parent link | none. Neither role reads it |
+| grade teacher + parent link | none. Neither role reads it |
+
 ## Parents
 
 ### `parent_links`
