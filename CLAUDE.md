@@ -60,7 +60,18 @@ superseding ADR first.
   named after the file (`0004_tracker_core`). The live history records them
   under timestamp versions, so `supabase db push` would see every file as
   unapplied: never run it against the live project. Applied so far: 0001 and
-  0002 by hand, 0003 to 0005 on 2026-10-04, 0006 and 0007 on 2026-10-05, 0008 on 2026-10-06, 0009, 0010, 0011 and 0012 on 2026-10-14, 0013 and 0014 on 2026-10-15, 0015, 0016 and 0017 on 2026-10-16, 0018 and 0019 on 2026-10-17.
+  0002 by hand, 0003 to 0005 on 2026-10-04, 0006 and 0007 on 2026-10-05, 0008 on 2026-10-06, 0009, 0010, 0011 and 0012 on 2026-10-14, 0013 and 0014 on 2026-10-15, 0015, 0016 and 0017 on 2026-10-16, 0018 and 0019 on 2026-10-17, 0020 on 2026-10-19 (by hand, see below).
+- **Human migration required.** The Supabase MCP holds any statement with
+  destructive properties (`drop`, `delete`, `truncate`, `alter ... drop`) for
+  a confirmation this client never shows, so `apply_migration` and
+  `execute_sql` hang for 60 seconds and nothing runs (0020 hit this, after
+  one earlier case). A migration containing such a statement is flagged
+  **HUMAN MIGRATION REQUIRED** in its PR title and the first line of its PR
+  body, so Charlie sees it early. Charlie runs the file in the dashboard SQL
+  editor; the agent then inserts the
+  `supabase_migrations.schema_migrations` row (version, name, statements,
+  created_by, the same shape `apply_migration` writes) so the history and
+  the sweep see it as applied, and verifies the result.
 
 ## Commands
 
