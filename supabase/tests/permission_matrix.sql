@@ -717,6 +717,8 @@ begin
       when 'adopt_student_schedule' then r := to_jsonb(tracker.adopt_student_schedule(t.notion_student_id, 'x', '[]'));
       when 'claim_daily_task' then
         select count(*) into n from tracker.claim_daily_task(t.org_id, 'teacher_texts', '2026-10-03', 60); r := to_jsonb(nullif(n, 0));
+      when 'setup_checks' then
+        select count(*) into n from tracker.setup_checks(t.org_id); r := to_jsonb(nullif(n, 0));
       when 'lock_booking_key' then perform tracker.lock_booking_key(t.org_id, 'student', t.notion_student_id);
       when 'schedule_write_context' then r := tracker.schedule_write_context(t.org_id, gen_random_uuid(), '[]');
       when 'is_my_series_student' then r := to_jsonb(nullif(tracker.is_my_series_student(t.org_id, t.notion_student_id), false));
