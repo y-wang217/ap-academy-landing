@@ -37,7 +37,7 @@ test('privacy: service providers name Supabase in the United States', () => {
 });
 
 test('privacy: last updated is the pinned date', () => {
-  assert.ok(page.includes('Last updated: October 16, 2026'));
+  assert.ok(page.includes('Last updated: October 19, 2026'));
 });
 
 test('docs: no stale region claims outside superseded text', () => {

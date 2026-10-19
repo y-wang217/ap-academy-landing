@@ -25,16 +25,16 @@ test('ai drafting: terms link', () => {
   assert.ok(page.includes('rel="noopener noreferrer"'));
 });
 
-test('ai drafting: headings run 1 to 13 and AI drafting is 5, after sharing', () => {
+test('ai drafting: headings run 1 to 14 and AI drafting is 5, after sharing', () => {
   const heads = [...page.matchAll(/<h2[^>]*>(\d+)\. ([^<]*)<\/h2>/g)].map((m) => [Number(m[1]), m[2]]);
   assert.deepEqual(heads.map((h) => h[0]), Array.from({ length: heads.length }, (_, i) => i + 1));
   const h = [...page.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1]);
   assert.ok(h.some((t) => t.startsWith('5. ') && t.includes('{')) || page.includes('{AI_DRAFTING_SECTION.heading}'));
-  assert.equal(page.match(/<section>/g)?.length, 13);
+  assert.equal(page.match(/<section>/g)?.length, 14);
   assert.ok(page.indexOf('How we share your information') < page.indexOf('AI_DRAFTING_SECTION.heading'));
   assert.ok(page.indexOf('AI_DRAFTING_SECTION.heading') < page.indexOf('A note about students and minors'));
-  assert.ok(page.includes('6. A note about students'));
-  assert.ok(page.includes('13. Contact us'));
+  assert.ok(page.includes('7. A note about students'));
+  assert.ok(page.includes('14. Contact us'));
 });
 
 test('ai drafting: provider line is rendered in section 4', () => {
