@@ -6,6 +6,8 @@
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
 // REQ-33: a Students query whose filter holds a Weekly Schedule is_not_empty clause gets only students with schedule text.
+// REQ-39: Lessons (schema with Class occurrence, query, create, read, patch) plus GET /__lessons. One form-logged row
+// cccc…0002 (Ryan, Sam, 21 days ago, empty ref). The seeded paid lesson cccc…0001 stays outside it and is never served to a query.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -100,6 +102,63 @@ const LESSON = {
   },
 };
 
+// REQ-39: the Lessons database the tracker may now read and write, through its four properties only.
+const LESSONS_SCHEMA = { properties: {
+  Lesson: { id: "title" }, Date: { id: "ldt" }, Teacher: { id: "lte" }, "Related to Students & Parents (Lessons 1)": { id: "lst" },
+  "Duration (hrs)": { id: "ldu" }, "Paid to Teacher": { id: "lpd" }, "Pay Period": { id: "lpp" }, Type: { id: "lty" }, "Class occurrence": { id: "lco" },
+} };
+const lessons = new Map(); // id -> { id, props }
+const lessonDay = (offset) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + offset * 86400000));
+lessons.set("cccccccc-cccc-4ccc-8ccc-cccccccc0002", { id: "cccccccc-cccc-4ccc-8ccc-cccccccc0002", props: {
+  Lesson: { title: [{ plain_text: "Form lesson" }] },
+  Date: { date: { start: lessonDay(-21) } },
+  Teacher: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] },
+  "Related to Students & Parents (Lessons 1)": { relation: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001" }] },
+  "Duration (hrs)": { number: 0.83 },
+  "Paid to Teacher": { checkbox: false },
+  "Class occurrence": { rich_text: [] },
+} });
+const refOf = (l) => (l.props["Class occurrence"]?.rich_text ?? []).map((r) => r.plain_text ?? r.text?.content ?? "").join("");
+const lessonJson = (l) => ({ id: l.id, properties: l.props });
+function lessonMatches(l, f) {
+  if (f.and) return f.and.every((g) => lessonMatches(l, g));
+  if (f.property === "Class occurrence") return "equals" in f.rich_text ? refOf(l) === f.rich_text.equals : refOf(l) === "";
+  const d = l.props.Date?.date?.start ?? "";
+  if (f.date?.on_or_after) return d >= f.date.on_or_after;
+  if (f.date?.on_or_before) return d <= f.date.on_or_before;
+  return false;
+}
+async function lessonsApi(req, res) {
+  const url = req.url ?? "";
+  const path = url.split("?")[0];
+  if (req.method === "GET" && path === "/__lessons") return res.end(JSON.stringify([...lessons.values()])), true;
+  if (req.method === "GET" && path === `/v1/data_sources/${LESSONS_DS}`) return res.end(JSON.stringify(LESSONS_SCHEMA)), true;
+  if (req.method === "POST" && path === `/v1/data_sources/${LESSONS_DS}/query`) {
+    const body = await readBody(req);
+    const hits = [...lessons.values()].filter((l) => lessonMatches(l, body.filter ?? {}));
+    return res.end(JSON.stringify({ results: hits.slice(0, body.page_size ?? 100).map(lessonJson), has_more: false, next_cursor: null })), true;
+  }
+  if (req.method === "POST" && path === "/v1/pages") {
+    const body = await readBody(req);
+    if (body.parent?.data_source_id !== LESSONS_DS) return false;
+    const id = randomUUID();
+    const props = Object.fromEntries(Object.entries(body.properties).map(([k, v]) => [k, k === "Class occurrence" || k === "Lesson"
+      ? { [k === "Lesson" ? "title" : "rich_text"]: (v.title ?? v.rich_text).map((t) => ({ plain_text: t.text.content })) } : v]));
+    lessons.set(id, { id, props });
+    return res.end(JSON.stringify({ id })), true;
+  }
+  const pageId = /^\/v1\/pages\/([0-9a-f-]{36})$/.exec(path)?.[1];
+  if (pageId && lessons.has(pageId)) {
+    const l = lessons.get(pageId);
+    if (req.method === "GET") return res.end(JSON.stringify(lessonJson(l))), true;
+    if (req.method === "PATCH") {
+      const body = await readBody(req);
+      for (const [k, v] of Object.entries(body.properties ?? {})) l.props[k] = k === "Class occurrence" ? { rich_text: v.rich_text.map((t) => ({ plain_text: t.text.content })) } : v;
+      return res.end(JSON.stringify(lessonJson(l))), true;
+    }
+  }
+  return false;
+}
 
 // REQ-25: the parent Billing tab. Invoices and Missed Sessions & Credits, plus billing properties on the Students &
 // Parents pages REQ-24 links (Ada dddd…0001, Cy dddd…0002) and Ada's sibling Haider (bbbb…0004, Billing Family Afzal).
@@ -282,7 +341,8 @@ http.createServer(async (req, res) => {
   if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
   // Read-only: the seeded lesson answers a GET and nothing else.
   if (req.method === "GET" && req.url === `/v1/pages/${LESSON_ID}`) return res.end(JSON.stringify(LESSON));
-  if ((req.url ?? "").includes(LESSON_ID) || (req.url ?? "").includes(LESSONS_DS)) { res.statusCode = 405; return res.end(JSON.stringify({ object: "error", status: 405 })); }
+  if ((req.url ?? "").includes(LESSON_ID)) { res.statusCode = 405; return res.end(JSON.stringify({ object: "error", status: 405 })); }
+  if (await lessonsApi(req, res)) return;
   if (await workApi(req, res)) return;
   if (await billingApi(req, res)) return;
   const pageId = /^\/v1\/pages\/([0-9a-f-]{36})(\?.*)?$/.exec(req.url ?? "")?.[1];
