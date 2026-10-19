@@ -230,7 +230,8 @@ describe("source scan (AC18)", () => {
   it("the week files never write classes, Notion, lessons or payouts, and never log", () => {
     for (const f of files) {
       const src = readFileSync(join(root, f), "utf8");
-      expect(src, f).not.toMatch(/lockedWrite|createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|createWindow|updateWindow|deleteWindow|writeWeeklySchedule|lessons|payout|PATCH/i);
+      // REQ-39: the week may show lesson status and link to the Unlinked lessons page; only outcome-actions.tsx calls the lesson routes.
+      expect(src, f).not.toMatch(/lockedWrite|createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|createWindow|updateWindow|deleteWindow|writeWeeklySchedule|createLesson|linkLesson|["'`]\/lessons|\/outcomes|payout|PATCH/i);
       expect(src, f).not.toMatch(/api\.notion\.com|console\./);
     }
   });

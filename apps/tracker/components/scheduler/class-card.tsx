@@ -4,6 +4,8 @@ import { useRef } from "react";
 import type { ClassPurpose } from "@/lib/domain/schedule/recurrence";
 import { cardStatus, notionStudentUrl, purposeRow } from "@/lib/view/week-text";
 import { formatDayHeading } from "@/lib/view/availability-text";
+import { outcomeBadge, type OutcomeState } from "@/lib/view/lesson-text";
+import { OutcomeActions, type LessonMode } from "@/components/scheduler/outcome-actions";
 
 export type CardData = {
   occurrenceKey: string;
@@ -25,6 +27,10 @@ export type CardData = {
   seriesId?: string;
   staffId?: string;
   seriesUpdatedAt?: string;
+  /** REQ-39: a past, not cancelled class; what it turned into; and what this viewer may do about it. */
+  linkable?: boolean;
+  outcome?: OutcomeState | null;
+  lessonMode?: LessonMode;
 };
 
 /** Pointer handlers the grid hands to a draggable card (admin, 768 px and up). */
@@ -46,6 +52,7 @@ export function ClassCard({ card, className = "", style, drag, saving, today, on
   const dialog = useRef<HTMLDialogElement>(null);
   const { onClick: afterDrag, ...dragRest } = drag ?? {};
   const badges = cardStatus(card);
+  const logged = outcomeBadge(card);
   const purpose = purposeRow(card);
   const cancelled = card.status === "cancelled";
   const name = card.studentName ?? "Student";
@@ -67,6 +74,7 @@ export function ClassCard({ card, className = "", style, drag, saving, today, on
         <span className={`block ${cancelled ? "line-through" : ""}`}>{card.subject}</span>
         <span className={`block ${cancelled ? "line-through" : ""}`}>{card.startTime}-{card.endTime}</span>
         {saving && <span className="block font-medium">Saving…</span>}
+        {logged && <span className="block font-medium" data-testid="outcome-badge"><span aria-hidden="true">{logged.icon} </span>{logged.label}</span>}
         {badges.filter((b) => b.label !== "Scheduled").map((b) => (
           <span key={b.label} className="block font-medium">
             <span aria-hidden="true">{b.icon} </span>{b.label}
@@ -87,6 +95,7 @@ export function ClassCard({ card, className = "", style, drag, saving, today, on
           <dd>{badges.map((b) => `${b.icon} ${b.label}`).join(" · ")}</dd>
           {card.status === "moved" && (<><dt className="text-text-muted">Original date</dt><dd>{formatDayHeading(card.originalDate)}</dd></>)}
         </dl>
+        <OutcomeActions card={card} />
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <a href={notionStudentUrl(card.studentId)} target="_blank" rel="noopener" className="text-sm text-accent underline underline-offset-2">
             Open student record
