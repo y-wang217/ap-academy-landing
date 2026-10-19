@@ -60,7 +60,13 @@ export const ConflictsResponseTeacher = z.strictObject({ conflicts: z.array(Conf
 export const ConflictsResponseAdmin = z.strictObject({ conflicts: z.array(ConflictAdmin), notEntered: z.array(z.guid()) });
 
 // Weekly calendar (REQ-6) -------------------------------------------------------------
-const WeekExtras = { studentName: z.string().nullable(), conflict: ConflictReason.nullable() };
+/** What a past class turned into (REQ-39). Null: nothing recorded yet. */
+export const WeekOutcome = z.discriminatedUnion("state", [
+  z.strictObject({ state: z.literal("logging"), stale: z.boolean() }),
+  z.strictObject({ state: z.literal("delivered"), lessonDate: IsoDate.nullable(), lessonUrl: z.string() }),
+  z.strictObject({ state: z.literal("no_show") }),
+]);
+const WeekExtras = { studentName: z.string().nullable(), conflict: ConflictReason.nullable(), linkable: z.boolean(), outcome: WeekOutcome.nullable() };
 export const WeekOccurrenceTeacher = OccurrenceTeacher.extend(WeekExtras).strict();
 export const WeekOccurrenceAdmin = OccurrenceAdmin.extend(WeekExtras).strict();
 const WeekDay = z.strictObject({
@@ -78,12 +84,16 @@ export const WeekResponseTeacher = z.strictObject({
   weekStart: IsoDate,
   today: IsoDate,
   namesLoaded: z.boolean(),
+  lessonsEnabled: z.boolean(),
+  outcomesLoaded: z.boolean(),
   teachers: z.array(z.strictObject({ staff: StaffPublicTeacher, days: z.array(WeekDay), occurrences: z.array(WeekOccurrenceTeacher), totals: WeekTotals })),
 });
 export const WeekResponseAdmin = z.strictObject({
   weekStart: IsoDate,
   today: IsoDate,
   namesLoaded: z.boolean(),
+  lessonsEnabled: z.boolean(),
+  outcomesLoaded: z.boolean(),
   teachers: z.array(z.strictObject({ staff: StaffPublicAdmin, days: z.array(WeekDay), occurrences: z.array(WeekOccurrenceAdmin), totals: WeekTotals })),
 });
 export type WeekResponseAdminT = z.infer<typeof WeekResponseAdmin>;
@@ -212,3 +222,20 @@ export const DailyTaskRunResponse = z.strictObject({
   result: z.enum(["created", "updated", "unchanged", "skipped", "busy", "failed"]),
   status: DailyTaskStatusResponse,
 });
+
+// Lesson logging (REQ-39) ---------------------------------------------------------------
+export const LessonOutcomeResponse = z.strictObject({
+  created: z.boolean(),
+  outcome: z.strictObject({ state: z.literal("delivered"), lessonId: z.guid(), lessonDate: IsoDate.nullable(), lessonUrl: z.string() }),
+});
+const UnlinkedClass = {
+  seriesId: z.guid(), originalDate: IsoDate, date: IsoDate, startTime: Hhmm, endTime: z.string(), subject: z.string(),
+  staffId: z.guid(), staffName: z.string().nullable(), studentId: z.guid(), studentName: z.string().nullable(),
+};
+export const UnlinkedResponse = z.strictObject({
+  from: IsoDate,
+  to: IsoDate,
+  unlinked: z.array(z.strictObject({ ...UnlinkedClass, candidates: z.array(z.strictObject({ lessonId: z.string(), date: IsoDate.nullable(), lessonUrl: z.string() })) })),
+  doubles: z.array(z.strictObject({ ...UnlinkedClass, lessonId: z.string(), lessonUrl: z.string() })),
+});
+export type UnlinkedResponseT = z.infer<typeof UnlinkedResponse>;

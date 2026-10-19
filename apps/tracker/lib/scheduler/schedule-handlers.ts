@@ -17,6 +17,8 @@ import type { BookingKey, BookingStamp, ScheduleStore, SeriesRecord, StoreError,
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
 import { ensureDailyTask, type DailyTaskDeps } from "./daily-task";
 import { normaliseScheduleText } from "../domain/schedule/legacy-line";
+import { CLAIM_MS, isLinkable, type LessonLinkPort } from "../domain/schedule/lesson-link";
+import type { OutcomeRecord, OutcomeStore } from "./outcome-store";
 
 /**
  * Handler dependencies plus storage and "today" (America/Toronto) as injected
@@ -31,6 +33,12 @@ export type ScheduleDeps = HandlerDeps & {
   studentNames?: () => Promise<Map<string, string>>;
   /** Today's "Text teachers their schedules" task (REQ-8). Absent when Notion's Work database is not wired in. */
   dailyTask?: DailyTaskDeps;
+  /** Notion Lessons (REQ-39). Absent when Notion is not wired in; the lesson routes then answer 503 lessons_not_ready. */
+  lessons?: LessonLinkPort;
+  /** Class outcomes, delivered or no-show (REQ-39, migration 0023). Wired together with `lessons`. */
+  outcomes?: OutcomeStore;
+  /** Milliseconds since the epoch; claims older than a minute are taken over. Defaults to Date.now. */
+  now?: () => number;
 };
 
 const HEADERS = { "Cache-Control": "no-store" };
@@ -282,7 +290,7 @@ export async function loadWeek(deps: ScheduleDeps, query: WeekQuery): Promise<We
 
   const range = weekOf(date);
   const scope = all ? undefined : staff[0]?.id;
-  if (!all && scope === undefined) return { ok: true, body: WeekResponseAdmin.parse({ weekStart: range.from, today, namesLoaded: true, teachers: [] }) };
+  if (!all && scope === undefined) return { ok: true, body: WeekResponseAdmin.parse({ weekStart: range.from, today, namesLoaded: true, lessonsEnabled: Boolean(deps.outcomes && deps.lessons), outcomesLoaded: true, teachers: [] }) };
   const [{ series, exceptions }, windows, avExceptions] = await Promise.all([
     deps.store.listSeries(range, scope),
     deps.store.listWindows(scope),
@@ -299,15 +307,36 @@ export async function loadWeek(deps: ScheduleDeps, query: WeekQuery): Promise<We
     return { member, mine, days, occurrences, conflictOf: new Map(conflicts.map((c) => [c.occurrence.occurrenceKey, c.reason])) };
   });
 
-  let names: Map<string, string> | null = new Map();
   const wanted = new Set(perTeacher.flatMap((t) => t.occurrences.map((o) => o.studentId)));
-  if (wanted.size > 0) {
+  const loadNames = async (): Promise<Map<string, string> | null> => {
+    if (wanted.size === 0) return new Map();
     try {
-      names = deps.studentNames ? await deps.studentNames() : null;
+      return deps.studentNames ? await deps.studentNames() : null;
     } catch {
-      names = null;
+      return null;
     }
-  }
+  };
+  // Outcomes (REQ-39) for the linkable occurrences only, read next to the names. A failed read still shows the week.
+  const lessonsEnabled = Boolean(deps.outcomes && deps.lessons);
+  const linkableKeys = perTeacher.flatMap((t) => t.occurrences.filter((o) => isLinkable(o, today)).map((o) => ({ seriesId: o.seriesId, originalDate: o.originalDate })));
+  const loadOutcomes = async (): Promise<OutcomeRecord[] | null> => {
+    if (!lessonsEnabled || linkableKeys.length === 0) return [];
+    try {
+      return await deps.outcomes!.listForOccurrences(linkableKeys);
+    } catch {
+      return null;
+    }
+  };
+  const [names, outcomes] = await Promise.all([loadNames(), loadOutcomes()]);
+  const outcomeOf = new Map((outcomes ?? []).map((r) => [`${r.seriesId}:${r.originalDate}`, r]));
+  const now = (deps.now ?? Date.now)();
+  const outcomeView = (o: Occurrence) => {
+    const r = outcomeOf.get(`${o.seriesId}:${o.originalDate}`);
+    if (!r) return null;
+    if (r.outcome === "no_show") return { state: "no_show" as const };
+    if (!r.notionLessonId) return { state: "logging" as const, stale: !r.claimedAt || now - Date.parse(r.claimedAt) >= CLAIM_MS };
+    return { state: "delivered" as const, lessonDate: r.lessonDate, lessonUrl: `https://www.notion.so/${r.notionLessonId.replaceAll("-", "")}` };
+  };
 
   const rows = perTeacher.map((t) => {
     const stamp = new Map(t.mine.map((s) => [s.id, s.updatedAt]));
@@ -319,11 +348,13 @@ export async function loadWeek(deps: ScheduleDeps, query: WeekQuery): Promise<We
         ...o,
         studentName: names?.get(o.studentId) ?? null,
         conflict: t.conflictOf.get(o.occurrenceKey) ?? null,
+        linkable: isLinkable(o, today),
+        outcome: outcomeView(o),
         seriesUpdatedAt: stamp.get(o.seriesId),
       })),
     };
   });
-  const head = { weekStart: range.from, today, namesLoaded: names !== null };
+  const head = { weekStart: range.from, today, namesLoaded: names !== null, lessonsEnabled, outcomesLoaded: lessonsEnabled && outcomes !== null };
 
   if (identity.scope === "teacher") {
     return {

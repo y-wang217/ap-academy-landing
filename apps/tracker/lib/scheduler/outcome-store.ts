@@ -27,6 +27,6 @@ export type OutcomeStore = {
   takeOver(id: string, seenClaimedAt: string | null): Promise<OutcomeRecord | null>;
   complete(id: string, lessonId: string, lessonDate: string): Promise<OutcomeRecord>;
   insertNoShow(input: OccurrenceKey): Promise<Inserted>;
-  /** Owner only (RLS). The audit trigger keeps the old row. */
+  /** Org owner only (RLS). The audit trigger keeps the old row. */
   remove(id: string): Promise<boolean>;
 };

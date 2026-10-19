@@ -3,7 +3,9 @@ import { getDb } from "../data/client";
 import { createScheduleStore } from "../data/schedule";
 import { todayIso } from "../time";
 import { getStaffList, getStudentNames } from "../notion/cached";
-import { notionConfigured, readStudentsConfig, readWorkConfig } from "../notion/config";
+import { notionConfigured, readLessonsConfig, readStudentsConfig, readWorkConfig } from "../notion/config";
+import { createLessonsPort } from "../notion/lessons";
+import { createOutcomeStore } from "../data/outcomes";
 import { fetchScheduledStudents, fetchStudentSchedule, writeWeeklySchedule } from "../notion/students";
 import type { HandlerDeps } from "./handlers";
 import { resolveSchedulerIdentity } from "./identity";
@@ -48,12 +50,13 @@ export function realScheduleDeps(): ScheduleDeps {
   const base = realDeps();
   let cached: ReturnType<HandlerDeps["identity"]> | undefined;
   const identity = () => (cached ??= base.identity());
-  const store = createScheduleStore(async () => {
+  const context = async () => {
     const [db, who] = await Promise.all([getDb(), identity()]);
     if (!db || (who.scope !== "admin" && who.scope !== "teacher")) return null;
     const user = (await db.supabase.auth.getUser()).data.user;
     return user ? { db, orgId: who.orgId, userId: user.id } : null;
-  });
+  };
+  const store = createScheduleStore(context);
   const config = readStudentsConfig();
   const students = config
     ? {
@@ -78,5 +81,9 @@ export function realScheduleDeps(): ScheduleDeps {
           studentNames,
         })
       : undefined;
-  return { ...base, identity, store, today: () => todayIso(), students, studentNames, dailyTask };
+  // Lesson logging (REQ-39): Notion Lessons plus the outcome table, wired together or not at all.
+  const lessonsConfig = readLessonsConfig();
+  const lessons = lessonsConfig ? createLessonsPort(lessonsConfig) : undefined;
+  const outcomes = lessons ? createOutcomeStore(context) : undefined;
+  return { ...base, identity, store, today: () => todayIso(), students, studentNames, dailyTask, lessons, outcomes };
 }
