@@ -464,7 +464,7 @@ try {
   check("a student with no class in the week never appears", (await teacher.getByText("Nobody Booked").count()) === 0);
 
   // REQ-9: snapshot every tracker table the scheduler may not touch, after sign-in and before the first booking step.
-  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers", "booking_stamps", "schedule_writes"];
+  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers", "booking_stamps", "schedule_writes", "notion_outbox"];
   const psql = (sql) => execSync(`psql -X -A -t "${process.env.PG_URL}" -c "${sql}"`).toString().trim();
   const otherTables = () =>
     psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' order by 1")
