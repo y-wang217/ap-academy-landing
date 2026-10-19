@@ -1,5 +1,5 @@
 # 0040: A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet
-Status: accepted
+Status: superseded by 0054
 Date: 2026-10-14
 
 ## Context
