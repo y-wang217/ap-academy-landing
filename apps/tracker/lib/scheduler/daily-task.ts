@@ -33,7 +33,9 @@ export type DailyTaskDeps = {
 /**
  * `uncertain`: a call that adds to Notion (a to-do, the Work Log entry) failed
  * in a way where Notion may have applied it anyway. It is never repeated
- * automatically; Charlie checks the task and retries (REQ-35 AC7).
+ * automatically: the row keeps UNCERTAIN_TASK as its error, and every later
+ * run for that date returns `uncertain` without touching Notion until the
+ * owner checks the task and retries (`ownerRetry`, REQ-35 AC7).
  */
 export type DailyTaskResult = "created" | "updated" | "unchanged" | "skipped" | "busy" | "failed" | "uncertain";
 export type DailyTaskMode = "create" | "refresh_only";
@@ -42,7 +44,8 @@ const LEASE_SECONDS = 60;
 const MAX_ERROR = 300;
 const INTRO = "Nothing is sent automatically. Tick a teacher after you text them.";
 const introText = (hhmm: string) => `${INTRO} Last updated ${hhmm}`;
-const UNCERTAIN = "Notion may have saved this. Check the task, then retry.";
+export const UNCERTAIN_TASK = "Notion may have saved this. Check the task, then retry.";
+const isUncertain = (row: { state: string; lastError: string | null } | null) => row?.state === "failed" && row.lastError === UNCERTAIN_TASK;
 
 const render = (d: TeacherDay): TeacherRender => ({
   todoText: d.title,
@@ -65,16 +68,19 @@ function errorText(e: unknown): string {
  * kept apart by a lease; a retry after a half-finished create adopts the page
  * it finds by exact title instead of making a second one (tracker ADR 0039).
  */
-export async function ensureDailyTask(deps: DailyTaskDeps, input: { date: string; mode: DailyTaskMode }): Promise<DailyTaskResult> {
+type EnsureInput = { date: string; mode: DailyTaskMode; /** The owner checked Notion and asked to send again: clears an uncertain task. */ ownerRetry?: boolean };
+
+export async function ensureDailyTask(deps: DailyTaskDeps, input: EnsureInput): Promise<DailyTaskResult> {
   return (await ensureDailyTaskDetail(deps, input)).result;
 }
 
 /** ensureDailyTask with the error behind a `failed`, which the outbox classifies for backoff (REQ-35). */
-export async function ensureDailyTaskDetail(deps: DailyTaskDeps, input: { date: string; mode: DailyTaskMode }): Promise<{ result: DailyTaskResult; error?: unknown }> {
+export async function ensureDailyTaskDetail(deps: DailyTaskDeps, input: EnsureInput): Promise<{ result: DailyTaskResult; error?: unknown }> {
   const { date } = input;
   let existing;
   try {
     existing = await deps.store.get(date);
+    if (isUncertain(existing) && !input.ownerRetry) return { result: "uncertain" };
     if (input.mode === "refresh_only" && !existing?.notionPageId) return { result: "skipped" };
   } catch (e) {
     return { result: "failed", error: e };
@@ -86,6 +92,11 @@ export async function ensureDailyTaskDetail(deps: DailyTaskDeps, input: { date: 
     return { result: "failed", error: e };
   }
   if (!row) return { result: "busy" };
+  if (isUncertain(row) && !input.ownerRetry) {
+    // Became uncertain between the read and the claim.
+    await deps.store.save(row.id, { releaseLease: true }).catch(() => undefined);
+    return { result: "uncertain" };
+  }
 
   let result: DailyTaskResult = "unchanged";
   let refreshCount = row.refreshCount;
@@ -170,7 +181,7 @@ export async function ensureDailyTaskDetail(deps: DailyTaskDeps, input: { date: 
     return { result };
   } catch (e) {
     const uncertain = adding && isAmbiguous(e);
-    await deps.store.save(row.id, { state: "failed", lastError: uncertain ? UNCERTAIN : errorText(e), refreshCount, releaseLease: true }).catch(() => undefined);
+    await deps.store.save(row.id, { state: "failed", lastError: uncertain ? UNCERTAIN_TASK : errorText(e), refreshCount, releaseLease: true }).catch(() => undefined);
     return { result: uncertain ? "uncertain" : "failed", error: e };
   }
 }

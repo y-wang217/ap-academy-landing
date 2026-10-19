@@ -414,15 +414,15 @@ describe("REQ-35 AC15: summaries go through the outbox when it is wired in", () 
     expect(out.calls).toContain("enqueueSummaries");
     expect(r.body.results).toEqual([{ studentId: S1, summarySync: "synced" }, { studentId: S2, summarySync: "synced" }]);
   });
-  it("a failed delivery leaves sync_state failed with its short error and the row failed", async () => {
+  it("a failed delivery leaves sync_state failed with its short error and the row pending for a retry", async () => {
     const w = world({ [S1]: CLEAN });
     const { out, deps } = withOutbox(w);
     await handleImportRun(deps, { dryRun: false });
     w.notion.set(S1, { ...w.notion.get(S1)!, weeklySchedule: "edited by hand" });
     w.failWrites(true);
     const r = await json(await handleSyncSummaries(deps, { studentId: S1 }));
-    expect(r.body.results).toEqual([{ studentId: S1, summarySync: "failed" }]);
+    expect(r.body.results).toEqual([{ studentId: S1, summarySync: "queued" }]);
     expect(w.summaries.get(S1)).toMatchObject({ syncState: "failed", lastError: "Notion returned 500" });
-    expect(out.rows.at(-1)).toMatchObject({ status: "failed" });
+    expect(out.rows.at(-1)).toMatchObject({ status: "pending", attempts: 1 }); // a 500 is retried with backoff (AC4)
   });
 });

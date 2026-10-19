@@ -60,6 +60,6 @@ export async function handleExportsRetry(deps: ScheduleDeps, body: unknown): Pro
   }
   if (r === "not_found") return send(404, { error: "not_found" });
   if (r === "not_retryable") return send(409, { error: "not_retryable" });
-  const [delivered] = await drainOutbox(drainDepsOf({ ...deps, outbox }), { ids: [r.id], limit: 1 });
+  const [delivered] = await drainOutbox(drainDepsOf({ ...deps, outbox }), { ids: [r.id], limit: 1, ownerRetry: true });
   return send(200, ExportRetryResponse.parse({ id: r.id, status: delivered?.status ?? "pending", supersededBy: r.supersededBy }));
 }

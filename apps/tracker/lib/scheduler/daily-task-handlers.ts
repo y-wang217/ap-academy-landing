@@ -44,7 +44,8 @@ export async function handleDailyTaskCreate(deps: ScheduleDeps, body: unknown): 
   const parsed = z.strictObject({ date: IsoDate, requestId: z.guid().optional() }).safeParse(body);
   if (!parsed.success || parsed.data.date !== deps.today()) return send(400, { error: "invalid_request" });
   if (!deps.dailyTask) return send(503, { error: "scheduler_not_configured" });
-  const result = await ensureDailyTask(deps.dailyTask, { date: parsed.data.date, mode: "create" });
+  // The owner pressed it after seeing the task, so an uncertain task may be sent again.
+  const result = await ensureDailyTask(deps.dailyTask, { date: parsed.data.date, mode: "create", ownerRetry: true });
   let row: DailyTaskRow | null = null;
   try {
     row = await deps.dailyTask.store.get(parsed.data.date);
@@ -96,7 +97,8 @@ export async function handleDailyTaskRun(input: {
     // Reported without a status row.
   }
   // A failure is a 502 so the calling workflow shows red; the next hourly run retries.
-  return send(result === "failed" ? 502 : 200, DailyTaskRunResponse.parse({ result, status: statusOf(row), ...(drained ? { drained } : {}) }));
+  // Uncertain is a 502 too: it waits for the owner, so it must not look green.
+  return send(result === "failed" || result === "uncertain" ? 502 : 200, DailyTaskRunResponse.parse({ result, status: statusOf(row), ...(drained ? { drained } : {}) }));
 }
 
 function countDrained(rows: { status: "done" | "pending" | "failed" | "uncertain" }[]) {

@@ -58,16 +58,29 @@ function afterFailure(row: OutboxRow, error: unknown, now: Date, fallback: strin
   return { status: "pending", lastError, nextAttemptAt: nextAttemptAt(row.attempts, now, retryAfterOf(error)) };
 }
 
-async function deliver(deps: DrainDeps, row: OutboxRow): Promise<{ finish: OutboxFinish; result: Delivered["result"]; error?: unknown }> {
+const FALLBACK: Record<OutboxKind, string> = { summary: "The Weekly Schedule could not be sent", daily_task: "Today's task could not be updated" };
+
+type Delivery = { finish: OutboxFinish; result: Delivered["result"]; error?: unknown };
+
+/** A delivery that throws (a storage call outside the port's own guards) is a failed attempt, never a thrown drain. */
+async function deliverSafely(deps: DrainDeps, row: OutboxRow, ownerRetry: boolean): Promise<Delivery> {
+  try {
+    return await deliver(deps, row, ownerRetry);
+  } catch (e) {
+    return { finish: afterFailure(row, e, deps.now(), FALLBACK[row.kind]), result: "failed", error: e };
+  }
+}
+
+async function deliver(deps: DrainDeps, row: OutboxRow, ownerRetry: boolean): Promise<Delivery> {
   const now = deps.now();
   if (row.kind === "summary") {
     if (!deps.summary) return { finish: { status: "done", lastError: null }, result: "not_configured" };
     const r = await syncStudentSummaryDetail(deps.summary, row.targetId);
-    if (r.result === "failed") return { finish: afterFailure(row, r.error, now, "The Weekly Schedule could not be sent"), result: r.result, error: r.error };
+    if (r.result === "failed") return { finish: afterFailure(row, r.error, now, FALLBACK.summary), result: r.result, error: r.error };
     return { finish: { status: "done", lastError: null, payloadHash: r.payloadHash }, result: r.result };
   }
   if (!deps.dailyTask) return { finish: { status: "done", lastError: null }, result: "not_configured" };
-  const r = await ensureDailyTaskDetail(deps.dailyTask, { date: deps.today(), mode: "refresh_only" });
+  const r = await ensureDailyTaskDetail(deps.dailyTask, { date: deps.today(), mode: "refresh_only", ownerRetry });
   switch (r.result) {
     case "busy":
       // Another run holds today's task: not an attempt, try again shortly.
@@ -78,7 +91,7 @@ async function deliver(deps: DrainDeps, row: OutboxRow): Promise<{ finish: Outbo
     case "uncertain":
       return { finish: { status: "uncertain", lastError: "Notion may have saved this. Check today's task, then retry." }, result: r.result, error: r.error };
     case "failed":
-      return { finish: afterFailure(row, r.error, now, "Today's task could not be updated"), result: r.result, error: r.error };
+      return { finish: afterFailure(row, r.error, now, FALLBACK.daily_task), result: r.result, error: r.error };
     default:
       return { finish: { status: "done", lastError: null }, result: r.result };
   }
@@ -88,9 +101,11 @@ async function deliver(deps: DrainDeps, row: OutboxRow): Promise<{ finish: Outbo
  * Claims and delivers due rows one at a time: at least SPACING_MS apart, at
  * most `limit` rows or `budgetMs`, and stops at the first 429. `ids` limits it
  * to those rows (a save's own exports); without it any due row of the org.
- * Never throws: a storage error ends the drain early and the rows stay owed.
+ * `ownerRetry` is the owner's Retry: it may re-send a daily task that is
+ * uncertain, after they checked Notion (AC7). Never throws: a storage error
+ * ends the drain early and the rows stay owed.
  */
-export async function drainOutbox(deps: DrainDeps, opts: { ids?: string[]; limit?: number; budgetMs?: number } = {}): Promise<Delivered[]> {
+export async function drainOutbox(deps: DrainDeps, opts: { ids?: string[]; limit?: number; budgetMs?: number; ownerRetry?: boolean } = {}): Promise<Delivered[]> {
   const limit = opts.limit ?? DRAIN_LIMIT;
   const budget = opts.budgetMs ?? DRAIN_BUDGET_MS;
   const ids = opts.ids ?? null;
@@ -107,7 +122,7 @@ export async function drainOutbox(deps: DrainDeps, opts: { ids?: string[]; limit
     }
     if (!row) break;
     if (i > 0) await deps.sleep(SPACING_MS);
-    const { finish, result, error } = await deliver(deps, row);
+    const { finish, result, error } = await deliverSafely(deps, row, opts.ownerRetry ?? false);
     try {
       await deps.outbox.finish(row, finish);
     } catch {
