@@ -4,13 +4,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { CardData } from "@/components/scheduler/class-card";
 import { ClassForm, type FormMode } from "@/components/scheduler/class-form";
+import { ExportsStrip } from "@/components/scheduler/exports-strip";
 import { WeekGrid, type GridEditor } from "@/components/scheduler/week-grid";
 import { Notice, buttonClass, secondaryButtonClass } from "@/components/ui";
 import type { AvailabilityDay } from "@/lib/domain/schedule/availability";
 import { isoWeekday } from "@/lib/domain/schedule/wallclock";
 import { api } from "@/lib/scheduler/api-client";
 import { dropLabel, saveErrorMessage } from "@/lib/view/booking-text";
-import { afterDailyRetry, afterSummaryRetry, readSaveOutcome, saveNotice, type SaveOutcome } from "@/lib/view/save-notice";
+import { afterDailyRetry, afterExportRetry, afterSummaryRetry, exportToRetry, readSaveOutcome, saveNotice, type SaveOutcome } from "@/lib/view/save-notice";
 import type { Slot } from "@/lib/view/drag";
 
 type Props = {
@@ -41,6 +42,8 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
   const [scope, setScope] = useState<"this" | "future">("this");
   const scopeDialog = useRef<HTMLDialogElement>(null);
   const lastCard = useRef<string | null>(null);
+  // Bumped after every save or retry, so the Notion exports strip reloads.
+  const [exportsKey, setExportsKey] = useState(0);
 
   // New data from the server: whatever was in flight has landed (or been refused), so show the server's picture.
   const [seen, setSeen] = useState(occurrences);
@@ -77,6 +80,7 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
     if (r.ok) {
       // The card stays at the new slot until the refreshed week replaces it.
       setNotice({ kind: "saved", outcome: readSaveOutcome(r.data, card.studentName ?? null) });
+      setExportsKey((k) => k + 1);
       router.refresh();
       return;
     }
@@ -89,14 +93,18 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
     if (r.stale) router.refresh();
   }
 
-  // Re-run one export only; the class is not saved again (REQ-28).
+  // Re-run one export only; the class is not saved again (REQ-28). With an outbox row, resend that row (REQ-35).
   async function retry(what: "summary" | "dailyTask", outcome: SaveOutcome) {
     if (retrying) return;
     setRetrying(what);
-    const next = what === "summary"
-      ? afterSummaryRetry(outcome, await api.send("POST", "/summaries/sync", `summary-retry:${outcome.studentId}`, { studentId: outcome.studentId }))
-      : afterDailyRetry(outcome, await api.send("POST", "/daily-task", `daily-task:${today}`, { date: today }));
+    const rowId = exportToRetry(outcome, what);
+    const next = rowId
+      ? afterExportRetry(outcome, what, rowId, await api.send("POST", "/exports/retry", `export-retry:${rowId}`, { id: rowId }))
+      : what === "summary"
+        ? afterSummaryRetry(outcome, await api.send("POST", "/summaries/sync", `summary-retry:${outcome.studentId}`, { studentId: outcome.studentId }))
+        : afterDailyRetry(outcome, await api.send("POST", "/daily-task", `daily-task:${today}`, { date: today }));
     setRetrying(null);
+    setExportsKey((k) => k + 1);
     // A form or a move may have replaced the notice while the retry ran; only update the one it belongs to.
     setNotice((n) => (n?.kind === "saved" && n.outcome === outcome ? { kind: "saved", outcome: next } : n));
     router.refresh();
@@ -126,6 +134,7 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
       <div role="status" aria-live="polite">
         {pending.size > 0 ? <p className="text-sm font-medium">Saving…</p> : notice?.kind === "error" ? <Notice tone="error">{notice.text}</Notice> : notice && <SavedNotice outcome={notice.outcome} retrying={retrying} onRetry={(what) => void retry(what, notice.outcome)} />}
       </div>
+      <ExportsStrip reloadKey={exportsKey} />
       <WeekGrid days={days} occurrences={occurrences} today={today} teacherName={teacher.name} editor={editor} />
 
       {form && (
@@ -143,6 +152,7 @@ export function WeekEditor({ days, occurrences, today, teacher, teachers, studen
           onSaved={(outcome) => {
             setForm(null);
             setNotice({ kind: "saved", outcome });
+            setExportsKey((k) => k + 1);
             router.refresh();
             refocus();
           }}

@@ -1,6 +1,6 @@
 # Scheduler: operator guide
 
-Four jobs keep the scheduler running. Background for each is in the ADR linked beside it.
+Five jobs keep the scheduler running. Background for each is in the ADR linked beside it.
 
 ## 1. Change the time of the daily task
 Background: [0039](decisions/0039-daily-teacher-texts-task.md).
@@ -30,3 +30,11 @@ Background: [0036](decisions/0036-availability-conflicts-computed.md).
 2. Read the reason beside each class, for example Outside available hours.
 3. Either move the class on `/tracker/schedule` (drag it, or open it and edit), or ask the teacher to change their hours on `/tracker/schedule/availability`.
 4. Reload the conflicts page. The entry disappears once the class fits; conflicts are computed on each visit, nothing needs clearing.
+
+## 5. A Notion export did not go through
+Background: [0053](decisions/0053-notion-export-outbox.md).
+1. Open `/tracker/schedule`. A "Notion exports" strip above the week lists every export that is not done. It is hidden when there are none.
+2. **Failed** (for example Notion returned 404): fix the cause in Notion first, such as a student page that was moved or a teacher missing from Staff, then press Retry.
+3. **May have been updated**: today's task may already have the change. Open today's task in Notion, check the teacher's to-do, then press Retry. Retry rewrites from the schedule, so a duplicate to-do is the only thing to delete by hand.
+4. **Waiting since** a time: Notion was busy or down. It retries on its own, at most an hour apart. Retry now sends it at once.
+5. Nothing is ever deleted: a line leaves the strip once a Retry or a later save sends that export.

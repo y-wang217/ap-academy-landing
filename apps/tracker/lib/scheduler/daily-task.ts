@@ -5,6 +5,7 @@ import type { StaffRecord } from "../notion/staff";
 import type { LogInput, TaskPage, TeacherRender, ToDo } from "../notion/work";
 import { localHhmm } from "../time";
 import type { DailyTaskStore } from "./daily-task-store";
+import { isAmbiguous } from "./notion-errors";
 
 /** The Notion side, injected so tests never touch Notion. The real one wraps lib/notion/work.ts. */
 export type DailyNotion = {
@@ -29,13 +30,19 @@ export type DailyTaskDeps = {
   /** The Work Log entry's Session link: the admin schedule page. */
   sessionLink: string;
 };
-export type DailyTaskResult = "created" | "updated" | "unchanged" | "skipped" | "busy" | "failed";
+/**
+ * `uncertain`: a call that adds to Notion (a to-do, the Work Log entry) failed
+ * in a way where Notion may have applied it anyway. It is never repeated
+ * automatically; Charlie checks the task and retries (REQ-35 AC7).
+ */
+export type DailyTaskResult = "created" | "updated" | "unchanged" | "skipped" | "busy" | "failed" | "uncertain";
 export type DailyTaskMode = "create" | "refresh_only";
 
 const LEASE_SECONDS = 60;
 const MAX_ERROR = 300;
 const INTRO = "Nothing is sent automatically. Tick a teacher after you text them.";
 const introText = (hhmm: string) => `${INTRO} Last updated ${hhmm}`;
+const UNCERTAIN = "Notion may have saved this. Check the task, then retry.";
 
 const render = (d: TeacherDay): TeacherRender => ({
   todoText: d.title,
@@ -59,24 +66,31 @@ function errorText(e: unknown): string {
  * it finds by exact title instead of making a second one (tracker ADR 0039).
  */
 export async function ensureDailyTask(deps: DailyTaskDeps, input: { date: string; mode: DailyTaskMode }): Promise<DailyTaskResult> {
+  return (await ensureDailyTaskDetail(deps, input)).result;
+}
+
+/** ensureDailyTask with the error behind a `failed`, which the outbox classifies for backoff (REQ-35). */
+export async function ensureDailyTaskDetail(deps: DailyTaskDeps, input: { date: string; mode: DailyTaskMode }): Promise<{ result: DailyTaskResult; error?: unknown }> {
   const { date } = input;
   let existing;
   try {
     existing = await deps.store.get(date);
-    if (input.mode === "refresh_only" && !existing?.notionPageId) return "skipped";
-  } catch {
-    return "failed";
+    if (input.mode === "refresh_only" && !existing?.notionPageId) return { result: "skipped" };
+  } catch (e) {
+    return { result: "failed", error: e };
   }
   let row;
   try {
     row = await deps.store.claim(date, LEASE_SECONDS);
-  } catch {
-    return "failed";
+  } catch (e) {
+    return { result: "failed", error: e };
   }
-  if (!row) return "busy";
+  if (!row) return { result: "busy" };
 
   let result: DailyTaskResult = "unchanged";
   let refreshCount = row.refreshCount;
+  // True while a call that adds to Notion is in flight: its failure may still have landed.
+  let adding = false;
   try {
     const [staff, names, occurrences] = await Promise.all([deps.fetchStaff(), deps.studentNames(), deps.occurrencesOn(date)]);
     const days = buildTeacherDays({
@@ -109,9 +123,11 @@ export async function ensureDailyTask(deps: DailyTaskDeps, input: { date: string
       result = "created";
     }
     if (!logId) {
+      adding = true;
       logId = await deps.notion.createLog({
         summary: `Daily teacher texts task created for ${date}`, date, workPageId: pageId, sessionLink: deps.sessionLink, decisions: "Created. Nothing is sent automatically.",
       });
+      adding = false;
       await deps.store.save(row.id, { notionLogId: logId });
     }
 
@@ -132,7 +148,9 @@ export async function ensureDailyTask(deps: DailyTaskDeps, input: { date: string
         }
         let next: StoredTeacher;
         if (p.isNew) {
+          adding = true;
           const appended = await deps.notion.append(pageId, render(day), label);
+          adding = false;
           next = { staffId: day.staffId, blockId: appended.blockId, writtenFingerprint: day.fingerprint, writtenAt: appended.lastEditedTime, acknowledgedFingerprint: null, labelled: false };
         } else {
           const edited = await deps.notion.update(prev!.blockId, render(day), label);
@@ -149,9 +167,10 @@ export async function ensureDailyTask(deps: DailyTaskDeps, input: { date: string
       }
     }
     await deps.store.save(row.id, { state: "ready", lastError: null, refreshCount, releaseLease: true });
-    return result;
+    return { result };
   } catch (e) {
-    await deps.store.save(row.id, { state: "failed", lastError: errorText(e), refreshCount, releaseLease: true }).catch(() => undefined);
-    return "failed";
+    const uncertain = adding && isAmbiguous(e);
+    await deps.store.save(row.id, { state: "failed", lastError: uncertain ? UNCERTAIN : errorText(e), refreshCount, releaseLease: true }).catch(() => undefined);
+    return { result: uncertain ? "uncertain" : "failed", error: e };
   }
 }
