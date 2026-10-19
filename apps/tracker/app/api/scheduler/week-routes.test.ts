@@ -7,6 +7,7 @@ import { handleWeek, loadWeek, type ScheduleDeps } from "../../../lib/scheduler/
 import type { AvailabilityExceptionRecord, ScheduleStore, SeriesRecord, WindowRecord } from "../../../lib/scheduler/schedule-store";
 import type { ClassException } from "../../../lib/domain/schedule/recurrence";
 import { WeekResponseAdmin, WeekResponseTeacher } from "../../../lib/scheduler/schemas";
+import type { OutcomeRecord, OutcomeStore } from "../../../lib/scheduler/outcome-store";
 
 const ORG = "10000000-0000-4000-8000-000000000001";
 const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -238,5 +239,77 @@ describe("source scan (AC18)", () => {
     const section = src.slice(src.indexOf("// Week ---"), src.indexOf("// Classes ---"));
     expect(section).toContain("loadWeek");
     expect(section).not.toMatch(/store\.(create|update|delete|upsert|split|adopt|mark)/);
+  });
+});
+
+describe("REQ-39 AC11: lesson status on the week", () => {
+  // Week of Mon 2026-10-12 (today is Mon 2026-10-19): Ryan's Mon 16:00 weekly for S1, moved Tue 13 -> the 13th is a pattern date of p2.
+  const p = series(1, A, S1, "2026-09-28", "16:00");
+  const p2 = series(2, A, S2, "2026-09-29", "17:00");
+  const k = series(3, B, S3, "2026-09-30", "15:00");
+  const outcomesOf = (rows: OutcomeRecord[], fail = false): OutcomeStore => ({
+    listForOccurrences: async (keys) => {
+      if (fail) throw new Error("down");
+      return rows.filter((r) => keys.some((x) => x.seriesId === r.seriesId && x.originalDate === r.originalDate));
+    },
+  } as OutcomeStore);
+  const row = (seriesId: string, originalDate: string, over: Partial<OutcomeRecord> = {}): OutcomeRecord => ({
+    id: ID(90), seriesId, originalDate, outcome: "delivered", linkSource: "logged", notionLessonId: "e0000000-0000-4000-8000-00000000000a",
+    lessonDate: originalDate, claimedAt: null, ...over,
+  });
+  const withOutcomes = (identity: SchedulerIdentity, outcomes: OutcomeStore, exceptions: ClassException[] = []) => ({
+    ...deps(identity, fakeStore({ series: [p, p2, k], windows: [], exceptions }).store),
+    outcomes,
+    lessons: {} as ScheduleDeps["lessons"],
+    now: () => Date.parse("2026-10-19T18:00:00Z"),
+  });
+  const occ = (body: { teachers: { occurrences: { seriesId: string; originalDate: string }[] }[] }, seriesId: string, originalDate: string) =>
+    body.teachers.flatMap((t) => t.occurrences).find((o) => o.seriesId === seriesId && o.originalDate === originalDate) as Record<string, unknown>;
+
+  it("a past occurrence is linkable and carries its stored outcome; a moved one gets the outcome under its original date", async () => {
+    const moved: ClassException = { seriesId: p2.id, originalDate: "2026-10-13", kind: "moved", newDate: "2026-10-15", newStartTime: "17:00" };
+    const r = await get(withOutcomes(admin, outcomesOf([row(p.id, "2026-10-12"), row(p2.id, "2026-10-13", { outcome: "no_show", linkSource: null, notionLessonId: null, lessonDate: null })]), [moved]), `date=2026-10-12&staffId=${A}`);
+    expect(r.status).toBe(200);
+    expect(r.body.lessonsEnabled).toBe(true);
+    expect(r.body.outcomesLoaded).toBe(true);
+    expect(occ(r.body, p.id, "2026-10-12")).toMatchObject({ linkable: true, outcome: { state: "delivered", lessonDate: "2026-10-12", lessonUrl: "https://www.notion.so/e000000000004000800000000000000a" } });
+    expect(occ(r.body, p2.id, "2026-10-13")).toMatchObject({ date: "2026-10-15", linkable: true, outcome: { state: "no_show" } });
+  });
+
+  it("future and cancelled occurrences are not linkable", async () => {
+    const cancelled: ClassException = { seriesId: p.id, originalDate: "2026-10-19", kind: "cancelled", newDate: null, newStartTime: null };
+    const r = await get(withOutcomes(admin, outcomesOf([]), [cancelled]), `date=2026-10-19&staffId=${A}`);
+    expect(occ(r.body, p.id, "2026-10-19")).toMatchObject({ status: "cancelled", linkable: false, outcome: null });
+    expect(occ(r.body, p2.id, "2026-10-20")).toMatchObject({ linkable: false, outcome: null });
+  });
+
+  it("a stale claim shows as logging with stale true; a fresh one with stale false", async () => {
+    const stale = row(p.id, "2026-10-12", { notionLessonId: null, lessonDate: null, claimedAt: "2026-10-19T17:58:00.000Z" });
+    const fresh = row(p2.id, "2026-10-13", { id: ID(91), notionLessonId: null, lessonDate: null, claimedAt: "2026-10-19T17:59:30.000Z" });
+    const r = await get(withOutcomes(admin, outcomesOf([stale, fresh])), `date=2026-10-12&staffId=${A}`);
+    expect(occ(r.body, p.id, "2026-10-12").outcome).toEqual({ state: "logging", stale: true });
+    expect(occ(r.body, p2.id, "2026-10-13").outcome).toEqual({ state: "logging", stale: false });
+  });
+
+  it("an outcome read that throws still loads the week, with outcomesLoaded false", async () => {
+    const r = await get(withOutcomes(admin, outcomesOf([], true)), `date=2026-10-12&staffId=${A}`);
+    expect(r.status).toBe(200);
+    expect(r.body.outcomesLoaded).toBe(false);
+    expect(occ(r.body, p.id, "2026-10-12").outcome).toBeNull();
+  });
+
+  it("the teacher response has the fields for the teacher's own classes only", async () => {
+    const r = await get(withOutcomes(teacher, outcomesOf([row(p.id, "2026-10-12"), row(k.id, "2026-10-14", { id: ID(92) })])), "date=2026-10-12");
+    expect(WeekResponseTeacher.safeParse(r.body).success).toBe(true);
+    const all = r.body.teachers.flatMap((t: { occurrences: { seriesId: string }[] }) => t.occurrences);
+    expect(all.every((o: { seriesId: string }) => o.seriesId !== k.id)).toBe(true);
+    expect(occ(r.body, p.id, "2026-10-12")).toMatchObject({ linkable: true, outcome: { state: "delivered" } });
+  });
+
+  it("without the lessons wiring, nothing is linkable-actionable and no outcome is read", async () => {
+    const r = await get(deps(admin, fakeStore({ series: [p], windows: [] }).store), `date=2026-10-12&staffId=${A}`);
+    expect(WeekResponseAdmin.safeParse(r.body).success).toBe(true);
+    expect(r.body.lessonsEnabled).toBe(false);
+    expect(occ(r.body, p.id, "2026-10-12")).toMatchObject({ linkable: true, outcome: null });
   });
 });
