@@ -5,6 +5,7 @@
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
+// REQ-33: a Students query whose filter holds a Weekly Schedule is_not_empty clause gets only students with schedule text.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -309,7 +310,9 @@ http.createServer(async (req, res) => {
     return;
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`)) {
-    res.end(JSON.stringify({ results: STUDENTS, has_more: false, next_cursor: null }));
+    const wantsScheduled = JSON.stringify((await readBody(req)).filter ?? {}).includes('{"property":"Weekly Schedule","rich_text":{"is_not_empty":true}}');
+    const results = wantsScheduled ? STUDENTS.filter((s) => schedule.get(s.id)) : STUDENTS;
+    res.end(JSON.stringify({ results, has_more: false, next_cursor: null }));
     return;
   }
   if (req.method === "POST" && /^\/v1\/data_sources\/[^/]+\/query$/.test(req.url ?? "")) {
