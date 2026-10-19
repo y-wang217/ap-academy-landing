@@ -159,7 +159,7 @@ insert into tracker.parent_links (id, org_id, student_id, email, parent_user_id,
   ('80000000-0000-0000-0000-000000000009', '10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-00000000000f',
    'zp@example.com', null, null, 'a0000000-0000-0000-0000-000000000002');
 
--- People copies (0021): staff ST1 to ST5 active and ST6 archived in O1, ST9
+-- People copies (0022): staff ST1 to ST5 active and ST6 archived in O1, ST9
 -- in O2; one student_people row per student; one good sync per org.
 insert into tracker.staff (org_id, notion_staff_id, name, active, synced_at, archived_at) values
   ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000001', 'Staff One', true, now(), null),

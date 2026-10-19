@@ -1,4 +1,4 @@
--- RLS and function checks for the people sync (0021, REQ-38). Run by
+-- RLS and function checks for the people sync (0022, REQ-38). Run by
 -- run-rls.sh on a fresh copy of the migrated database. Each check raises on
 -- failure and prints "ok: ..." when it passes.
 --
