@@ -9,6 +9,7 @@ import { handleDailyTaskCreate, handleDailyTaskRun, handleDailyTaskStatus } from
 import type { DailyTaskRow, DailyTaskStore } from "../../../lib/scheduler/daily-task-store";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import { handleCancelOccurrence, handleCreateClass, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
+import { fakeOutbox } from "../../../lib/scheduler/outbox.fake";
 import { lockedWrites } from "./series-writes.fake";
 import type { ScheduleStore, SeriesRecord, WindowRecord } from "../../../lib/scheduler/schedule-store";
 
@@ -250,5 +251,42 @@ describe("AC9, AC13: source scans of the new files", () => {
     });
     const importers = files(root).filter((f) => /@ap-academy\/db\/service/.test(readFileSync(f, "utf8"))).map((f) => f.slice(root.length + 1));
     expect(importers).toEqual(["app/api/scheduler/daily-task/run/route.ts"]);
+  });
+});
+
+describe("REQ-35 AC9: the hourly run drains the outbox first", () => {
+  const SECRET = "s3cret-value";
+  const outboxWorld = () => {
+    const out = fakeOutbox(ORG, () => Date.parse("2026-10-19T09:00:00Z"));
+    const id = out.enqueue("summary", STUDENT);
+    const drain = {
+      outbox: out.store, today: () => TODAY, now: () => new Date("2026-10-19T09:00:00Z"), sleep: async () => {},
+      summary: {
+        store: { getSummary: async () => null } as unknown as ScheduleStore,
+        students: { list: async () => [], get: async () => null, write: async () => {} }, fetchStaff: async () => [ryan], today: () => TODAY,
+      },
+    };
+    return { out, id, drain };
+  };
+  it("a 05:00 call returns not_yet with what it drained", async () => {
+    const w = dailyWorld();
+    const o = outboxWorld();
+    const res = await handleDailyTaskRun({
+      authorization: `Bearer ${SECRET}`, env: { secret: SECRET, orgId: ORG, time: undefined }, build: () => w.daily, drain: () => o.drain,
+      now: () => new Date("2026-10-19T09:00:00Z"), // 05:00 EDT
+    });
+    expect(await res.json()).toEqual({ result: "not_yet", drained: { done: 1, pending: 0, failed: 0, uncertain: 0 } });
+    expect(o.out.row(o.id)!.status).toBe("done");
+    expect(w.notionCalls).toEqual([]);
+  });
+  it("a bad bearer drains nothing", async () => {
+    const o = outboxWorld();
+    let asked = 0;
+    const res = await handleDailyTaskRun({
+      authorization: "Bearer wrong", env: { secret: SECRET, orgId: ORG, time: undefined }, build: () => null, drain: () => { asked++; return o.drain; },
+    });
+    expect(res.status).toBe(401);
+    expect(asked).toBe(0);
+    expect(o.out.calls).toEqual([]);
   });
 });

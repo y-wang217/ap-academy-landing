@@ -20,7 +20,7 @@ const occ = (over: Partial<Occurrence>): Occurrence => ({
   staffId: RYAN, studentId: SAM, subject: "MHF4U", status: "scheduled", kind: "weekly", ...over,
 });
 
-function harness(opts: { notionFails?: () => boolean; saveFails?: boolean; busy?: boolean } = {}) {
+function harness(opts: { notionFails?: () => boolean; error?: () => Error; saveFails?: boolean; busy?: boolean } = {}) {
   // --- store
   let row: DailyTaskRow | null = null;
   let leased = !!opts.busy;
@@ -50,7 +50,7 @@ function harness(opts: { notionFails?: () => boolean; saveFails?: boolean; busy?
   let clock = 1000;
   let n = 0;
   const fail = () => {
-    if (opts.notionFails?.()) throw new NotionError("Notion returned 500", 500);
+    if (opts.notionFails?.()) throw opts.error?.() ?? new NotionError("Notion returned 500", 500);
   };
   const notion: DailyNotion = {
     find: async (title) => {
@@ -256,5 +256,45 @@ describe("ensureDailyTask", () => {
     down = false;
     expect(await h.run("refresh_only")).toBe("updated");
     expect(h.row).toMatchObject({ state: "ready", lastError: null });
+  });
+
+  describe("REQ-35 AC7: a call that adds to Notion and may have landed is uncertain", () => {
+    const setup = (what: string, error: () => Error) => {
+      let armed = false;
+      const h: ReturnType<typeof harness> = harness({ notionFails: () => armed && h.calls.at(-1) === what, error });
+      return { h, arm: () => { armed = true; } };
+    };
+    it("append throwing a 504 or a network error returns uncertain and does not append again in that call", async () => {
+      for (const error of [() => new NotionError("Notion returned 504", 504), () => new NotionError("Notion request failed")]) {
+        const { h, arm } = setup("append", error);
+        await h.run();
+        h.teachers.clear(); // every teacher now reads as new, so the refresh appends
+        h.calls.length = 0;
+        arm();
+        expect(await h.run("refresh_only")).toBe("uncertain");
+        expect(count(h.calls, "append")).toBe(1);
+        expect(h.row).toMatchObject({ state: "failed", lastError: "Notion may have saved this. Check the task, then retry." });
+      }
+    });
+    it("append throwing a 429 is failed, not uncertain: Notion refused it", async () => {
+      const { h, arm } = setup("append", () => new NotionError("Notion returned 429", 429));
+      await h.run();
+      h.teachers.clear();
+      arm();
+      expect(await h.run("refresh_only")).toBe("failed");
+    });
+    it("createLog throwing a 504 is uncertain", async () => {
+      const { h, arm } = setup("createLog", () => new NotionError("Notion returned 504", 504));
+      arm();
+      expect(await h.run()).toBe("uncertain");
+    });
+    it("update throwing a 504 stays a plain failure: rewriting a block is safe to repeat", async () => {
+      const { h, arm } = setup("update", () => new NotionError("Notion returned 504", 504));
+      await h.run();
+      h.setOccurrences([h.occ({ startTime: "17:30", endTime: "18:30" })]);
+      arm();
+      expect(await h.run("refresh_only")).toBe("failed");
+      expect(h.row?.lastError).toBe("Notion returned 504");
+    });
   });
 });

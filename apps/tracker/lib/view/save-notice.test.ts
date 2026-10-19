@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ApiResult } from "../scheduler/api-client";
-import { afterDailyRetry, afterSummaryRetry, readSaveOutcome, saveNotice, type SaveOutcome } from "./save-notice";
+import { afterDailyRetry, afterExportRetry, afterSummaryRetry, exportToRetry, readSaveOutcome, saveNotice, type SaveOutcome } from "./save-notice";
 
 const S1 = "11111111-1111-4111-8111-111111111111";
 const base: SaveOutcome = { summarySync: undefined, dailyTask: undefined, studentId: S1, studentName: "Sam S." };
@@ -136,3 +136,43 @@ describe("afterDailyRetry (AC5)", () => {
     }
   });
 });
+
+describe("REQ-35 AC10: queued and uncertain", () => {
+  const ROW = "0b000000-0000-4000-8000-000000000001";
+  const ada = { ...base, studentName: "Ada L." };
+  it("queued lines read as on their way, tone ok", () => {
+    const n = saveNotice({ ...ada, summarySync: "queued", dailyTask: "queued" });
+    expect(n.lines.map((l) => l.text)).toEqual([
+      "Saved.",
+      "Weekly Schedule for Ada L.: Queued. It will be sent shortly.",
+      "Today's Notion task: Queued. It will be updated shortly.",
+    ]);
+    expect(n.tone).toBe("ok");
+    expect(n.lines.some((l) => l.retry)).toBe(false);
+  });
+  it("an uncertain task says to check Notion, warns, and offers Retry", () => {
+    const n = saveNotice({ ...ada, dailyTask: "uncertain" });
+    expect(n.lines.at(-1)).toEqual({ text: "Today's Notion task may have been updated. Check it in Notion, then retry.", retry: "dailyTask" });
+    expect(n.tone).toBe("warn");
+  });
+  it("readSaveOutcome keeps the exports, and Retry targets the failed or uncertain row", () => {
+    const o = readSaveOutcome({ summarySync: "failed", dailyTask: "uncertain", exports: [
+      { id: ROW, kind: "summary", status: "failed" }, { id: REQ2, kind: "daily_task", status: "uncertain" },
+    ], series: { studentId: S1 } }, "Ada L.");
+    expect(exportToRetry(o, "summary")).toBe(ROW);
+    expect(exportToRetry(o, "dailyTask")).toBe(REQ2);
+    expect(exportToRetry({ ...o, exports: [{ id: ROW, kind: "summary", status: "done" }] }, "summary")).toBeNull();
+  });
+  it("afterExportRetry folds done, pending, failed and uncertain answers", () => {
+    const o: SaveOutcome = { ...ada, summarySync: "failed", dailyTask: "uncertain", exports: [{ id: ROW, kind: "summary", status: "failed" }, { id: REQ2, kind: "daily_task", status: "uncertain" }] };
+    const ok = (data: unknown): ApiResult<unknown> => ({ ok: true, data });
+    expect(afterExportRetry(o, "summary", ROW, ok({ id: ROW, status: "done", supersededBy: null }))).toMatchObject({ summarySync: "synced", retryFailed: { summary: undefined } });
+    expect(afterExportRetry(o, "summary", ROW, ok({ id: REQ3, status: "pending", supersededBy: ROW })).exports).toContainEqual({ id: REQ3, kind: "summary", status: "pending" });
+    expect(afterExportRetry(o, "summary", ROW, ok({ id: ROW, status: "failed", supersededBy: null }))).toMatchObject({ summarySync: "failed", retryFailed: { summary: true } });
+    expect(afterExportRetry(o, "dailyTask", REQ2, ok({ id: REQ2, status: "done", supersededBy: null }))).toMatchObject({ dailyTask: "updated" });
+    expect(afterExportRetry(o, "dailyTask", REQ2, ok({ id: REQ2, status: "uncertain", supersededBy: null }))).toMatchObject({ dailyTask: "uncertain", retryFailed: { dailyTask: true } });
+    expect(afterExportRetry(o, "dailyTask", REQ2, { ok: false, stale: false, message: "x" })).toMatchObject({ dailyTask: "failed", retryFailed: { dailyTask: true } });
+  });
+});
+const REQ2 = "0b000000-0000-4000-8000-000000000002";
+const REQ3 = "0b000000-0000-4000-8000-000000000003";
