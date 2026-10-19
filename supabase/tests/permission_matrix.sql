@@ -159,7 +159,7 @@ insert into tracker.parent_links (id, org_id, student_id, email, parent_user_id,
   ('80000000-0000-0000-0000-000000000009', '10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-00000000000f',
    'zp@example.com', null, null, 'a0000000-0000-0000-0000-000000000002');
 
--- People copies (0021): staff ST1 to ST5 active and ST6 archived in O1, ST9
+-- People copies (0022): staff ST1 to ST5 active and ST6 archived in O1, ST9
 -- in O2; one student_people row per student; one good sync per org.
 insert into tracker.staff (org_id, notion_staff_id, name, active, synced_at, archived_at) values
   ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000001', 'Staff One', true, now(), null),
@@ -717,6 +717,8 @@ begin
       when 'adopt_student_schedule' then r := to_jsonb(tracker.adopt_student_schedule(t.notion_student_id, 'x', '[]'));
       when 'claim_daily_task' then
         select count(*) into n from tracker.claim_daily_task(t.org_id, 'teacher_texts', '2026-10-03', 60); r := to_jsonb(nullif(n, 0));
+      when 'setup_checks' then
+        select count(*) into n from tracker.setup_checks(t.org_id); r := to_jsonb(nullif(n, 0));
       when 'lock_booking_key' then perform tracker.lock_booking_key(t.org_id, 'student', t.notion_student_id);
       when 'schedule_write_context' then r := tracker.schedule_write_context(t.org_id, gen_random_uuid(), '[]');
       when 'is_my_series_student' then r := to_jsonb(nullif(tracker.is_my_series_student(t.org_id, t.notion_student_id), false));

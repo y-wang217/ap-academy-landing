@@ -397,7 +397,7 @@ delete either raises `42501` or touches no row.
 
 ## People copies
 
-Local copies of Notion Staff and Students & Parents (migration 0021,
+Local copies of Notion Staff and Students & Parents (migration 0022,
 workspace ADR 0004). Select-only policies; nobody writes directly, and
 `apply_people_sync` (owner or service role) writes all three tables.
 
