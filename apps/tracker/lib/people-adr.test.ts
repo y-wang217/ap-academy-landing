@@ -186,3 +186,19 @@ describe("ADR 0004 pointers and wording", () => {
     expect(decision).toContain("Supabase row ids are local");
   });
 });
+
+describe("tracker ADR 0053, the people sync as built (REQ-38 AC10, AC17)", () => {
+  const source = read(join(TRACKER_ADRS, "0053-people-sync.md"));
+  it("exists, is indexed and lists the reads that stay live", () => {
+    expect(source).toMatch(/^# 0053: /);
+    expect(read(join(TRACKER_ADRS, "README.md"))).toContain("(0053-people-sync.md)");
+    for (const live of ["fetchScheduledStudents", "fetchStudentSchedule", "writeWeeklySchedule", "lib/notion/billing.ts"]) expect(source).toContain(live);
+    expect(source).toContain("Rollout");
+  });
+  it("has no em-dashes, nor does the operator section", () => {
+    expect(source).not.toContain("—");
+    const ops = read(join(ROOT, "apps/tracker/docs/scheduler-operations.md"));
+    expect(ops).toContain("## 5. Names and the people sync");
+    expect(ops.slice(ops.indexOf("## 5. Names"))).not.toContain("—");
+  });
+});

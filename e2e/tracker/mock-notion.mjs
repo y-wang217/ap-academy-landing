@@ -5,6 +5,9 @@
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
+// REQ-38 adds the Staff schema (the people sync asks for property IDs), a Stage on every student, and
+// POST /__people/fail (toggles a 500 on the Staff and Students reads), /__people/rename (Ryan becomes
+// "Ryan Renamed") and /__people/inactive (toggles Ryan's Status between Active and Inactive).
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -24,7 +27,7 @@ const STAFF = [
 ];
 
 const STUDENTS_DS = "fe3d651a-70c6-4d1e-8a38-656163d6bc63";
-const student = (id, name) => ({ id, properties: { "Student Name": { title: [{ plain_text: name }] } } });
+const student = (id, name) => ({ id, properties: { "Student Name": { title: [{ plain_text: name }] }, Stage: { select: { name: "Active" } } } });
 const STUDENTS = [
   student("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", "Sam Student"),
   student("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "Kim Kuby-Student"),
@@ -34,6 +37,9 @@ const STUDENTS = [
 // Weekly Schedule text per student, empty to start (so a first booking can adopt the student).
 const schedule = new Map(STUDENTS.map((s) => [s.id, ""]));
 let scheduleFails = false;
+let peopleFails = false;
+const RYAN_PAGE = STAFF[0];
+const STAFF_SCHEMA = { properties: { Name: { id: "title" }, Email: { id: "em" }, Status: { id: "st" }, Function: { id: "fn" }, Subjects: { id: "sb" } } };
 const studentPage = (id) => {
   const base = STUDENTS.find((s) => s.id === id);
   return {
@@ -277,6 +283,13 @@ http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/__journal") return res.end(JSON.stringify(journal));
   if (req.method === "POST" && req.url === "/__billing/fail") { billingFails = !billingFails; return res.end(JSON.stringify({ billingFails })); }
   if (req.method === "POST" && req.url === "/__schedule/fail") { scheduleFails = !scheduleFails; return res.end(JSON.stringify({ scheduleFails })); }
+  if (req.method === "POST" && req.url === "/__people/fail") { peopleFails = !peopleFails; return res.end(JSON.stringify({ peopleFails })); }
+  if (req.method === "POST" && req.url === "/__people/rename") { RYAN_PAGE.properties.Name = { title: [{ plain_text: "Ryan Renamed" }] }; return res.end("{}"); }
+  if (req.method === "POST" && req.url === "/__people/inactive") {
+    const now = RYAN_PAGE.properties.Status.select.name === "Active" ? "Inactive" : "Active";
+    RYAN_PAGE.properties.Status = { select: { name: now } };
+    return res.end(JSON.stringify({ status: now }));
+  }
   await bufferBody(req);
   if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
   // Read-only: the seeded lesson answers a GET and nothing else.
@@ -301,6 +314,11 @@ http.createServer(async (req, res) => {
       return;
     }
   }
+  const peopleRead = /^\/v1\/data_sources\/[^/?]+(\/query)?(\?.*)?$/.test(req.url ?? "") && !(req.url ?? "").includes(WORK_DS);
+  if (peopleFails && peopleRead) {
+    res.statusCode = 500;
+    return res.end(JSON.stringify({ object: "error", status: 500 }));
+  }
   if (req.method === "GET" && req.url === `/v1/data_sources/${STUDENTS_DS}`) {
     res.end(JSON.stringify({ properties: {
       "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" },
@@ -312,8 +330,12 @@ http.createServer(async (req, res) => {
     res.end(JSON.stringify({ results: STUDENTS, has_more: false, next_cursor: null }));
     return;
   }
-  if (req.method === "POST" && /^\/v1\/data_sources\/[^/]+\/query$/.test(req.url ?? "")) {
+  if (req.method === "POST" && /^\/v1\/data_sources\/[^/]+\/query(\?.*)?$/.test(req.url ?? "")) {
     res.end(JSON.stringify({ results: STAFF, has_more: false, next_cursor: null }));
+    return;
+  }
+  if (req.method === "GET" && /^\/v1\/data_sources\/[^/?]+$/.test(req.url ?? "")) {
+    res.end(JSON.stringify(STAFF_SCHEMA));
     return;
   }
   res.statusCode = 404;

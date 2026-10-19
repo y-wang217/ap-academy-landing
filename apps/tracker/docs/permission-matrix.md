@@ -447,6 +447,10 @@ workspace ADR 0004). Select-only policies; nobody writes directly, and
 
 These never touch Postgres rows; the scheduler route guards and the parent shell enforce them.
 
+Since REQ-38 the staff list and student names are served from the local
+copies (`staff`, `student_people` above) under their RLS, and the scope rules
+below still apply on top. The other three reads are still live Notion reads.
+
 ### Notion: staff list
 
 | role | access |

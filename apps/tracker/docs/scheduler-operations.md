@@ -30,3 +30,12 @@ Background: [0036](decisions/0036-availability-conflicts-computed.md).
 2. Read the reason beside each class, for example Outside available hours.
 3. Either move the class on `/tracker/schedule` (drag it, or open it and edit), or ask the teacher to change their hours on `/tracker/schedule/availability`.
 4. Reload the conflicts page. The entry disappears once the class fits; conflicts are computed on each visit, nothing needs clearing.
+
+## 5. Names and the people sync
+Background: [0053](decisions/0053-people-sync.md), workspace ADR 0004.
+1. The tracker keeps a copy of staff names, subjects and active state, and student names and stage, from Notion. It never copies parent details, email, rates or notes. Edit people in Notion as before.
+2. The copy refreshes every hour (the Daily teacher texts workflow) and when you tap Sync now on `/tracker/schedule`. A rename or a new student shows after the next sync.
+3. Under today's task on `/tracker/schedule` you see "Names synced N minutes ago." or "Last sync failed at HH:MM. Names are from HH:MM." Sync now waits a minute between taps.
+4. When the copy is older than two hours every schedule page and the parent calendar show "Names last updated N hours ago". The classes still show, with the names from the last good sync. Check that the Notion integration still has access to Staff and Students & Parents, then tap Sync now.
+5. A teacher set to inactive in Notion loses scheduler access on their next page load after a sync. To cut access at once, revoke the link (section 2).
+6. First deploy: apply migration 0021, deploy, then tap Sync now. Until then teachers see "Scheduling is not available right now."
