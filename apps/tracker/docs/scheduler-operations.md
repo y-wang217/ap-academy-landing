@@ -38,4 +38,4 @@ Background: [0053](decisions/0053-people-sync.md), workspace ADR 0004.
 3. Under today's task on `/tracker/schedule` you see "Names synced N minutes ago." or "Last sync failed at HH:MM. Names are from HH:MM." Sync now waits a minute between taps.
 4. When the copy is older than two hours every schedule page and the parent calendar show "Names last updated N hours ago". The classes still show, with the names from the last good sync. Check that the Notion integration still has access to Staff and Students & Parents, then tap Sync now.
 5. A teacher set to inactive in Notion loses scheduler access on their next page load after a sync. To cut access at once, revoke the link (section 2).
-6. First deploy: apply migration 0021, deploy, then tap Sync now. Until then teachers see "Scheduling is not available right now."
+6. First deploy: apply migration 0022, deploy, then tap Sync now. Until then teachers see "Scheduling is not available right now."

@@ -32,7 +32,7 @@ As on the card: Notion readers `fetchStaffForSync` and `fetchStudentPeople`; pur
 
 ## Build notes
 
-- Migration number 0021 and tracker ADR 0053: 0018 to 0020 and ADRs 0050 to 0052 were taken by REQ-30, REQ-31 and REQ-32 when this was built.
+- Migration number 0022 and tracker ADR 0053: 0018 to 0021 and ADRs 0050 to 0052 were taken by REQ-30 to REQ-33 when this was built (0021 went to REQ-33 setup_checks while this was in review).
 - `write_audit()` keys rows by an `id` column, which these tables do not have, so the migration adds `tracker.write_audit_keyed(<key column>)` for the conditional audit triggers.
 - `apply_people_sync` checks `auth.role() = 'service_role'`; `supabase/tests/supabase-stub.sql` gains `auth.role()` as hosted Supabase has it.
 - The permission matrix (SQL test and doc) classifies the three new tables, as the matrix test requires for any new table.
