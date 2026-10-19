@@ -28,7 +28,7 @@
     "awaiting_migration": "awaiting-migration",
     "human_merge": "needs-human-merge"
   },
-  "wip_limit": 1,
+  "wip_limit": 3,
   "max_attempts": 2,
   "max_chain": 12,
   "review_round_cap": 3,
