@@ -17,6 +17,7 @@ import type { BookingKey, BookingStamp, ScheduleStore, SeriesRecord, StoreError,
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
 import { ensureDailyTask, type DailyTaskDeps } from "./daily-task";
 import { normaliseScheduleText } from "../domain/schedule/legacy-line";
+import type { PeopleStore } from "../data/people";
 
 /**
  * Handler dependencies plus storage and "today" (America/Toronto) as injected
@@ -27,8 +28,14 @@ export type ScheduleDeps = HandlerDeps & {
   store: ScheduleStore;
   today: () => string;
   students?: StudentsPort;
-  /** Student names for the calendar (REQ-6). Names only. Absent when Notion is not wired in. */
+  /** Student names for the calendar (REQ-6), from the local people copy (REQ-38), archived included. Names only. */
   studentNames?: () => Promise<Map<string, string>>;
+  /** Active, not archived students for pickers (REQ-38 AC14). */
+  activeStudents?: () => Promise<{ id: string; name: string }[]>;
+  /** The last good people sync, or null when there has never been one (REQ-38 AC11). */
+  peopleSyncedAt?: () => Promise<string | null>;
+  /** The caller's people store, for the owner's sync status and Sync now (REQ-38). */
+  peopleStore?: () => Promise<PeopleStore>;
   /** Today's "Text teachers their schedules" task (REQ-8). Absent when Notion's Work database is not wired in. */
   dailyTask?: DailyTaskDeps;
 };

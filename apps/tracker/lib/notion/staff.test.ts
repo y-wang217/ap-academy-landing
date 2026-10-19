@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchStaff, NotionError, parseStaffPage } from "./staff";
+import { fetchStaff, fetchStaffForSync, NotionError, parseStaffPage } from "./staff";
 
 const ID1 = "11111111-1111-4111-8111-111111111111";
 const ID2 = "22222222-2222-4222-8222-222222222222";
@@ -77,5 +77,52 @@ describe("fetchStaff", () => {
   it("skips pages that are not valid staff rows instead of failing the list", async () => {
     const fetcher = (async () => ok({ results: [{ id: "not-a-uuid", properties: {} }, page(ID1, "A")], has_more: false })) as unknown as typeof fetch;
     expect((await fetchStaff(cfg, fetcher)).map((s) => s.id)).toEqual([ID1]);
+  });
+});
+
+describe("fetchStaffForSync (REQ-38 AC3)", () => {
+  const SCHEMA = {
+    properties: {
+      Name: { id: "title" }, Email: { id: "em" }, Status: { id: "st" }, Function: { id: "fn" }, Subjects: { id: "sb" },
+      "Hourly Rate (CAD)": { id: "rt" }, Phone: { id: "ph" },
+    },
+  };
+  function recorder(respond: (url: string, init: RequestInit) => Response) {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetcher = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return respond(url, init);
+    }) as unknown as typeof fetch;
+    return { calls, fetcher };
+  }
+
+  it("reads the schema, then queries with exactly Name, Status, Function and Subjects, never Email", async () => {
+    const { calls, fetcher } = recorder((_url, init) => (init.method === "GET" ? ok(SCHEMA) : ok({ results: [page(ID1, " Mr. Ryan ")], has_more: false })));
+    const staff = await fetchStaffForSync(cfg, fetcher);
+    expect(staff).toEqual([{ id: ID1, name: "Mr. Ryan", subjects: ["MHF4U", "SPH3U"], active: true }]);
+    expect(Object.keys(staff[0]).sort()).toEqual(["active", "id", "name", "subjects"]);
+    expect(calls[0].url).toBe("https://api.notion.com/v1/data_sources/ds-1");
+    const q = calls.find((c) => c.init.method === "POST")!;
+    expect(new URL(q.url).searchParams.getAll("filter_properties[]")).toEqual(["title", "st", "fn", "sb"]);
+    expect(q.url).not.toContain("em");
+    expect(JSON.stringify(staff)).not.toMatch(/t@example.com|60|555|secret/);
+  });
+  it("paginates and computes active from Status and Function", async () => {
+    const inactive = page(ID2, "B");
+    inactive.properties.Status = { type: "select", select: { name: "Inactive" } };
+    let n = 0;
+    const { calls, fetcher } = recorder((_url, init) => {
+      if (init.method === "GET") return ok(SCHEMA);
+      n += 1;
+      return n === 1 ? ok({ results: [page(ID1, "A")], has_more: true, next_cursor: "c2" }) : ok({ results: [inactive], has_more: false });
+    });
+    const staff = await fetchStaffForSync(cfg, fetcher);
+    expect(staff.map((s) => [s.id, s.active])).toEqual([[ID1, true], [ID2, false]]);
+    expect(JSON.parse(calls[2].init.body as string).start_cursor).toBe("c2");
+  });
+  it("throws NotionError on a 500 and on a missing property", async () => {
+    await expect(fetchStaffForSync(cfg, recorder(() => new Response("{}", { status: 500 })).fetcher)).rejects.toBeInstanceOf(NotionError);
+    const noSubjects = { properties: { Name: { id: "title" }, Status: { id: "st" }, Function: { id: "fn" } } };
+    await expect(fetchStaffForSync(cfg, recorder(() => ok(noSubjects)).fetcher)).rejects.toBeInstanceOf(NotionError);
   });
 });
