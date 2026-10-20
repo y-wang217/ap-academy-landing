@@ -188,6 +188,20 @@ describe("owner home badge (AC10)", () => {
   });
 });
 
+// REQ-39: the lesson UI calls the lesson routes on purpose; it has its own scan below.
+const LESSON_UI = ["components/scheduler/outcome-actions.tsx", "components/scheduler/link-lesson-button.tsx", "app/schedule/lessons/page.tsx"];
+
+describe("REQ-39: the lesson UI", () => {
+  const root = resolve(__dirname, "../../..");
+  it("calls only the lesson routes through api.act, never Notion, classes or payouts", () => {
+    for (const f of LESSON_UI) {
+      const src = readFileSync(join(root, f), "utf8");
+      expect(src, f).not.toMatch(/lockedWrite|class_series|class_exceptions|writeWeeklySchedule|payout|api\.notion\.com|fetch\(|api\.send/i);
+      for (const m of src.matchAll(/api\.act\("(\w+)", "([^"]+)"/g)) expect(["POST /lessons", "POST /outcomes", "DELETE /outcomes", "POST /lessons/link"], f).toContain(`${m[1]} ${m[2]}`);
+    }
+  });
+});
+
 describe("source scan (AC9, AC13)", () => {
   const root = resolve(__dirname, "../../..");
   const files: string[] = [];
@@ -195,7 +209,7 @@ describe("source scan (AC9, AC13)", () => {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name);
       if (statSync(p).isDirectory()) walk(p);
-      else if (/\.(ts|tsx)$/.test(name) && !/\.test\./.test(name)) files.push(p);
+      else if (/\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) && !LESSON_UI.some((l) => p.endsWith(l))) files.push(p);
     }
   };
   for (const d of ["components/scheduler", "app/schedule"]) {
@@ -208,7 +222,7 @@ describe("source scan (AC9, AC13)", () => {
     expect(files.length).toBeGreaterThan(1);
     for (const f of files) {
       const src = readFileSync(f, "utf8");
-      expect(src, f).not.toMatch(/lockedWrite|createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|class_series|class_exceptions|writeWeeklySchedule|lessons|payout|from\("students"\)/i);
+      expect(src, f).not.toMatch(/lockedWrite|createSeries|upsertException|\.split\(\{|adoptStudent|markSummary|class_series|class_exceptions|writeWeeklySchedule|createLesson|linkLesson|["'`]\/lessons|\/outcomes|payout|from\("students"\)/i);
       expect(src, f).not.toMatch(/api\.notion\.com|fetch\(["'`]https?:/);
     }
   });

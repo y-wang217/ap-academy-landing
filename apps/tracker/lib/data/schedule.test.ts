@@ -73,6 +73,7 @@ describe("REQ-30: the locked write over RPC", () => {
       ["not_weekly", { ok: false, status: 422, error: "not_weekly" }],
       ["request_reused", { ok: false, status: 400, error: "request_reused" }],
       ["forbidden", { ok: false, status: 403, error: "forbidden" }],
+      ["has_outcome", { ok: false, status: 409, error: "has_outcome" }],
       ["something else", { ok: false, status: 503, error: "unavailable" }],
     ];
     for (const [message, expected] of cases) {

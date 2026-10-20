@@ -54,3 +54,20 @@ Background: [0055](decisions/0055-people-sync.md), workspace ADR 0004.
 4. When the copy is older than two hours every schedule page and the parent calendar show "Names last updated N hours ago". The classes still show, with the names from the last good sync. Check that the Notion integration still has access to Staff and Students & Parents, then tap Sync now.
 5. A teacher set to inactive in Notion loses scheduler access on their next page load after a sync. To cut access at once, revoke the link (section 2).
 6. First deploy: apply migration 0022, deploy, then tap Sync now. Until then teachers see "Scheduling is not available right now."
+
+## 8. Lesson logging
+Background: [0056](decisions/0056-lesson-link-and-outcomes.md).
+
+Set up once, by hand in Notion:
+1. In the Lessons database, add a property of type **Text** named exactly `Class occurrence`. Do not rename it later.
+2. Share the tracker's Notion integration with Lessons with read, insert and update access (Can edit content).
+3. Never edit `Class occurrence` by hand. The tracker writes it; a wrong value is fixed with Clear in the class dialog.
+
+Until the property exists, Log this class answers 503 `lessons_not_ready` before any Notion write, and the class dialog says "Lesson logging is not set up yet." The "Log a Lesson" form keeps working as it does today.
+
+Day to day:
+1. A teacher opens a past class on `/tracker/schedule` and presses Log this class (a Lessons row is created with the class link, or the existing one is found) or Mark no-show (kept in the tracker only).
+2. Rows sent through the form show on [`/tracker/schedule/lessons`](https://www.apacademy.ca/tracker/schedule/lessons) (Unlinked lessons, owners only) under the class with the same teacher, student and date. Press Link to connect one. Nothing is linked automatically.
+3. "Possible double logs" lists form rows on the same day as a class that is already logged. Check them before pay; nothing is deleted automatically.
+4. A wrong link or a wrong no-show: open the class and press Clear. The Notion row stays; only its class link is cleared. The old value is kept in the audit log.
+5. A logged or marked class cannot be cancelled or moved. Clear it first.

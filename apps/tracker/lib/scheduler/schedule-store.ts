@@ -8,7 +8,7 @@ export type SeriesRecord = ClassSeries & { updatedAt: string; splitFrom: string 
 export type StoreError = {
   ok: false;
   status: 400 | 403 | 404 | 409 | 422 | 503;
-  error: "not_found" | "stale" | "past_occurrence" | "not_weekly" | "unavailable" | "booking_changed" | "request_reused" | "forbidden";
+  error: "not_found" | "stale" | "past_occurrence" | "not_weekly" | "unavailable" | "booking_changed" | "request_reused" | "forbidden" | "has_outcome";
 };
 export type StoreResult<T> = { ok: true; value: T; created: boolean } | StoreError;
 

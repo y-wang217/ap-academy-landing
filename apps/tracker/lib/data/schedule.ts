@@ -83,6 +83,8 @@ function mapWriteError(error: PgError): StoreError | "duplicate" {
     case "not_weekly": return { ok: false, status: 422, error: "not_weekly" };
     case "request_reused": return { ok: false, status: 400, error: "request_reused" };
     case "forbidden": return { ok: false, status: 403, error: "forbidden" };
+    // Migration 0023: the occurrence is logged or marked, so it is frozen (REQ-39 AC9).
+    case "has_outcome": return { ok: false, status: 409, error: "has_outcome" };
     default: return UNAVAILABLE;
   }
 }

@@ -5,6 +5,8 @@
 export const PARENT_FORBIDDEN: RegExp[] = [
   /lessons|payout|invoice|credit|billing/i,
   /6300f58a/,
+  // REQ-39: class outcomes (delivered, no-show) stay out of parent views until Charlie opens them.
+  /occurrence_outcomes/,
   /weekly.?schedule/i,
   /api\.notion\.com/,
   /console\./,
@@ -37,6 +39,8 @@ export const BILLING_FORBIDDEN: RegExp[] = [
   /\bReason\b/,
   /\bBilled Month\b/,
   /6300f58a/,
+  // REQ-39: class outcomes (delivered, no-show) stay out of parent views until Charlie opens them.
+  /occurrence_outcomes/,
   /unstable_cache/,
   /\.(insert|update|upsert|delete|rpc)\(/,
   /service.?role|createServiceClient/i,

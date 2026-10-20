@@ -613,6 +613,20 @@ describe("REQ-31 AC11: the student's cancellations", () => {
   });
 });
 
+describe("REQ-39 AC9: a class with an outcome is frozen", () => {
+  it("a cancel or move the database refuses with has_outcome answers 409 has_outcome", async () => {
+    const f = await fixture();
+    f.begin();
+    f.store.lockedWrite = async () => ({ ok: false, status: 409, error: "has_outcome" });
+    const cancel = await handleCancelOccurrence(f.deps(), f.s1.id, "2026-10-26", { requestId: REQ(90), expectedUpdatedAt: f.s1.updatedAt, scope: "this" });
+    expect(cancel.status).toBe(409);
+    expect(await cancel.json()).toEqual({ error: "has_outcome" });
+    const move = await handleEditOccurrence(f.deps(), f.s1.id, "2026-10-26", { requestId: REQ(91), expectedUpdatedAt: f.s1.updatedAt, changes: { date: "2026-10-27", startTime: "16:00" } });
+    expect(move.status).toBe(409);
+    expect(await move.json()).toEqual({ error: "has_outcome" });
+  });
+});
+
 // REQ-35: a save delivers the exports its own write enqueued (tracker ADR 0054). ------------
 
 describe("REQ-35 AC8: a save delivers its own exports", () => {

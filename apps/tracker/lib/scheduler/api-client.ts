@@ -20,6 +20,8 @@ export function createApiClient(fetchFn: FetchFn = (...a) => fetch(...a)) {
       const res = await fetchFn(`${SCHEDULER_API}${path}`, init);
       const data = await res.json().catch(() => null);
       if (res.ok) return { ok: true, data: data as T };
+      // has_outcome (REQ-39): the class is logged or marked, which no reload changes.
+      if (res.status === 409 && data?.error === "has_outcome") return { ok: false, stale: false, status: 409, error: "has_outcome", message: "This class is already logged or marked. Ask Charlie to clear it first." };
       if (res.status === 409) return { ok: false, stale: true, message: "Someone else changed this. Showing the latest." };
       const failure: ApiFailure = { ok: false, stale: false, status: res.status, message: "That did not save. Please try again." };
       if (data && typeof data === "object") {
@@ -35,6 +37,20 @@ export function createApiClient(fetchFn: FetchFn = (...a) => fetch(...a)) {
 
   return {
     get: <T>(path: string) => run<T>(path, { cache: "no-store" }),
+    /**
+     * The lesson routes (REQ-39): no request ID, since the class itself is the
+     * key, and every refusal comes back by name for the dialog's copy.
+     */
+    async act<T = unknown>(method: "POST" | "DELETE", path: string, body: Record<string, unknown>): Promise<{ ok: true; status: number; data: T } | { ok: false; status?: number; error?: string }> {
+      try {
+        const res = await fetchFn(`${SCHEDULER_API}${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => null);
+        if (res.ok) return { ok: true, status: res.status, data: data as T };
+        return { ok: false, status: res.status, error: data && typeof data.error === "string" ? data.error : undefined };
+      } catch {
+        return { ok: false };
+      }
+    },
     async send<T = unknown>(method: "POST" | "PATCH" | "DELETE", path: string, key: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
       const requestId = pending.get(key) ?? crypto.randomUUID();
       pending.set(key, requestId);

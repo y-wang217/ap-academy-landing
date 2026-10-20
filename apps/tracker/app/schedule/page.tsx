@@ -81,11 +81,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       daily = null;
     }
   }
+  // Lesson logging (REQ-39): what the class dialog offers this viewer.
+  const lessonMode = !body.lessonsEnabled ? "off" as const : !body.outcomesLoaded ? "unloaded" as const : who.scope === "admin" ? "owner" as const : "teacher" as const;
   const rows = body.teachers.map((t) => ({
     staff: { id: t.staff.id, name: t.staff.name },
     days: t.days,
     totals: t.totals,
-    occurrences: t.occurrences.map((o) => ({ ...o })),
+    occurrences: t.occurrences.map((o) => ({ ...o, lessonMode })),
   }));
   const shown = rows[0];
   const title = who.scope === "teacher" ? "Your week" : all ? "All teachers" : shown ? `${shown.staff.name}'s week` : "Schedule";
@@ -94,9 +96,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     <>
       <PeopleFreshness load={deps.peopleSyncedAt} />
       {who.scope === "admin" && (
-        <Link href="/scheduler/setup" className={`${linkClass} text-sm`}>
-          Setup checklist
-        </Link>
+        <div className="flex flex-wrap gap-4">
+          <Link href="/scheduler/setup" className={`${linkClass} text-sm`}>
+            Setup checklist
+          </Link>
+          {body.lessonsEnabled && (
+            <Link href="/schedule/lessons" className={`${linkClass} text-sm`}>
+              Unlinked lessons
+            </Link>
+          )}
+        </div>
       )}
       {daily && <DailyTaskStatus key={daily.state} date={body.today} time={process.env.DAILY_TASK_TIME || "06:00"} initial={daily} />}
       {syncRuns && <PeopleSyncStatus initial={syncRuns} />}

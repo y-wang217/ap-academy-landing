@@ -313,7 +313,9 @@ describe("AC15: scheduler modules never talk to Notion or write lessons, payouts
       const src = readFileSync(file, "utf8");
       expect(src, file).not.toMatch(/api\.notion\.com|payout|lessons?_?(db|source)|from\(["']students["']\)/i);
       for (const m of src.matchAll(/from ["'](?:\.\.?\/)+notion\/([\w-]+)["']/g)) {
-        expect(["cached", "staff", "students", "config", "work"], `${file} imports notion/${m[1]}`).toContain(m[1]);
+        // REQ-39: only the wiring imports the Lessons adapter; handlers reach it through the port.
+        const allowed = ["cached", "staff", "students", "config", "work", ...(file.endsWith("lib/scheduler/deps.ts") ? ["lessons"] : [])];
+        expect(allowed, `${file} imports notion/${m[1]}`).toContain(m[1]);
       }
     }
   });

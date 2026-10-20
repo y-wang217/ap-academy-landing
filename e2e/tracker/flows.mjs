@@ -1226,6 +1226,93 @@ try {
   await parent.getByText("Billing not available yet").waitFor({ timeout: 15000 });
   check("a child with no Notion link sees Billing not available yet and no cards", (await parent.locator("[data-invoice-card]").count()) === 0 && (await parent.getByRole("heading", { name: "Credits" }).count()) === 0);
 
+  // REQ-39: Log this class, Mark no-show, Unlinked lessons and the freeze. A weekly class for Ryan and Sam on the
+  // weekday of 21 days ago, ending today: occurrences at -21 (logged through the form, cccc…0002), -14 (left), -7 and today.
+  const LESSON_SERIES = psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, effective_until, created_by) values ('${ORG}', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001', 'MCV4U', 'weekly', '${isoIn(-21)}', '16:00', 50, '${isoIn(0)}', '00000000-0000-0000-0000-00000000aaaa') returning id`).split("\n")[0];
+  const lessonRef = (offset) => `sched:${LESSON_SERIES}:${isoIn(offset)}`;
+  const lessonTablesBefore = process.env.PG_URL ? snapshot() : null;
+  const lessonJournalStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+  const lessonJournal = async () => (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(lessonJournalStart);
+  const isLessonCreate = (j) => j.method === "POST" && j.path === "/v1/pages" && j.body?.parent?.data_source_id === "6300f58a-8b8c-4789-88c1-e44272079b0f";
+  const lessonCard = (who) => who.getByRole("button", { name: /Sam Student.*MCV4U/s });
+
+  await ryan.setViewportSize({ width: 1200, height: 900 });
+  await ryan.goto(`${BASE}/schedule?date=${isoIn(0)}`);
+  await lessonCard(ryan).waitFor({ timeout: 15000 });
+  await lessonCard(ryan).click();
+  const ryanDialog = ryan.getByRole("dialog").filter({ hasText: "MCV4U" });
+  await ryanDialog.getByRole("button", { name: "Log this class" }).click();
+  await ryan.getByTestId("outcome-badge").filter({ hasText: "Logged" }).first().waitFor({ timeout: 15000 });
+  const logged1 = await lessonJournal();
+  const creates1 = logged1.filter(isLessonCreate);
+  const firstCreate = logged1.findIndex(isLessonCreate);
+  const findBefore = logged1.slice(0, firstCreate).some((j) => j.path.startsWith("/v1/data_sources/6300f58a-8b8c-4789-88c1-e44272079b0f/query") && j.body?.filter?.rich_text?.equals === lessonRef(0));
+  check("REQ-39: Ryan logs today's class and the journal shows one Lessons create carrying the ref, after one find query",
+    creates1.length === 1 && findBefore && creates1[0].body.properties["Class occurrence"].rich_text[0].text.content === lessonRef(0)
+      && JSON.stringify(Object.keys(creates1[0].body.properties).sort()) === JSON.stringify(["Class occurrence", "Date", "Duration (hrs)", "Lesson", "Related to Students & Parents (Lessons 1)", "Teacher"])
+      && creates1[0].body.properties["Duration (hrs)"].number === 0.83,
+    JSON.stringify(logged1.map((j) => `${j.method} ${j.path}`)));
+  await ryan.reload();
+  await lessonCard(ryan).waitFor({ timeout: 15000 });
+  check("REQ-39: after a reload the card face says Logged", (await lessonCard(ryan).innerText()).includes("Logged"));
+  const logAgain = await ryan.evaluate(async ([base, body]) => { const r = await fetch(`${base}/api/scheduler/lessons`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json() }; },
+    [BASE, { seriesId: LESSON_SERIES, originalDate: isoIn(0) }]);
+  check("REQ-39: a second log answers 200 and creates nothing", logAgain.status === 200 && logAgain.body.created === false && (await lessonJournal()).filter(isLessonCreate).length === 1, JSON.stringify(logAgain));
+
+  const beforeNoShow = (await lessonJournal()).length;
+  await ryan.goto(`${BASE}/schedule?date=${isoIn(-7)}`);
+  await lessonCard(ryan).waitFor({ timeout: 15000 });
+  await lessonCard(ryan).click();
+  ryan.once("dialog", (d) => d.accept());
+  await ryan.getByRole("dialog").filter({ hasText: "MCV4U" }).getByRole("button", { name: "Mark no-show" }).click();
+  await ryan.getByTestId("outcome-badge").filter({ hasText: "No-show" }).first().waitFor({ timeout: 15000 });
+  const afterNoShow = (await lessonJournal()).slice(beforeNoShow);
+  check("REQ-39: Ryan marks last week's class No-show and Notion hears nothing about Lessons",
+    !afterNoShow.some((j) => j.path.includes("6300f58a") || /\/v1\/pages\/[0-9a-f-]{36}$/.test(j.path) && j.method !== "GET"), JSON.stringify(afterNoShow.map((j) => `${j.method} ${j.path}`)));
+  const ryanUnlinked = await ryan.evaluate(async (base) => (await fetch(`${base}/api/scheduler/lessons/unlinked`)).status, BASE);
+  check("REQ-39: Ryan gets 403 from the Unlinked lessons API", ryanUnlinked === 403);
+
+  await teacher.setViewportSize({ width: 1200, height: 900 });
+  await teacher.goto(`${BASE}/schedule/lessons?from=${isoIn(-27)}&to=${isoIn(0)}`);
+  await teacher.getByRole("heading", { name: "Unlinked classes" }).waitFor({ timeout: 15000 });
+  const unlinkedText = await teacher.locator('[data-testid="unlinked-classes"]').innerText();
+  check("REQ-39: Unlinked lessons lists the form row under its class and says No matching lesson for the other",
+    (await teacher.getByTestId("link-cccccccc-cccc-4ccc-8ccc-cccccccc0002").count()) === 1 && unlinkedText.includes("No matching lesson in Notion."), unlinkedText.replaceAll("\n", " | "));
+  await teacher.getByTestId("link-cccccccc-cccc-4ccc-8ccc-cccccccc0002").click();
+  await teacher.getByTestId("link-cccccccc-cccc-4ccc-8ccc-cccccccc0002").waitFor({ state: "detached", timeout: 15000 });
+  const lessonsAfter = await (await fetch(`${MOCK_NOTION}/__lessons`, { headers: { "x-e2e-probe": "1" } })).json();
+  const formRow = lessonsAfter.find((l) => l.id === "cccccccc-cccc-4ccc-8ccc-cccccccc0002");
+  check("REQ-39: Link changed only Class occurrence on the form row",
+    formRow && formRow.props["Class occurrence"].rich_text.map((t) => t.plain_text).join("") === lessonRef(-21)
+      && formRow.props.Date.date.start === isoIn(-21) && formRow.props["Paid to Teacher"].checkbox === false && formRow.props["Duration (hrs)"].number === 0.83,
+    JSON.stringify(formRow));
+  // Only PATCHes to Lessons rows: the outbox drain (REQ-35) may deliver a daily-task export (blocks, the Work page) in the same window.
+  const lessonIds = new Set(lessonsAfter.map((l) => l.id));
+  const patches = (await lessonJournal()).filter((j) => j.method === "PATCH");
+  const linkPatches = patches.filter((j) => lessonIds.has(j.path.replace("/v1/pages/", "")));
+  check("REQ-39: every Notion PATCH to a Lessons row in the lesson flow names only Class occurrence",
+    linkPatches.length === 1 && linkPatches.every((j) => JSON.stringify(Object.keys(j.body.properties)) === '["Class occurrence"]'), JSON.stringify(linkPatches));
+  check("REQ-39: no other PATCH in the lesson flow touches a payout field",
+    patches.every((j) => !/Paid to Teacher|Pay Period|Duration \(hrs\)/.test(JSON.stringify(j.body))), JSON.stringify(patches.map((j) => `${j.method} ${j.path}`)));
+
+  if (lessonTablesBefore) {
+    const after = snapshot();
+    const changed = Object.keys(after).filter((t) => t !== "occurrence_outcomes" && after[t] !== lessonTablesBefore[t]);
+    check("REQ-39: outside occurrence_outcomes and audit_log, no tracker table changed", changed.length === 0, changed.join(","));
+    check("REQ-39: three outcomes are stored: logged today, no-show last week, linked three weeks ago",
+      psql(`select string_agg(outcome || ':' || coalesce(link_source, '-'), ',' order by original_date) from tracker.occurrence_outcomes where series_id = '${LESSON_SERIES}'`) === "delivered:reconciled,no_show:-,delivered:logged");
+  } else {
+    check("REQ-39: outside occurrence_outcomes and audit_log, no tracker table changed (PG_URL missing)", false);
+  }
+
+  const seriesStamp = psql(`select to_json(updated_at) #>> '{}' from tracker.class_series where id = '${LESSON_SERIES}'`);
+  const frozen = await teacher.evaluate(async ([base, id, date, stamp]) => {
+    const r = await fetch(`${base}/api/scheduler/classes/${id}/occurrences/${date}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ requestId: crypto.randomUUID(), expectedUpdatedAt: stamp, scope: "this" }) });
+    return { status: r.status, body: await r.json() };
+  }, [BASE, LESSON_SERIES, isoIn(0), seriesStamp]);
+  check("REQ-39: the owner's cancel of the logged class answers 409 has_outcome", frozen.status === 409 && frozen.body.error === "has_outcome", JSON.stringify(frozen));
+  check("REQ-39: the seeded paid lesson cccc…0001 was never requested", !(await lessonJournal()).some((j) => j.path.includes("cccccccc-cccc-4ccc-8ccc-cccccccc0001")));
+
   // Teachers, owners and students are sent back to the tracker home.
   await teacher.goto(`${BASE}/parent`);
   check("an owner opening /tracker/parent is redirected", new URL(teacher.url()).pathname.replace(/\/$/, "") === "/tracker");
