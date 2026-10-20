@@ -207,6 +207,39 @@ describe("runIntake: failures", () => {
     expect(w.db.byGmailId("g1")).toBeUndefined();
   });
 
+  it("an out-of-range entity in an HTML body is stored as text and the run goes on", async () => {
+    const w = world([
+      mail({ id: "e1", from: "ann@x.com", html: "<p>Bad &#x110000; entity</p>", snippet: "Bad &#99999999; entity" }),
+      mail({ id: "e2", from: "ann@x.com", body: "Next one" }),
+    ]);
+    const out = await runIntake(w.deps());
+    expect(out).toMatchObject({ result: "ok", stored: 2, failed: 0 });
+    expect(w.db.byGmailId("e1")).toMatchObject({ state: "matched", bodyText: "Bad &#x110000; entity", snippet: "Bad &#99999999; entity" });
+    expect(w.db.byGmailId("e2")).toMatchObject({ state: "matched", bodyText: "Next one" });
+  });
+
+  it("a message that cannot be read is counted failed and a newer message in the same run is still stored", async () => {
+    const poison = mail({ id: "x1", from: "ann@x.com", at: T0 - 9000 });
+    (poison.payload as { headers: unknown }).headers = 5;
+    const w = world([poison, mail({ id: "x2", from: "ann@x.com", body: "Good one", at: T0 - 5000 })]);
+    const out = await runIntake(w.deps());
+    expect(out).toMatchObject({ result: "ok", failed: 1, stored: 1 });
+    expect(w.db.byGmailId("x1")).toBeUndefined();
+    expect(w.db.byGmailId("x2")).toMatchObject({ state: "matched", bodyText: "Good one" });
+  });
+
+  it("a waiting message that cannot be read on retry is marked failed and the retry loop goes on", async () => {
+    const w = world([mail({ id: "r1", from: "ann@x.com", at: T0 - 9000 }), mail({ id: "r2", from: "ann@x.com", body: "Body r2", at: T0 - 5000 })]);
+    w.setDirectory(async () => { throw new NotionError("Notion returned 503", 503); });
+    await runIntake(w.deps());
+    (w.gmail.box.get("r1")!.payload as { headers: unknown }).headers = 5;
+    w.setDirectory(async () => FAMILIES);
+    const out = await runIntake(w.deps());
+    expect(out).toMatchObject({ result: "ok", failed: 1, matched: 1 });
+    expect(w.db.byGmailId("r1")).toMatchObject({ state: "failed", lastError: "Could not read the message" });
+    expect(w.db.byGmailId("r2")).toMatchObject({ state: "matched", bodyText: "Body r2" });
+  });
+
   it("a list failure ends the run as failed with gmailListFailed", async () => {
     const w = world([mail({ from: "ann@x.com" })]);
     w.gmail.setFailList(true);

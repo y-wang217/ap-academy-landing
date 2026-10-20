@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodyText, capBody, headerMap, htmlToText, isAutomated, parseFrom, snippetOf, type GmailPart } from "./mime";
+import { bodyText, capBody, decodeEntities, headerMap, htmlToText, isAutomated, parseFrom, snippetOf, type GmailPart } from "./mime";
 
 // REQ-42 AC14, AC15: the pure parts of reading a Gmail message.
 const b64 = (s: string, encoding: BufferEncoding = "utf8") => Buffer.from(s, encoding).toString("base64url");
@@ -43,6 +43,19 @@ describe("bodyText", () => {
 
   it("htmlToText collapses blank lines", () => {
     expect(htmlToText("<p>a</p><p></p><p></p><p>b</p>")).toBe("a\n\nb");
+  });
+});
+
+describe("decodeEntities", () => {
+  it("decodes numeric entities in range, including astral ones", () => {
+    expect(decodeEntities("&#x1F600; &#65;&#x42;")).toBe("\u{1F600} AB");
+  });
+  it("leaves out-of-range and surrogate code points untouched instead of throwing", () => {
+    const bad = "a &#x110000; b &#99999999; c &#xD800; d &#99999999999999999999999;";
+    expect(() => decodeEntities(bad)).not.toThrow();
+    expect(decodeEntities(bad)).toBe(bad);
+    expect(htmlToText("<p>Hi &#x110000;&amp; bye</p>")).toBe("Hi &#x110000;& bye");
+    expect(snippetOf("x &#99999999; y")).toBe("x &#99999999; y");
   });
 });
 
