@@ -1,4 +1,4 @@
-# 0053: Staff and student names come from a local copy synced from Notion
+# 0055: Staff and student names come from a local copy synced from Notion
 Status: accepted
 Date: 2026-10-19
 
@@ -28,3 +28,5 @@ Workspace ADR 0004 (option B, Charlie 2026-10-16) decided that Notion stays the 
 - A teacher's student names are now limited by RLS to their own series, which only narrows what they saw before.
 - Supersedes the live Notion read and five-minute recheck in ADR 0033 and the names cache in ADR 0037, as ADR 0004 said it would.
 - Old `sync_runs` rows are not pruned. Revisit if the table grows past a few thousand rows.
+
+Merged with REQ-33: the owner setup checklist (ADR 0053) counts Teachers approved from this copy, so before the first sync it says no active teachers.

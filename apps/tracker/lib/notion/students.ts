@@ -174,6 +174,42 @@ export async function fetchStudentPeople(config: NotionConfig, fetcher: typeof f
   throw new NotionError("Too many Notion pages");
 }
 
+/**
+ * Names only (REQ-33): Active and Onboarding students whose Weekly Schedule is
+ * not empty, for the owner setup page's "adopted of scheduled" count. Notion
+ * filters on the schedule property, but only Student Name is asked for, so the
+ * schedule text never reaches the tracker. Not cached: the owner should see an
+ * adoption from a minute ago.
+ */
+export async function fetchScheduledStudentNames(config: NotionConfig, fetcher: typeof fetch = fetch): Promise<[string, string][]> {
+  const ids = await propertyIds(config, fetcher, [NAME]);
+  const filter = {
+    and: [
+      { or: ["Active", "Onboarding"].map((name) => ({ property: STAGE, select: { equals: name } })) },
+      { property: SCHEDULE, rich_text: { is_not_empty: true } },
+    ],
+  };
+  const out: [string, string][] = [];
+  let cursor: string | undefined;
+  for (let guard = 0; guard < 50; guard++) {
+    const res = await call(fetcher, `${BASE}/data_sources/${config.dataSourceId}/query?${filterQuery(ids)}`, {
+      method: "POST",
+      headers: headers(config, true),
+      body: JSON.stringify({ page_size: 100, filter, ...(cursor ? { start_cursor: cursor } : {}) }),
+    });
+    if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+    const parsed = Response_.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new NotionError("Unexpected Notion response");
+    for (const raw of parsed.data.results) {
+      const page = NamePage.safeParse(raw);
+      if (page.success) out.push([page.data.id, plain(page.data.properties[NAME].title).trim()]);
+    }
+    if (!parsed.data.has_more || !parsed.data.next_cursor) return out;
+    cursor = parsed.data.next_cursor;
+  }
+  throw new NotionError("Too many Notion pages");
+}
+
 /** One student, fresh. Null when Notion says the page does not exist. */
 export async function fetchStudentSchedule(config: NotionConfig, pageId: string, fetcher: typeof fetch = fetch): Promise<StudentRecord | null> {
   if (!z.guid().safeParse(pageId).success) throw new NotionError("Invalid page ID");

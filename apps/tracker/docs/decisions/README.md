@@ -57,4 +57,5 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0050](0050-locked-booking-writes.md) | Class writes are revalidated under a lock | accepted |
 | [0051](0051-class-purpose-and-past.md) | One-off classes say their purpose, and the parent calendar says past, not done | accepted |
 | [0052](0052-permission-matrix.md) | One permission matrix for every role, proven cell by cell | accepted |
-| [0053](0053-people-sync.md) | Staff and student names come from a local copy synced from Notion | accepted |
+| [0053](0053-owner-setup-checklist.md) | The owner setup checklist reads only, and a failed read is never a zero | accepted |
+| [0055](0055-people-sync.md) | Staff and student names come from a local copy synced from Notion | accepted |

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ACTIVE_STUDENT_STAGES, fetchScheduledStudents, fetchStudentNames, fetchStudentPeople, fetchStudentSchedule, parseStudentPage, writeWeeklySchedule } from "./students";
+import { ACTIVE_STUDENT_STAGES, fetchScheduledStudentNames, fetchScheduledStudents, fetchStudentNames, fetchStudentPeople, fetchStudentSchedule, parseStudentPage, writeWeeklySchedule } from "./students";
 import { NotionError } from "./staff";
 
 const S1 = "11111111-1111-4111-8111-111111111111";
@@ -104,6 +104,40 @@ describe("fetchStudentNames (REQ-6 AC7, AC18)", () => {
     expect((await fetchStudentNames(cfg, fetcher)).size).toBe(1);
     const bad = recorder(() => json({}, 500));
     await expect(fetchStudentNames(cfg, bad.fetcher)).rejects.toBeInstanceOf(NotionError);
+  });
+});
+
+describe("fetchScheduledStudentNames (REQ-33 AC13, AC8)", () => {
+  it("asks for Student Name only, filters on stage and a non-empty Weekly Schedule, returns [id, name] pairs", async () => {
+    const { calls, fetcher } = recorder((c) => (c.method === "GET" ? json(SCHEMA) : json({ results: [page(S1, "Sam Lee", "Active", "Tue 17:30-18:30 | Math | Jane")], has_more: false })));
+    const out = await fetchScheduledStudentNames(cfg, fetcher);
+    expect(out).toEqual([[S1, "Sam Lee"]]);
+    expect(JSON.stringify(out)).not.toContain("17:30");
+    const posts = calls.filter((c) => c.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0].url).toContain("/v1/data_sources/ds-students/query");
+    expect(new URL(posts[0].url).searchParams.getAll("filter_properties[]")).toEqual(["title"]);
+    expect((posts[0].body as { filter: unknown }).filter).toEqual({
+      and: [
+        { or: [{ property: "Stage", select: { equals: "Active" } }, { property: "Stage", select: { equals: "Onboarding" } }] },
+        { property: "Weekly Schedule", rich_text: { is_not_empty: true } },
+      ],
+    });
+    expect(calls.every((c) => c.url.includes("/data_sources/ds-students"))).toBe(true);
+  });
+  it("follows next_cursor and throws NotionError on a non-OK answer", async () => {
+    let n = 0;
+    const { calls, fetcher } = recorder((c) => {
+      if (c.method === "GET") return json(SCHEMA);
+      n++;
+      return n === 1
+        ? json({ results: [page(S1, "A", "Active", "x")], has_more: true, next_cursor: "c1" })
+        : json({ results: [page("22222222-2222-4222-8222-222222222222", "B", "Active", "y")], has_more: false });
+    });
+    expect((await fetchScheduledStudentNames(cfg, fetcher)).map(([, name]) => name)).toEqual(["A", "B"]);
+    expect((calls.filter((c) => c.method === "POST")[1].body as { start_cursor?: string }).start_cursor).toBe("c1");
+    const bad = recorder((c) => (c.method === "GET" ? json(SCHEMA) : json({}, 503)));
+    await expect(fetchScheduledStudentNames(cfg, bad.fetcher)).rejects.toBeInstanceOf(NotionError);
   });
 });
 

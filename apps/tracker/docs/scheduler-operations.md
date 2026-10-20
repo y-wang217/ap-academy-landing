@@ -1,6 +1,6 @@
 # Scheduler: operator guide
 
-Four jobs keep the scheduler running. Background for each is in the ADR linked beside it.
+Five jobs keep the scheduler running. Background for each is in the ADR linked beside it.
 
 ## 1. Change the time of the daily task
 Background: [0039](decisions/0039-daily-teacher-texts-task.md).
@@ -31,8 +31,15 @@ Background: [0036](decisions/0036-availability-conflicts-computed.md).
 3. Either move the class on `/tracker/schedule` (drag it, or open it and edit), or ask the teacher to change their hours on `/tracker/schedule/availability`.
 4. Reload the conflicts page. The entry disappears once the class fits; conflicts are computed on each visit, nothing needs clearing.
 
-## 5. Names and the people sync
-Background: [0053](decisions/0053-people-sync.md), workspace ADR 0004.
+## 5. Check what is still missing
+Background: [0053](decisions/0053-owner-setup-checklist.md).
+1. Open [`/tracker/scheduler/setup`](https://www.apacademy.ca/tracker/scheduler/setup) (owners only; also linked as Setup on the home page and Setup checklist on `/tracker/schedule`).
+2. Each row shows Done, Partial, Missing or Not checked, a count, who is affected while it is missing, and a link to where it is fixed.
+3. Not checked with "Could not read Notion" means Notion did not answer; reload in a minute. It never means zero.
+4. The page only reads. Fix each row on the screen its link opens, then reload the page.
+
+## 7. Names and the people sync
+Background: [0055](decisions/0055-people-sync.md), workspace ADR 0004.
 1. The tracker keeps a copy of staff names, subjects and active state, and student names and stage, from Notion. It never copies parent details, email, rates or notes. Edit people in Notion as before.
 2. The copy refreshes every hour (the Daily teacher texts workflow) and when you tap Sync now on `/tracker/schedule`. A rename or a new student shows after the next sync.
 3. Under today's task on `/tracker/schedule` you see "Names synced N minutes ago." or "Last sync failed at HH:MM. Names are from HH:MM." Sync now waits a minute between taps.
