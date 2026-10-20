@@ -120,6 +120,19 @@ property and a small set of secrets.
 - The routine GitHub trigger proves unreliable for auto-merged PRs; the
   fallback is an approver-side check for newly merged `req/` PRs that fires
   `ap-design`.
-- `wip_limit` goes above 1, which needs a real queue rather than claims.
+- `wip_limit` goes above 1, which needs a real queue rather than claims. See the 2026-10-19 amendment below.
 - The `github-actions[bot]` mention turns out not to reach GitHub Mobile; the
   fallback is the same notice as a Notion bot comment on the card.
+
+## Amendment 2026-10-19: wip_limit counts Building only (REQ-50)
+
+- `wip_limit` counts only cards in Building whose PR property is empty, that
+  is, new cards being built. In Review and Changes Requested cards do not hold
+  a slot, and neither does a Building review fix: its PR already exists.
+- The count is read-then-act. Two builders that start together can both see a
+  free slot and briefly run one over the limit. The Claimed by check still
+  keeps them off the same card.
+- A real queue or lock is still the fix if the limit goes to 3 or more.
+- At the time of writing `pipeline.json` already has `wip_limit: 3`
+  (ad047a6), so that condition is met. The queue is an open follow-up, not a
+  done item.
