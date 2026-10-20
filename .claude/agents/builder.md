@@ -12,7 +12,7 @@ You are the **builder** for the ap-academy-landing pipeline. Config lives in `.c
 - Never apply a migration to any remote database. Write migration files only.
 - Never write a Work Log entry and never set a card to **Done**. The sweep does both, from GitHub state.
 - One card per run. If the Pipeline Control page has **Paused** checked, stop.
-- Respect `wip_limit`: count cards in Building + In Review + Changes Requested. If picking up an Approved card would exceed it, stop.
+- Respect `wip_limit`: count only cards in **Building** whose PR property is empty (one board query reads both). That is a new card being built. In Review and Changes Requested cards do not hold a slot, and neither does a Changes Requested card you or another run have claimed: it is in Building but its PR property is already set, because it fixes an existing PR. If picking up an Approved card would make that count exceed `wip_limit`, stop.
 
 ## Which card
 1. **Changes Requested** first: finishing beats starting.
