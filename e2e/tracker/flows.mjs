@@ -1280,6 +1280,134 @@ try {
   const st = timingRes.headers()["server-timing"] ?? "";
   check("scheduler GET carries Server-Timing auth, db and total", timingRes.status() === 200 && /auth;dur=/.test(st) && /db;dur=/.test(st) && /total;dur=/.test(st), `${timingRes.status()} ${st}`);
 
+  // REQ-42: Iris 2/9. The read-only inbox against the mock Gmail (54334) and the family directory in the mock
+  // Notion. Runs before REQ-32 revokes Ryan's link.
+  {
+    const MOCK_GMAIL = process.env.MOCK_GMAIL_URL ?? "http://127.0.0.1:54334";
+    const IRIS_SECRET = "e2e-iris-secret-not-for-production";
+    const SAM_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001";
+    const HAIDER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004";
+    const ADA_ID = "dddddddd-dddd-4ddd-8ddd-dddddddd0001";
+    const irisRun = async () => {
+      const r = await fetch(`${BASE}/api/iris/run`, { method: "POST", headers: { Authorization: `Bearer ${IRIS_SECRET}` } });
+      return { status: r.status, body: await r.json().catch(() => null) };
+    };
+    const gmail = (path, method = "POST", body) => fetch(`${MOCK_GMAIL}${path}`, { method, ...(body ? { body: JSON.stringify(body) } : {}) }).then((r) => r.json());
+    const msg = (gid, cols) => psql(`select ${cols} from iris.messages where gmail_message_id = '${gid}'`);
+    const irisTables = () => psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' and table_name not in ('audit_log', 'notion_outbox') order by 1").split("\n").filter(Boolean);
+    const trackerSnapshot = () => Object.fromEntries(irisTables().map((t) => [t, psql(`select count(*) || ' ' || coalesce(md5(string_agg(x::text, '' order by x::text)), '') from tracker.${t} x`)]));
+    const trackerBefore = trackerSnapshot();
+    const notionStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+    await gmail("/__gmail/reset");
+
+    // 1. Signed out: the pages and run-now redirect to /login; the run wants its bearer.
+    const signedOut = await Promise.all([
+      fetch(`${BASE}/iris`, { redirect: "manual" }),
+      fetch(`${BASE}/iris/settings`, { redirect: "manual" }),
+      fetch(`${BASE}/api/iris/run-now`, { method: "POST", redirect: "manual" }),
+    ]);
+    check("REQ-42: signed out, /iris, /iris/settings and run-now redirect to /login",
+      signedOut.every((r) => r.status >= 300 && r.status < 400 && (r.headers.get("location") ?? "").includes("/login")), signedOut.map((r) => r.status).join(","));
+    check("REQ-42: the run with no bearer is 401", (await fetch(`${BASE}/api/iris/run`, { method: "POST", redirect: "manual" })).status === 401);
+
+    // 2. Ryan (scheduling teacher) is sent home and refused, and Gmail is never called.
+    await ryan.goto(`${BASE}/iris`);
+    check("REQ-42: Ryan opening /iris lands on /", /\/tracker\/?$/.test(new URL(ryan.url()).pathname), ryan.url());
+    const ryanPatch = await ryan.context().request.patch(`${BASE}/api/iris/settings`, { data: { paused: false, confirmed: true } });
+    const ryanRun = await ryan.context().request.post(`${BASE}/api/iris/run-now`);
+    check("REQ-42: Ryan gets 403 from settings and run-now", ryanPatch.status() === 403 && ryanRun.status() === 403, `${ryanPatch.status()} ${ryanRun.status()}`);
+    check("REQ-42: no Gmail call so far", (await gmail("/__gmail/calls", "GET")).length === 0);
+
+    // 3. Paused: the run answers paused and still no Gmail call.
+    const paused = await irisRun();
+    check("REQ-42: a paused run answers paused", paused.status === 200 && paused.body?.result === "paused", JSON.stringify(paused));
+    check("REQ-42: a paused run calls no Gmail", (await gmail("/__gmail/calls", "GET")).length === 0);
+
+    // 4. A cross-site unpause is refused before the session is read.
+    const evilPatch = await teacher.context().request.patch(`${BASE}/api/iris/settings`, { data: { paused: false, confirmed: true }, headers: { Origin: "https://evil.example" } });
+    check("REQ-42: a cross-site settings PATCH is 403 and Iris stays paused", evilPatch.status() === 403 && psql("select paused from iris.settings") === "t", String(evilPatch.status()));
+
+    // 5. The owner unpauses with the tick.
+    await teacher.goto(`${BASE}/iris/settings`);
+    const unpause = teacher.getByRole("button", { name: "Unpause", exact: true });
+    check("REQ-42: Unpause is disabled until the tick", await unpause.isDisabled());
+    await teacher.getByLabel("The privacy page is live and families are writing to charlie@apacademy.ca").check();
+    await unpause.click();
+    await teacher.locator('[data-iris-status="running"]').waitFor({ timeout: 15000 });
+    check("REQ-42: the owner unpauses and the page shows Running", psql("select paused from iris.settings") === "f");
+
+    // 6. A run stores the inbox.
+    const first = await irisRun();
+    check("REQ-42: the first run answers 200 ok", first.status === 200 && first.body?.result === "ok", JSON.stringify(first));
+    check("REQ-42: m1 is matched with its body", msg("m1", "state || '|' || body_text") === "matched|Hi Charlie, Sam is sick today and will miss class.", msg("m1", "state"));
+    const m2Thread = psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm2'");
+    check("REQ-42: m2 (HTML) is matched with both siblings on its thread", msg("m2", "state") === "matched" && m2Thread.includes(HAIDER_ID) && m2Thread.includes(ADA_ID), m2Thread);
+    check("REQ-42: m3 (unknown) has no body and is escalated unknown_sender", msg("m3", "coalesce(body_text, 'NULL') || '|' || state || '|' || escalation_reason") === "NULL|escalated|unknown_sender");
+    check("REQ-42: m4 (newsletter) has no body and is handled", msg("m4", "coalesce(body_text, 'NULL') || '|' || (handled_at is not null)::text") === "NULL|true");
+    check("REQ-42: m5 is cut to 20,000 characters", msg("m5", "length(body_text) || '|' || body_truncated::text") === "20000|true");
+    check("REQ-42: m6 is stored outbound in Sam's thread", msg("m6", "direction || '|' || source") === "outbound|charlie_manual");
+    check("REQ-42: m7 (the mailbox in a new thread) is not stored", msg("m7", "count(*)") === "0");
+    check("REQ-42: every inbound row has policy version 1", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 1") === "0");
+    check("REQ-42: Sam's thread carries his Notion page id", psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm1'") === SAM_ID);
+
+    // 7. The owner's inbox: m3 needs him, m4 does not.
+    await teacher.goto(`${BASE}/iris`);
+    await teacher.getByRole("heading", { name: "Needs you", exact: true }).waitFor({ timeout: 15000 });
+    const needsYou = await section(teacher, "Needs you").innerText();
+    check("REQ-42: Needs you lists the unknown sender and not the newsletter", needsYou.includes("lead@example.org") && !needsYou.includes("news@shop.example"), needsYou.slice(0, 200));
+
+    // 8. The same inbox again stores nothing new.
+    const count = () => psql("select count(*) from iris.messages");
+    const before8 = count();
+    const second = await irisRun();
+    check("REQ-42: a second run stores 0 and the row count holds", second.body?.stored === 0 && count() === before8, JSON.stringify(second.body));
+
+    // 9. Two runs at once: one works, one is busy.
+    await gmail("/__gmail/slow");
+    const pair = await Promise.all([irisRun(), irisRun()]);
+    await gmail("/__gmail/slow");
+    check("REQ-42: two runs at once give one ok and one busy", pair.map((p) => p.body?.result).sort().join(",") === "busy,ok", JSON.stringify(pair.map((p) => p.body)));
+
+    // 10. Notion down: m8 waits with no body, then matches when Notion is back.
+    await fetch(`${MOCK_NOTION}/__students/fail`, { method: "POST" });
+    await gmail("/__gmail/add", "POST", {
+      id: "m8", threadId: "thread-m8", internalDate: String(Date.now()), snippet: "Running late",
+      payload: { mimeType: "text/plain", headers: [{ name: "From", value: "sam.parent@example.com" }, { name: "Subject", value: "Late" }], body: { data: Buffer.from("Running late today.").toString("base64url") } },
+    });
+    const down = await irisRun();
+    check("REQ-42: with Notion down the run is still 200", down.status === 200, JSON.stringify(down));
+    const m8 = msg("m8", "state || '|' || coalesce(body_text, 'NULL') || '|' || coalesce(length(last_error), 0)");
+    check("REQ-42: m8 waits at received with no body and a short error", /^received\|NULL\|([1-9]\d?|[12]\d\d|300)$/.test(m8), m8);
+    await fetch(`${MOCK_NOTION}/__students/fail`, { method: "POST" });
+    await irisRun();
+    check("REQ-42: once Notion is back, m8 is matched with its body", msg("m8", "state || '|' || body_text") === "matched|Running late today.");
+
+    // 11. Only the four properties were asked for, and Notion was never written.
+    const journal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(notionStart);
+    const familyQueries = journal.filter((j) => j.method === "POST" && JSON.stringify(j.body?.filter ?? {}).includes('"equals":"Paused"'));
+    const props = (path) => (path.split("?")[1] ?? "").split("&").filter((p) => p.startsWith("filter_properties")).sort().join("&");
+    check("REQ-42: every family query asks for exactly Student Name, Stage, Parent Email and Parent Name",
+      familyQueries.length >= 3 && familyQueries.every((j) => props(j.path) === "filter_properties[]=pe&filter_properties[]=pn&filter_properties[]=stage&filter_properties[]=title"),
+      familyQueries.map((j) => j.path).join(" "));
+    check("REQ-42: no Notion write during the Iris section", !journal.some((j) => j.method === "PATCH" || j.method === "DELETE" || (j.method === "POST" && j.path === "/v1/pages") || j.path.includes("/comments")));
+
+    // 12. A Gmail list failure: Run now shows it, the run is 502, and the settings page shows the short error.
+    await gmail("/__gmail/fail-list");
+    await teacher.goto(`${BASE}/iris/settings`);
+    await teacher.getByRole("button", { name: "Run now", exact: true }).click();
+    await teacher.getByText("The run failed. See the last error.", { exact: true }).waitFor({ timeout: 30000 });
+    check("REQ-42: Run now shows the failed run", true);
+    const failedRun = await irisRun();
+    check("REQ-42: a Gmail list failure answers 502", failedRun.status === 502 && failedRun.body?.result === "failed", JSON.stringify(failedRun));
+    await teacher.reload();
+    const lastError = await teacher.locator("[data-last-error]").innerText();
+    check("REQ-42: the settings page shows the short last error", lastError.includes("Gmail returned 500") && !lastError.includes("@"), lastError);
+    await gmail("/__gmail/fail-list");
+
+    // 13. No tracker table changed (the audit log records the pause changes by design; the outbox drains in the background).
+    check("REQ-42: every tracker table is unchanged across the Iris section", JSON.stringify(trackerSnapshot()) === JSON.stringify(trackerBefore));
+  }
+
   // REQ-32 direct API: PostgREST with real JWTs, no UI, so RLS alone decides. Runs last because it revokes access.
   const tokenOf = async (email) => {
     const { cookieValue } = await (await fetch(`${MOCK}/__session?email=${encodeURIComponent(email)}`)).json();
