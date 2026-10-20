@@ -391,6 +391,7 @@ delete either raises `42501` or touches no row.
 | owner + staff link | read, write: the union of the `owner` and `scheduling-only teacher` rows |
 | grade teacher + staff link | read, write: the union of the `grade teacher` and `scheduling-only teacher` rows |
 | staff link + parent link | read, write: the union of the `scheduling-only teacher` and `parent` rows |
+| grade teacher + parent link | none. Neither role reads it |
 
 ### `notion_outbox`
 
