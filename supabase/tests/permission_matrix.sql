@@ -165,6 +165,22 @@ insert into tracker.parent_links (id, org_id, student_id, email, parent_user_id,
   ('80000000-0000-0000-0000-000000000009', '10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-00000000000f',
    'zp@example.com', null, null, 'a0000000-0000-0000-0000-000000000002');
 
+-- People copies (0022): staff ST1 to ST5 active and ST6 archived in O1, ST9
+-- in O2; one student_people row per student; one good sync per org.
+insert into tracker.staff (org_id, notion_staff_id, name, active, synced_at, archived_at) values
+  ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000001', 'Staff One', true, now(), null),
+  ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000002', 'Staff Two', true, now(), null),
+  ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000003', 'Staff Three', true, now(), null),
+  ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000004', 'Staff Four', true, now(), null),
+  ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000005', 'Staff Five', true, now(), null),
+  ('10000000-0000-0000-0000-000000000001', '5a000000-0000-4000-8000-000000000006', 'Staff Six', false, now(), now()),
+  ('10000000-0000-0000-0000-000000000002', '5a000000-0000-4000-8000-000000000009', 'Staff Nine', true, now(), null);
+insert into tracker.student_people (org_id, notion_student_id, name, stage, active, synced_at)
+  select s.org_id, s.notion_student_id, s.first_name || ' ' || s.last_initial || '.', 'Active', true, now() from tracker.students s;
+insert into tracker.sync_runs (org_id, trigger, started_at, finished_at, result) values
+  ('10000000-0000-0000-0000-000000000001', 'schedule', now(), now(), 'ok'),
+  ('10000000-0000-0000-0000-000000000002', 'schedule', now(), now(), 'ok');
+
 -- The matrix -------------------------------------------------------------------
 -- One row per single role and table: rows visible from the fixture above,
 -- whether a direct insert, update and delete get past the grants and RLS, and
@@ -200,6 +216,9 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('owner', 'booking_stamps',          8, false, false, false, null),
   ('owner', 'schedule_writes',         1, true,  true,  false, 'schedule_write'),
   ('owner', 'occurrence_outcomes',      2, true,  true,  true,  null),
+  ('owner', 'staff',                   6, false, false, false, 'apply_people_sync'),
+  ('owner', 'student_people',          3, false, false, false, 'apply_people_sync'),
+  ('owner', 'sync_runs',               1, false, false, false, 'apply_people_sync'),
   ('owner', 'notion_outbox',        null, false, true,  false, 'enqueue_summary_sync, claim_notion_outbox, retry_notion_outbox'),
   -- grade_teacher
   ('grade_teacher', 'orgs',                    1, false, false, false, null),
@@ -226,6 +245,9 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('grade_teacher', 'booking_stamps',          0, false, false, false, null),
   ('grade_teacher', 'schedule_writes',         0, false, false, false, null),
   ('grade_teacher', 'occurrence_outcomes',      0, false, false, false, null),
+  ('grade_teacher', 'staff',                   0, false, false, false, null),
+  ('grade_teacher', 'student_people',          0, false, false, false, null),
+  ('grade_teacher', 'sync_runs',               0, false, false, false, null),
   ('grade_teacher', 'notion_outbox',           0, false, false, false, null),
   -- scheduling_teacher
   ('scheduling_teacher', 'orgs',                    0, false, false, false, null),
@@ -252,6 +274,9 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('scheduling_teacher', 'booking_stamps',          0, false, false, false, null),
   ('scheduling_teacher', 'schedule_writes',         0, false, false, false, null),
   ('scheduling_teacher', 'occurrence_outcomes',      1, true,  true,  false, null),
+  ('scheduling_teacher', 'staff',                   5, false, false, false, null),
+  ('scheduling_teacher', 'student_people',          2, false, false, false, null),
+  ('scheduling_teacher', 'sync_runs',               0, false, false, false, null),
   ('scheduling_teacher', 'notion_outbox',           0, false, false, false, null),
   -- student
   ('student', 'orgs',                    1, false, false, false, null),
@@ -278,6 +303,9 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('student', 'booking_stamps',          0, false, false, false, null),
   ('student', 'schedule_writes',         0, false, false, false, null),
   ('student', 'occurrence_outcomes',      0, false, false, false, null),
+  ('student', 'staff',                   0, false, false, false, null),
+  ('student', 'student_people',          0, false, false, false, null),
+  ('student', 'sync_runs',               0, false, false, false, null),
   ('student', 'notion_outbox',           0, false, false, false, null),
   -- parent
   ('parent', 'orgs',                    1, false, false, false, null),
@@ -304,6 +332,9 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('parent', 'booking_stamps',          0, false, false, false, null),
   ('parent', 'schedule_writes',         0, false, false, false, null),
   ('parent', 'occurrence_outcomes',      0, false, false, false, null),
+  ('parent', 'staff',                   2, false, false, false, null),
+  ('parent', 'student_people',          1, false, false, false, null),
+  ('parent', 'sync_runs',               0, false, false, false, null),
   ('parent', 'notion_outbox',           0, false, false, false, null);
 
 -- The login that plays each single role, and each combination's parts.
@@ -340,6 +371,8 @@ language sql immutable as $$
     when 'memberships' then (j ->> 'user_id') || ':' || (j ->> 'org_id')
     when 'daily_task_teachers' then (j ->> 'task_id') || ':' || (j ->> 'notion_staff_id')
     when 'booking_stamps' then (j ->> 'org_id') || ':' || (j ->> 'key_kind') || ':' || (j ->> 'key_id')
+    when 'staff' then (j ->> 'org_id') || ':' || (j ->> 'notion_staff_id')
+    when 'student_people' then (j ->> 'org_id') || ':' || (j ->> 'notion_student_id')
     else j ->> 'id'
   end;
 $$;
@@ -669,6 +702,10 @@ begin
   n := n + (select count(*) from tracker.class_exceptions e join matrix.ids i on i.series_id = e.series_id where i.first_name in ('Bea', 'Zed'));
   n := n + (select count(*) from tracker.class_exceptions where series_id in ('40000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000004', '40000000-0000-0000-0000-000000000007'));
   n := n + (select count(*) from tracker.schedule_summaries where notion_student_id in (select notion_student_id from matrix.ids where first_name in ('Bea', 'Zed')));
+  n := n + (select count(*) from tracker.student_people where notion_student_id in (select notion_student_id from matrix.ids where first_name in ('Bea', 'Zed')));
+  -- Ada's teachers are ST1 and ST5; any other staff row belongs to another family's classes.
+  n := n + (select count(*) from tracker.staff where notion_staff_id not in ('5a000000-0000-4000-8000-000000000001', '5a000000-0000-4000-8000-000000000005'));
+  n := n + (select count(*) from tracker.sync_runs);
   n := n + (select count(*) from tracker.audit_log);
   return n;
 end;
@@ -714,6 +751,16 @@ begin
       when 'occurrence_is_linkable' then r := to_jsonb(nullif(tracker.occurrence_is_linkable(t.series_id, '2026-09-28'), false));
       when 'lock_booking_key' then perform tracker.lock_booking_key(t.org_id, 'student', t.notion_student_id);
       when 'schedule_write_context' then r := tracker.schedule_write_context(t.org_id, gen_random_uuid(), '[]');
+      when 'is_my_series_student' then r := to_jsonb(nullif(tracker.is_my_series_student(t.org_id, t.notion_student_id), false));
+      -- The teacher of the other family's first series: ST2 for Bea, ST9 for Zed.
+      when 'is_my_childs_teacher' then
+        r := to_jsonb(nullif(tracker.is_my_childs_teacher(t.org_id,
+               case t.first_name when 'Bea' then '5a000000-0000-4000-8000-000000000002'::uuid else '5a000000-0000-4000-8000-000000000009'::uuid end), false));
+      when 'apply_people_sync' then r := to_jsonb(tracker.apply_people_sync(t.org_id, 'owner', now(), '[]', '[]', null));
+      -- An org-wide timestamp, no family data: the parent's own org (Bea's) answers by
+      -- design, so only Org Two (Zed's) must answer null.
+      when 'people_synced_at' then
+        r := case when t.org_id = '10000000-0000-0000-0000-000000000001' then null else to_jsonb(tracker.people_synced_at(t.org_id)) end;
       when 'schedule_write' then
         r := tracker.schedule_write(t.org_id, gen_random_uuid(), 'cancel', '[]',
                jsonb_build_object('series_id', t.series_id, 'original_date', '2026-09-21', 'expected_updated_at', now()));
@@ -895,7 +942,7 @@ set request.jwt.claims = '{"sub": "d0000000-0000-0000-0000-000000000001", "email
 do $$
 declare t text; n bigint;
 begin
-  foreach t in array array['class_series', 'class_exceptions', 'availability_windows', 'availability_exceptions'] loop
+  foreach t in array array['class_series', 'class_exceptions', 'availability_windows', 'availability_exceptions', 'staff', 'student_people'] loop
     execute format('select count(*) from tracker.%I', t) into n;
     if n <> 0 then raise exception 'revoked teacher still reads % rows of %', n, t; end if;
   end loop;
@@ -923,7 +970,7 @@ do $$
 declare t text; n bigint;
 begin
   foreach t in array array['orgs', 'memberships', 'students', 'goals', 'courses', 'syllabus_versions', 'categories', 'assessments',
-                           'tasks', 'class_series', 'class_exceptions', 'parent_links'] loop
+                           'tasks', 'class_series', 'class_exceptions', 'parent_links', 'staff', 'student_people'] loop
     execute format('select count(*) from tracker.%I', t) into n;
     if n <> 0 then raise exception 'removed parent still reads % rows of %', n, t; end if;
   end loop;
