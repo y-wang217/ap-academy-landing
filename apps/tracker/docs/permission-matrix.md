@@ -409,6 +409,54 @@ delete either raises `42501` or touches no row.
 | staff link + parent link | read: the union of the `scheduling-only teacher` and `parent` rows |
 | grade teacher + parent link | read: the union of the `grade teacher` and `parent` rows |
 
+## People copies
+
+Local copies of Notion Staff and Students & Parents (migration 0022,
+workspace ADR 0004). Select-only policies; nobody writes directly, and
+`apply_people_sync` (owner or service role) writes all three tables.
+
+### `staff`
+
+| role | access |
+|---|---|
+| owner | read, write: `apply_people_sync` (org). `owner, scheduling teachers and the child's parents read staff` (`is_org_owner`). No direct insert, update or delete |
+| grade teacher | none. A membership is not a staff link |
+| scheduling-only teacher | read (org, active and not archived, plus own row). Same policy (`my_staff_id(org_id) is not null`) |
+| student | none. No student rule in the policy |
+| parent | read (teachers on the linked published child's series). Same policy (`is_my_childs_teacher`) |
+| owner + staff link | read, write: the union of the `owner` and `scheduling-only teacher` rows |
+| grade teacher + staff link | read: the union of the `grade teacher` and `scheduling-only teacher` rows |
+| staff link + parent link | read: the union of the `scheduling-only teacher` and `parent` rows |
+| grade teacher + parent link | read: the union of the `grade teacher` and `parent` rows |
+
+### `student_people`
+
+| role | access |
+|---|---|
+| owner | read, write: `apply_people_sync` (org). `owner, that student's teachers and parents read student people` (`is_org_owner`). No direct insert, update or delete |
+| grade teacher | none. A membership is not a staff link |
+| scheduling-only teacher | read (own series). Same policy (`is_my_series_student`): only students on a series with the caller's staff ID |
+| student | none. No student rule in the policy |
+| parent | read (linked published child). Same policy (`is_my_childs_schedule`) |
+| owner + staff link | read, write: the union of the `owner` and `scheduling-only teacher` rows |
+| grade teacher + staff link | read: the union of the `grade teacher` and `scheduling-only teacher` rows |
+| staff link + parent link | read: the union of the `scheduling-only teacher` and `parent` rows |
+| grade teacher + parent link | read: the union of the `grade teacher` and `parent` rows |
+
+### `sync_runs`
+
+| role | access |
+|---|---|
+| owner | read, write: `apply_people_sync` (org). `owner reads sync runs`. Others learn only the last good time, through `people_synced_at` |
+| grade teacher | none. owner-only policy |
+| scheduling-only teacher | none. owner-only policy |
+| student | none. owner-only policy |
+| parent | none. owner-only policy |
+| owner + staff link | read, write: the union of the `owner` and `scheduling-only teacher` rows |
+| grade teacher + staff link | none. Neither role reads it |
+| staff link + parent link | none. Neither role reads it |
+| grade teacher + parent link | none. Neither role reads it |
+
 ## Notion-backed reads
 
 These never touch Postgres rows; the scheduler route guards and the parent shell enforce them.
