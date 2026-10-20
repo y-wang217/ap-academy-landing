@@ -44,7 +44,7 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0037](0037-teachers-see-own-student-names.md) | Teachers see the names of their own scheduled students | accepted in part; the names cache and "never stored" are superseded by workspace ADR 0004 once REQ-38 ships |
 | [0038](0038-booking-validation.md) | Bookings are checked on the server before any write | accepted; atomicity and one-off writes superseded by 0050 |
 | [0039](0039-daily-teacher-texts-task.md) | The daily teacher-texts task is one Notion page per date, kept apart by a lease | accepted |
-| [0040](0040-lesson-link-extension-point.md) | A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet | superseded by 0054 |
+| [0040](0040-lesson-link-extension-point.md) | A delivered lesson will point at a class occurrence through one reference, and nothing is wired yet | superseded by 0056 |
 | [0041](0041-owner-unlinks-claimed-student.md) | An owner can unlink a claimed student, through a function only | accepted |
 | [0042](0042-origin-check-for-scheduler-api.md) | The proxy refuses cross-site writes to the scheduler API | accepted |
 | [0043](0043-daily-text-greeting-name.md) | The daily text greets a teacher by honorific and name | accepted |
@@ -58,4 +58,5 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0051](0051-class-purpose-and-past.md) | One-off classes say their purpose, and the parent calendar says past, not done | accepted |
 | [0052](0052-permission-matrix.md) | One permission matrix for every role, proven cell by cell | accepted |
 | [0053](0053-owner-setup-checklist.md) | The owner setup checklist reads only, and a failed read is never a zero | accepted |
-| [0054](0054-lesson-link-and-outcomes.md) | Log this class writes the class reference into Lessons, the owner reconciles form-logged rows, and outcomes live in the tracker | accepted |
+| [0054](0054-notion-export-outbox.md) | Notion exports go through an outbox in Postgres | accepted |
+| [0056](0056-lesson-link-and-outcomes.md) | Log this class writes the class reference into Lessons, the owner reconciles form-logged rows, and outcomes live in the tracker | accepted |

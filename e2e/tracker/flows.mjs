@@ -495,7 +495,7 @@ try {
   check("a student with no class in the week never appears", (await teacher.getByText("Nobody Booked").count()) === 0);
 
   // REQ-9: snapshot every tracker table the scheduler may not touch, after sign-in and before the first booking step.
-  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers", "booking_stamps", "schedule_writes"];
+  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers", "booking_stamps", "schedule_writes", "notion_outbox"];
   const psql = (sql) => execSync(`psql -X -A -t "${process.env.PG_URL}" -c "${sql}"`).toString().trim();
   const otherTables = () =>
     psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' order by 1")
@@ -750,14 +750,19 @@ try {
   }
   check("the seeded lesson reads back unchanged and was never requested by the tracker", (await (await fetch(lessonUrl, { headers: { "x-e2e-probe": "1" } })).text()) === lessonBefore && lessonBefore.includes('"Paid to Teacher"'));
 
-  // REQ-28: the week editor reports each Notion export after a save, with a Retry that re-runs only that export.
+  // REQ-28, REQ-35: the week editor reports each Notion export after a save. A Notion 500 leaves the export
+  // owed in the outbox ("Queued"); once it has waited, the "Notion exports" strip lists it with Retry now.
   const NOBODY = "Nobody Booked";
-  const failLine = `Weekly Schedule for ${NOBODY}: Failed. The Notion save failed.`;
+  const NOBODY_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003";
+  const queuedLine = `Weekly Schedule for ${NOBODY}: Queued. It will be sent shortly.`;
   const scheduleFail = () => fetch(`${MOCK_NOTION}/__schedule/fail`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+  const writesTo = async (id) => (await (await fetch(`${MOCK_NOTION}/__schedule/writes`, { headers: { "x-e2e-probe": "1" } })).json())[id] ?? 0;
+  const strip = teacher.locator("section", { has: teacher.getByRole("heading", { name: "Notion exports", exact: true }) });
   await teacher.setViewportSize({ width: 1200, height: 900 });
   await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${plus(classDay, 9)}`);
   await teacher.getByRole("button", { name: "Book a class" }).waitFor({ timeout: 15000 });
   check("the mock now fails Weekly Schedule writes", (await scheduleFail()).scheduleFails === true);
+  const writesBefore = await writesTo(NOBODY_ID);
   await teacher.getByRole("button", { name: "Book a class" }).click();
   const book28 = teacher.getByRole("dialog", { name: "Book a class" });
   await book28.getByLabel("Student").selectOption({ label: NOBODY });
@@ -767,19 +772,35 @@ try {
   // Weekly, so the generated Weekly Schedule text really changes and Notion is written.
   await book28.getByLabel("Repeats weekly").check();
   await book28.getByRole("button", { name: "Book class" }).click();
-  const failShown = await teacher.getByText(failLine, { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
-  check("a booking whose Weekly Schedule write failed says so, with a Retry",
-    failShown && (await teacher.getByRole("button", { name: "Retry Weekly Schedule" }).isVisible()) && (await teacher.getByText("Saved.", { exact: true }).isVisible()),
-    failShown ? "" : `${await book28.getByRole("alert").textContent({ timeout: 2000 }).catch(() => "no alert")} | ${await teacher.getByRole("status").nth(1).textContent({ timeout: 2000 }).catch(() => "no status")}`);
+  const queuedShown = await teacher.getByText(queuedLine, { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
+  check("a booking whose Weekly Schedule write failed says Queued, with Saved.",
+    queuedShown && (await teacher.getByText("Saved.", { exact: true }).isVisible()) && (await teacher.getByRole("button", { name: "Retry Weekly Schedule" }).count()) === 0,
+    queuedShown ? "" : `${await book28.getByRole("alert").textContent({ timeout: 2000 }).catch(() => "no alert")} | ${await teacher.getByRole("status").nth(1).textContent({ timeout: 2000 }).catch(() => "no status")}`);
+  check("the strip is hidden while the export is fresh", (await strip.count()) === 0);
+  // Ten minutes pass without a drain getting through: the row is stale, and its next try is later still.
+  psql(`update tracker.notion_outbox set requested_at = now() - interval '11 minutes', next_attempt_at = now() + interval '1 hour' where dedupe_key = 'summary:${NOBODY_ID}' and status = 'pending'`);
+  await teacher.reload();
+  const stripShown = await strip.getByText(`${NOBODY} Weekly Schedule`).waitFor({ timeout: 15000 }).then(() => true, () => false);
+  check("the Notion exports strip lists the waiting student with Retry now", stripShown && /Waiting since \d\d:\d\d\. Next try/.test(await strip.textContent()),
+    stripShown ? "" : await teacher.locator("main").textContent().catch(() => ""));
   check("the mock recovers", (await scheduleFail()).scheduleFails === false);
   let classCalls = 0;
   const countClasses = (req) => { if (req.url().includes("/api/scheduler/classes")) classCalls++; };
   teacher.on("request", countClasses);
-  await teacher.getByRole("button", { name: "Retry Weekly Schedule" }).click();
-  const synced = await teacher.getByText(`Weekly Schedule for ${NOBODY}: Synced.`, { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
+  await strip.getByRole("button", { name: `Retry now: ${NOBODY} Weekly Schedule` }).click();
+  const emptied = await strip.waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false);
   teacher.off("request", countClasses);
-  check("Retry re-runs only the summary: Synced, no Retry left, no class request",
-    synced && (await teacher.getByRole("button", { name: "Retry Weekly Schedule" }).count()) === 0 && classCalls === 0, `synced=${synced} classCalls=${classCalls}`);
+  check("Retry now sends it once: the strip empties, one Weekly Schedule write, no class request",
+    emptied && (await writesTo(NOBODY_ID)) === writesBefore + 1 && classCalls === 0, `emptied=${emptied} writes=${await writesTo(NOBODY_ID)} before=${writesBefore} classCalls=${classCalls}`);
+  check("the outbox row is done", psql(`select string_agg(status, ',') from tracker.notion_outbox where dedupe_key = 'summary:${NOBODY_ID}' and status not in ('done', 'superseded')`) === "");
+
+  // The strip waits for its first answer, so the week grid never jumps; a teacher cannot read it.
+  await teacher.route("**/api/scheduler/exports", () => new Promise(() => {}));
+  await teacher.reload();
+  await teacher.getByRole("button", { name: "Book a class" }).waitFor({ timeout: 15000 });
+  check("while the exports list loads, the strip is absent and the week is shown", (await strip.count()) === 0 && (await teacher.getByRole("button", { name: /Nobody Booked/ }).count()) > 0);
+  await teacher.unroute("**/api/scheduler/exports");
+  check("a teacher gets 403 from the exports list", (await ryan.evaluate(async (base) => (await fetch(`${base}/api/scheduler/exports`)).status, BASE)) === 403);
 
   // A drag-move (this class only) whose daily task failed (the response is rewritten) shows the daily line and its Retry.
   await teacher.route("**/api/scheduler/classes/**", async (route) => {
@@ -822,6 +843,27 @@ try {
   const deleted = await teacher.getByText(`Weekly Schedule for ${NOBODY}: Synced.`, { exact: true }).waitFor({ timeout: 15000 }).then(() => true, () => false);
   check("delete (cancel this class and future) shows Saved. and the Weekly Schedule Synced line",
     deleted && (await teacher.getByText("Saved.", { exact: true }).isVisible()), deleted ? "" : await del.getByRole("alert").textContent().catch(() => "no alert"));
+
+  // REQ-35 AC6, AC9: Notion saves the text but answers 504. The save reports Queued; the next admin page's
+  // background drain reads the text back, writes nothing more, and marks the row done.
+  check("the mock will apply the next Weekly Schedule write and then time out",
+    (await (await fetch(`${MOCK_NOTION}/__schedule/commit-then-fail`, { method: "POST", headers: { "x-e2e-probe": "1" } })).json()).commitThenFail === true);
+  const committedBefore = await writesTo(NOBODY_ID);
+  const timedOut = await teacher.evaluate(async ({ base, body }) => {
+    const res = await fetch(`${base}/api/scheduler/classes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId: crypto.randomUUID(), ...body }) });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  }, { base: BASE, body: { staffId: RYAN_ID, studentId: NOBODY_ID, subject: "MCV4U", kind: "weekly", startDate: plus(classDay, 23), startTime: "13:00", durationMinutes: 60, effectiveUntil: null } });
+  check("a save whose Notion write committed but timed out is 201 with summarySync queued",
+    timedOut.status === 201 && timedOut.body?.summarySync === "queued" && (await writesTo(NOBODY_ID)) === committedBefore + 1, JSON.stringify(timedOut).slice(0, 200));
+  psql(`update tracker.notion_outbox set next_attempt_at = now() where dedupe_key = 'summary:${NOBODY_ID}' and status = 'pending'`);
+  await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${plus(classDay, 23)}`);
+  let owed = "pending";
+  for (let i = 0; i < 40 && owed !== ""; i++) {
+    owed = psql(`select coalesce(string_agg(status, ','), '') from tracker.notion_outbox where dedupe_key = 'summary:${NOBODY_ID}' and status not in ('done', 'superseded')`);
+    if (owed !== "") await teacher.waitForTimeout(250);
+  }
+  check("an admin page's background drain finishes it with no second write", owed === "" && (await writesTo(NOBODY_ID)) === committedBefore + 1,
+    `owed=${owed} writes=${await writesTo(NOBODY_ID)} before=${committedBefore}`);
 
   // REQ-15: the owner sees who claimed Sam, unlinks with a corrected address, and the right person takes over.
   await teacher.goto(`${BASE}`);

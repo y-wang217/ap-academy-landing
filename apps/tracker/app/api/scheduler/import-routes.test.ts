@@ -6,6 +6,7 @@ import type { StaffRecord } from "../../../lib/notion/staff";
 import type { StudentRecord } from "../../../lib/notion/students";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import { handleImportPreview, handleImportRun, handleMonthlyReview, handleSyncSummaries } from "../../../lib/scheduler/import-handlers";
+import { fakeOutbox } from "../../../lib/scheduler/outbox.fake";
 import { lockedWrites } from "./series-writes.fake";
 import { handleCancelOccurrence, handleCreateClass, handleEditOccurrence, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
 import type { ScheduleStore, SeriesRecord, StoreResult, SummaryPatch, SummaryRecord } from "../../../lib/scheduler/schedule-store";
@@ -380,5 +381,55 @@ describe("routes and source scans (AC18, AC4, AC21)", () => {
     const methods = new Set([...src.matchAll(/method: "([A-Z]+)"/g)].map((m) => m[1]));
     expect([...methods].sort()).toEqual(["GET", "PATCH", "POST"]);
     expect(src).not.toMatch(/Paid to Teacher|Pay Period|"Type"/);
+  });
+});
+
+describe("REQ-35 AC15: summaries go through the outbox when it is wired in", () => {
+  // The outbox with the 0021 trigger played by hand: adoption and enqueue_summary_sync add rows.
+  const withOutbox = (w: ReturnType<typeof world>) => {
+    const out = fakeOutbox(ORG);
+    const store = new Proxy(w.store, {
+      get(target, key: string) {
+        const v = target[key as keyof ScheduleStore];
+        if (key !== "adoptStudent" || typeof v !== "function") return v;
+        return async (input: { studentId: string }) => {
+          const r = await (v as (i: unknown) => Promise<StoreResult<SummaryRecord>>)(input);
+          if (r.ok && r.created) out.enqueue("summary", input.studentId);
+          return r;
+        };
+      },
+    });
+    return { out, deps: { ...w.deps, store, outbox: out.store, sleep: async () => {} } as ScheduleDeps };
+  };
+  it("the import run delivers each adopted student's summary row and records sync_state as before", async () => {
+    const w = world({ [S1]: CLEAN });
+    const { out, deps } = withOutbox(w);
+    const r = await json(await handleImportRun(deps, { dryRun: false }));
+    expect(r.body.results).toEqual([{ studentId: S1, name: "Student 11", status: "adopted", summarySync: "synced" }]);
+    expect(out.rows).toMatchObject([{ kind: "summary", targetId: S1, status: "done" }]);
+    expect(w.summaries.get(S1)).toMatchObject({ syncState: "synced", lastError: null });
+  });
+  it("Sync all calls enqueueSummaries, drains the returned rows, and keeps the response shape", async () => {
+    const w = world({ [S1]: CLEAN, [S2]: CLEAN });
+    const { out, deps } = withOutbox(w);
+    await handleImportRun(deps, { dryRun: false });
+    out.calls.length = 0;
+    w.failWrites(true);
+    await json(await handleSyncSummaries(deps, {}));
+    // The text already matches, so no write is attempted and both are synced.
+    const r = await json(await handleSyncSummaries(deps, {}));
+    expect(out.calls).toContain("enqueueSummaries");
+    expect(r.body.results).toEqual([{ studentId: S1, summarySync: "synced" }, { studentId: S2, summarySync: "synced" }]);
+  });
+  it("a failed delivery leaves sync_state failed with its short error and the row pending for a retry", async () => {
+    const w = world({ [S1]: CLEAN });
+    const { out, deps } = withOutbox(w);
+    await handleImportRun(deps, { dryRun: false });
+    w.notion.set(S1, { ...w.notion.get(S1)!, weeklySchedule: "edited by hand" });
+    w.failWrites(true);
+    const r = await json(await handleSyncSummaries(deps, { studentId: S1 }));
+    expect(r.body.results).toEqual([{ studentId: S1, summarySync: "queued" }]);
+    expect(w.summaries.get(S1)).toMatchObject({ syncState: "failed", lastError: "Notion returned 500" });
+    expect(out.rows.at(-1)).toMatchObject({ status: "pending", attempts: 1 }); // a 500 is retried with backoff (AC4)
   });
 });

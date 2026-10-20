@@ -45,6 +45,16 @@ as $$
   )
 $$;
 
+-- The request's API role (anon, authenticated, service_role), as hosted.
+create function auth.role() returns text
+language sql stable
+as $$
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.role', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
+  )::text
+$$;
+
 grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;

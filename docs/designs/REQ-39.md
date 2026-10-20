@@ -8,7 +8,7 @@ Card: https://app.notion.com/p/3fbd6ae73dd7812db6f2eb83b0104c7c (design approved
 
 ## Build notes (what the build pinned that the design left open)
 - **Migration number:** `0023_occurrence_outcomes.sql`. 0021 is on main (`0021_setup_checks.sql`) and 0022 is on `req/REQ-38-migration` (`0022_people_sync.sql`). Migration PR: #96.
-- **ADR number:** 0054. 0052 and 0053 were taken by REQ-32 and REQ-33.
+- **ADR number:** built as 0054; at merge 0054 and 0055 were taken by REQ-35 and REQ-38, so it ships as 0056 and the operator guide section as 8.
 - **Week response:** besides `linkable` and `outcome` per occurrence, the head carries `lessonsEnabled` (both the lessons port and the outcome store are wired) and `outcomesLoaded`. The page turns these into `lessonMode` (`off`, `unloaded`, `teacher`, `owner`) on each card. With `off` the dialog shows nothing about lessons; with `unloaded` it says "Could not load lesson status."
 - **`has_outcome` in the browser:** the API client keeps a 409 `has_outcome` as a named, non-stale failure, so the booking UI shows "This class is already logged or marked. Ask Charlie to clear it first." instead of "Someone else changed this."
 - **Lesson routes and request IDs:** the lesson routes take no client `requestId` (decision 12: the occurrence is the key), so the client calls them through a new `api.act` that sends the body as is and returns the error code by name.

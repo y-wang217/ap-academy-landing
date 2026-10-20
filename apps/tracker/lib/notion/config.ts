@@ -78,7 +78,7 @@ export function readBillingConfig(): BillingConfig | null {
 export const DEFAULT_LESSONS_DATA_SOURCE_ID = "6300f58a-8b8c-4789-88c1-e44272079b0f";
 
 /**
- * Same token, pointed at Lessons (REQ-39, ADR 0054). The integration needs
+ * Same token, pointed at Lessons (REQ-39, ADR 0056). The integration needs
  * read, insert and update access there, and Lessons needs a Text property
  * named `Class occurrence` before Log this class works.
  */

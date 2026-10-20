@@ -17,10 +17,17 @@ export type StaffRecord = {
 };
 
 export class NotionError extends Error {
-  constructor(message: string, readonly status?: number) {
+  /** `status` is undefined for a network error or an abort. `retryAfterSeconds` comes from a 429's Retry-After header. */
+  constructor(message: string, readonly status?: number, readonly retryAfterSeconds?: number) {
     super(message);
     this.name = "NotionError";
   }
+}
+
+/** The error for a non-2xx Notion answer, with Retry-After kept on a 429 (REQ-35). */
+export function notionHttpError(res: Response): NotionError {
+  const after = res.status === 429 ? Number(res.headers.get("retry-after")) : NaN;
+  return new NotionError(`Notion returned ${res.status}`, res.status, Number.isFinite(after) && after > 0 ? after : undefined);
 }
 
 const names = (v: { name: string }[] | undefined) => (v ?? []).map((o) => o.name);
@@ -74,7 +81,7 @@ export async function fetchStaff(config: NotionConfig, fetcher: typeof fetch = f
     } catch {
       throw new NotionError("Notion request failed");
     }
-    if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+    if (!res.ok) throw notionHttpError(res);
     const parsed = Response_.safeParse(await res.json().catch(() => null));
     if (!parsed.success) throw new NotionError("Unexpected Notion response");
     for (const raw of parsed.data.results) {

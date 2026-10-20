@@ -12,7 +12,7 @@ import { LessonOutcomeResponse, UnlinkedResponse } from "./schemas";
 
 /**
  * Log this class, Mark no-show, the owner's corrections and the Unlinked
- * lessons list (REQ-39, tracker ADR 0054). The guard runs first, and the
+ * lessons list (REQ-39, tracker ADR 0056). The guard runs first, and the
  * teacher's access is checked on the series before any outcome or Notion
  * call. Every Notion write goes through the lessons port, which finds first.
  */

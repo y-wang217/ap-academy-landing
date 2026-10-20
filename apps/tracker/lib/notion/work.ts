@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { NOTION_VERSION, notionApiBaseOverride, type WorkConfig } from "./config";
-import { NotionError } from "./staff";
+import { NotionError, notionHttpError } from "./staff";
 
 /**
  * Notion writes for the daily teacher-texts task (REQ-8, tracker ADR 0039):
@@ -30,7 +30,7 @@ async function call(config: WorkConfig, fetcher: typeof fetch, path: string, met
   } catch {
     throw new NotionError("Notion request failed");
   }
-  if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+  if (!res.ok) throw notionHttpError(res);
   return res.json().catch(() => ({}));
 }
 

@@ -99,15 +99,23 @@ export const WeekResponseAdmin = z.strictObject({
 export type WeekResponseAdminT = z.infer<typeof WeekResponseAdmin>;
 export type WeekResponseTeacherT = z.infer<typeof WeekResponseTeacher>;
 
-/** The result of regenerating a student's Weekly Schedule after a class write (REQ-4). */
-export const SummarySync = z.enum(["synced", "failed", "skipped"]);
+/** The result of regenerating a student's Weekly Schedule after a class write (REQ-4). `queued`: owed, sent by a later drain (REQ-35). */
+export const SummarySync = z.enum(["synced", "failed", "skipped", "queued"]);
 
-/** What a class write did to today's Notion task (REQ-8). */
-export const DailyTaskOutcome = z.enum(["updated", "unchanged", "skipped", "failed"]);
+/** What a class write did to today's Notion task (REQ-8). `queued` and `uncertain` come from the outbox (REQ-35). */
+export const DailyTaskOutcome = z.enum(["updated", "unchanged", "skipped", "failed", "queued", "uncertain"]);
+
+/** The outbox rows a class save delivered or left owed (REQ-35). */
+export const ExportRef = z.strictObject({
+  id: z.guid(),
+  kind: z.enum(["summary", "daily_task"]),
+  status: z.enum(["pending", "running", "done", "failed", "uncertain", "superseded"]),
+});
 
 export const SeriesResponse = z.strictObject({
   summarySync: SummarySync.optional(),
   dailyTask: DailyTaskOutcome.optional(),
+  exports: z.array(ExportRef).optional(),
   series: z.strictObject({
     id: z.guid(),
     staffId: z.guid(),
@@ -219,8 +227,33 @@ export const DailyTaskStatusResponse = z.strictObject({
   updatedAt: z.string().nullable(),
 });
 export const DailyTaskRunResponse = z.strictObject({
-  result: z.enum(["created", "updated", "unchanged", "skipped", "busy", "failed"]),
+  result: z.enum(["created", "updated", "unchanged", "skipped", "busy", "failed", "uncertain"]),
   status: DailyTaskStatusResponse,
+  /** What the hourly run's outbox drain did first (REQ-35 AC9). */
+  drained: z.strictObject({ done: z.number().int(), pending: z.number().int(), failed: z.number().int(), uncertain: z.number().int() }).optional(),
+});
+
+// Notion exports (REQ-35) ------------------------------------------------------------
+/** One open outbox row for the week editor's strip and the setup page. Names only, never a payload. */
+export const ExportOut = z.strictObject({
+  id: z.guid(),
+  kind: z.enum(["summary", "daily_task"]),
+  targetId: z.guid(),
+  /** The student's name for a summary row; null for today's task or when Notion has no name. */
+  name: z.string().nullable(),
+  status: z.enum(["pending", "running", "failed", "uncertain"]),
+  attempts: z.number().int(),
+  nextAttemptAt: z.string(),
+  requestedAt: z.string(),
+  lastError: z.string().nullable(),
+});
+export const ExportsResponse = z.strictObject({ exports: z.array(ExportOut) });
+export type ExportOutT = z.infer<typeof ExportOut>;
+/** `id` is the row that was sent (a pending row for the same target answers a retried one); `status` is how that send ended. */
+export const ExportRetryResponse = z.strictObject({
+  id: z.guid(),
+  status: z.enum(["pending", "done", "failed", "uncertain"]),
+  supersededBy: z.guid().nullable(),
 });
 
 // Lesson logging (REQ-39) ---------------------------------------------------------------

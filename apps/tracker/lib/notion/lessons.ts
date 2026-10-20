@@ -5,7 +5,7 @@ import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig } from "./conf
 import { NotionError } from "./staff";
 
 /**
- * Lessons in Notion, read and written with plain fetch (REQ-39, ADR 0054).
+ * Lessons in Notion, read and written with plain fetch (REQ-39, ADR 0056).
  * Lessons is payout-adjacent, so this file asks for four properties only
  * (Date, Teacher, the student relation, Class occurrence) and drops the rest
  * at the parse step. It has exactly two write shapes: a create with six fixed

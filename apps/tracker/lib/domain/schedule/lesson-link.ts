@@ -3,7 +3,7 @@ import type { Occurrence } from "./recurrence";
 
 /**
  * Linking a delivered lesson to the class occurrence it came from (REQ-39,
- * tracker ADR 0054, which supersedes ADR 0040). The Notion Lessons row carries
+ * tracker ADR 0056, which supersedes ADR 0040). The Notion Lessons row carries
  * the ref in its `Class occurrence` property; the tracker keeps a local
  * outcome row as the claim and the week view's cache. Pure on purpose: the
  * handlers and the Notion adapter do the I/O.
