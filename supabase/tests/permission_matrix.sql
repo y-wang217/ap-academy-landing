@@ -193,6 +193,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('owner', 'parent_links',            4, true,  false, false, 'remove_parent_link'),
   ('owner', 'booking_stamps',          8, false, false, false, null),
   ('owner', 'schedule_writes',         1, true,  true,  false, 'schedule_write'),
+  ('owner', 'notion_outbox',        null, false, true,  false, 'enqueue_summary_sync, claim_notion_outbox, retry_notion_outbox'),
   -- grade_teacher
   ('grade_teacher', 'orgs',                    1, false, false, false, null),
   ('grade_teacher', 'memberships',             1, false, false, false, null),
@@ -217,6 +218,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('grade_teacher', 'parent_links',            0, false, false, false, null),
   ('grade_teacher', 'booking_stamps',          0, false, false, false, null),
   ('grade_teacher', 'schedule_writes',         0, false, false, false, null),
+  ('grade_teacher', 'notion_outbox',           0, false, false, false, null),
   -- scheduling_teacher
   ('scheduling_teacher', 'orgs',                    0, false, false, false, null),
   ('scheduling_teacher', 'memberships',             0, false, false, false, null),
@@ -241,6 +243,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('scheduling_teacher', 'parent_links',            0, false, false, false, null),
   ('scheduling_teacher', 'booking_stamps',          0, false, false, false, null),
   ('scheduling_teacher', 'schedule_writes',         0, false, false, false, null),
+  ('scheduling_teacher', 'notion_outbox',           0, false, false, false, null),
   -- student
   ('student', 'orgs',                    1, false, false, false, null),
   ('student', 'memberships',             1, false, false, false, null),
@@ -265,6 +268,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('student', 'parent_links',            0, false, false, false, null),
   ('student', 'booking_stamps',          0, false, false, false, null),
   ('student', 'schedule_writes',         0, false, false, false, null),
+  ('student', 'notion_outbox',           0, false, false, false, null),
   -- parent
   ('parent', 'orgs',                    1, false, false, false, null),
   ('parent', 'memberships',             1, false, false, false, null),
@@ -288,7 +292,8 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('parent', 'daily_task_teachers',     0, false, false, false, null),
   ('parent', 'parent_links',            1, false, false, false, null),
   ('parent', 'booking_stamps',          0, false, false, false, null),
-  ('parent', 'schedule_writes',         0, false, false, false, null);
+  ('parent', 'schedule_writes',         0, false, false, false, null),
+  ('parent', 'notion_outbox',           0, false, false, false, null);
 
 -- The login that plays each single role, and each combination's parts.
 create table matrix.cast_of (actor text primary key, uid uuid not null);
@@ -306,6 +311,9 @@ update matrix.expected set rows = (select count(*) from tracker.audit_log where 
 update matrix.expected set rows = (select count(*) from tracker.audit_log where org_id = '10000000-0000-0000-0000-000000000001'
     and table_name in ('students', 'goals', 'courses', 'syllabus_versions', 'categories', 'assessments', 'tasks', 'grade_flags'))
   where actor = 'grade_teacher' and tbl = 'audit_log';
+-- The outbox rows the fixture's class and summary writes enqueued (0021).
+update matrix.expected set rows = (select count(*) from tracker.notion_outbox where org_id = '10000000-0000-0000-0000-000000000001')
+  where actor = 'owner' and tbl = 'notion_outbox';
 
 -- Probes ------------------------------------------------------------------------
 -- Each write attempt runs in a subtransaction and is rolled back, so the
@@ -563,7 +571,17 @@ begin
     raise exception 'matrix: rolled back' using errcode = 'P0001';
   exception when sqlstate 'P0001' then null;
   end;
-  raise notice 'ok: owner unlink_student remove_parent_link adopt_student_schedule split_class_series claim_daily_task (AC6)';
+  begin
+    assert (select count(*) from tracker.enqueue_summary_sync('10000000-0000-0000-0000-000000000001',
+      array['6a000000-0000-4000-8000-00000000000a']::uuid[])) = 1, 'enqueue_summary_sync returned no row';
+    new_id := (select c.id from tracker.claim_notion_outbox('10000000-0000-0000-0000-000000000001', null, 1, 60) c);
+    assert new_id is not null, 'claim_notion_outbox took no row';
+    update tracker.notion_outbox set status = 'failed', lease_until = null where id = new_id;
+    assert (select r.id from tracker.retry_notion_outbox(new_id) r) = new_id, 'retry_notion_outbox did not retry the row';
+    raise exception 'matrix: rolled back' using errcode = 'P0001';
+  exception when sqlstate 'P0001' then null;
+  end;
+  raise notice 'ok: owner unlink_student remove_parent_link adopt_student_schedule split_class_series claim_daily_task enqueue_summary_sync claim_notion_outbox retry_notion_outbox (AC6)';
 end $$;
 reset role;
 
@@ -687,6 +705,13 @@ begin
       when 'schedule_write' then
         r := tracker.schedule_write(t.org_id, gen_random_uuid(), 'cancel', '[]',
                jsonb_build_object('series_id', t.series_id, 'original_date', '2026-09-21', 'expected_updated_at', now()));
+      when 'enqueue_summary_sync' then
+        select count(*) into n from tracker.enqueue_summary_sync(t.org_id, array[t.notion_student_id]); r := to_jsonb(nullif(n, 0));
+      when 'claim_notion_outbox' then
+        select count(*) into n from tracker.claim_notion_outbox(t.org_id, null, 10, 60); r := to_jsonb(nullif(n, 0));
+      when 'retry_notion_outbox' then
+        select count(*) into n from tracker.retry_notion_outbox((select o.id from tracker.notion_outbox o where o.org_id = t.org_id limit 1));
+        r := to_jsonb(nullif(n, 0));
       else raise exception 'matrix: % is granted to authenticated but not classified here', fn;
     end case;
   exception when others then
