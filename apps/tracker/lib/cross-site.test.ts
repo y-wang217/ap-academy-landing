@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedSiteHosts, isCrossSiteWrite } from "./cross-site";
+import { ORIGIN_CHECKED_PREFIXES, allowedSiteHosts, isCrossSiteWrite } from "./cross-site";
 
 const hosts = ["www.apacademy.ca", "apacademy.ca"];
 const call = (o: { method?: string; secFetchSite?: string | null; origin?: string | null; allowedHosts?: readonly string[] }) =>
@@ -52,5 +52,11 @@ describe("allowedSiteHosts", () => {
 
   it("deduplicates and keeps a port", () => {
     expect(allowedSiteHosts("http://localhost:3000/")).toEqual(["localhost:3000"]);
+  });
+});
+
+describe("ORIGIN_CHECKED_PREFIXES (REQ-42 AC22)", () => {
+  it("is exactly the scheduler and Iris API prefixes", () => {
+    expect([...ORIGIN_CHECKED_PREFIXES]).toEqual(["/api/scheduler/", "/api/iris/"]);
   });
 });

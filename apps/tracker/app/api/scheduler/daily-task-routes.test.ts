@@ -252,14 +252,14 @@ describe("AC9, AC13: source scans of the new files", () => {
       expect(src, f).not.toMatch(/payout|paid to teacher|pay period|lessons|\.from\(["'](class_series|class_exceptions|students|schedule_summaries)["']\)/i);
     }
   });
-  it("only the run route imports the service-role client", () => {
+  it("only the two bearer-protected run routes import the service-role client (REQ-8, REQ-42)", () => {
     const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => {
       const p = join(dir, f);
       if (f === "node_modules" || f === ".next") return [];
       return statSync(p).isDirectory() ? files(p) : /\.tsx?$/.test(p) && !p.endsWith(".test.ts") ? [p] : [];
     });
     const importers = files(root).filter((f) => /@ap-academy\/db\/service/.test(readFileSync(f, "utf8"))).map((f) => f.slice(root.length + 1));
-    expect(importers).toEqual(["app/api/scheduler/daily-task/run/route.ts"]);
+    expect(importers.sort()).toEqual(["app/api/iris/run/route.ts", "app/api/scheduler/daily-task/run/route.ts"]);
   });
 });
 
