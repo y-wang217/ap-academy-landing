@@ -229,6 +229,8 @@ export const DailyTaskStatusResponse = z.strictObject({
 export const DailyTaskRunResponse = z.strictObject({
   result: z.enum(["created", "updated", "unchanged", "skipped", "busy", "failed", "uncertain"]),
   status: DailyTaskStatusResponse,
+  /** The hourly people sync's result (REQ-38 AC7), on the run route only. */
+  people: z.enum(["ok", "failed", "not_configured"]).optional(),
   /** What the hourly run's outbox drain did first (REQ-35 AC9). */
   drained: z.strictObject({ done: z.number().int(), pending: z.number().int(), failed: z.number().int(), uncertain: z.number().int() }).optional(),
 });

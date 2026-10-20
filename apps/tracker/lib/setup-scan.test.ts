@@ -21,10 +21,11 @@ describe("setup page source scan (AC8, AC11)", () => {
     expect(src).not.toMatch(/fetchScheduledStudents\b|fetchStudentSchedule|writeWeeklySchedule|getStudentNames/);
     expect(src).not.toContain("—");
   });
-  it("the only Notion reads are getStaffList and fetchScheduledStudentNames", () => {
+  it("the only Notion read is fetchScheduledStudentNames; staff come from the REQ-38 copy", () => {
     const all = FILES.map(read).join("\n");
     const notionImports = [...all.matchAll(/import \{([^}]+)\} from "@\/lib\/notion\/[^"]+"/g)].flatMap((m) => m[1].split(",").map((s) => s.trim()));
-    expect(notionImports.filter((n) => !["readStudentsConfig", "readWorkConfig", "NotionError"].includes(n)).sort()).toEqual(["fetchScheduledStudentNames", "getStaffList"]);
+    expect(notionImports.filter((n) => !["readStudentsConfig", "readWorkConfig", "NotionError"].includes(n)).sort()).toEqual(["fetchScheduledStudentNames"]);
+    expect(all).toContain("createPeopleStore");
   });
   it("the page is owner-only and dynamic", () => {
     const page = read("app/scheduler/setup/page.tsx");

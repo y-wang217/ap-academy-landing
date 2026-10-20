@@ -22,6 +22,7 @@ import { dailyTaskKey, summaryKey, type OutboxStore } from "./outbox-store";
 import { normaliseScheduleText } from "../domain/schedule/legacy-line";
 import { CLAIM_MS, isLinkable, type LessonLinkPort } from "../domain/schedule/lesson-link";
 import type { OutcomeRecord, OutcomeStore } from "./outcome-store";
+import type { PeopleStore } from "../data/people";
 
 /**
  * Handler dependencies plus storage and "today" (America/Toronto) as injected
@@ -32,8 +33,14 @@ export type ScheduleDeps = HandlerDeps & {
   store: ScheduleStore;
   today: () => string;
   students?: StudentsPort;
-  /** Student names for the calendar (REQ-6). Names only. Absent when Notion is not wired in. */
+  /** Student names for the calendar (REQ-6), from the local people copy (REQ-38), archived included. Names only. */
   studentNames?: () => Promise<Map<string, string>>;
+  /** Active, not archived students for pickers (REQ-38 AC14). */
+  activeStudents?: () => Promise<{ id: string; name: string }[]>;
+  /** The last good people sync, or null when there has never been one (REQ-38 AC11). */
+  peopleSyncedAt?: () => Promise<string | null>;
+  /** The caller's people store, for the owner's sync status and Sync now (REQ-38). */
+  peopleStore?: () => Promise<PeopleStore>;
   /** Today's "Text teachers their schedules" task (REQ-8). Absent when Notion's Work database is not wired in. */
   dailyTask?: DailyTaskDeps;
   /** Notion Lessons (REQ-39). Absent when Notion is not wired in; the lesson routes then answer 503 lessons_not_ready. */

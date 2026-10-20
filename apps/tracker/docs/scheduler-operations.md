@@ -46,6 +46,15 @@ Background: [0054](decisions/0054-notion-export-outbox.md).
 4. **Waiting since** a time: Notion was busy or down. It retries on its own, at most an hour apart. Retry now sends it at once.
 5. Nothing is ever deleted: a line leaves the strip once a Retry or a later save sends that export.
 
+## 7. Names and the people sync
+Background: [0055](decisions/0055-people-sync.md), workspace ADR 0004.
+1. The tracker keeps a copy of staff names, subjects and active state, and student names and stage, from Notion. It never copies parent details, email, rates or notes. Edit people in Notion as before.
+2. The copy refreshes every hour (the Daily teacher texts workflow) and when you tap Sync now on `/tracker/schedule`. A rename or a new student shows after the next sync.
+3. Under today's task on `/tracker/schedule` you see "Names synced N minutes ago." or "Last sync failed at HH:MM. Names are from HH:MM." Sync now waits a minute between taps.
+4. When the copy is older than two hours every schedule page and the parent calendar show "Names last updated N hours ago". The classes still show, with the names from the last good sync. Check that the Notion integration still has access to Staff and Students & Parents, then tap Sync now.
+5. A teacher set to inactive in Notion loses scheduler access on their next page load after a sync. To cut access at once, revoke the link (section 2).
+6. First deploy: apply migration 0022, deploy, then tap Sync now. Until then teachers see "Scheduling is not available right now."
+
 ## 8. Lesson logging
 Background: [0056](decisions/0056-lesson-link-and-outcomes.md).
 

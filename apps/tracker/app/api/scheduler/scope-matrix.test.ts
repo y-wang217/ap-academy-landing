@@ -74,7 +74,8 @@ describe("matrix roles resolve to scheduler scopes (REQ-32 AC12)", () => {
     configured: true,
     getUser: async () => ({ id: "u", email: "u@example.com" }),
     claimLink: async () => {},
-    fetchStaff: async () => staff,
+    getStaff: async (_org: string, id: string) => staff.find((s) => s.id === id) ?? null,
+    syncedAt: async () => "2026-10-19T12:00:00Z",
   };
   const link = { orgId: ORG, notionStaffId: RYAN };
   it.each([

@@ -5,8 +5,10 @@ import type { StaffRecord } from "../notion/staff";
  * Who is calling the scheduler. Admin is the tracker org owner; teacher is a
  * login linked (by Charlie's approval) to an active teaching Staff record.
  * Dependencies are injected so this runs under Vitest with no Supabase or
- * Notion. Fails closed: if Notion can't be read, a teacher gets "unavailable",
- * never a widened or a denied-by-guess scope.
+ * Notion. Teacher scope comes from the local staff copy (REQ-38): a row that
+ * is inactive, archived or missing gives "none" even with an unrevoked link.
+ * Fails closed: with no good sync yet, or a failed read, a teacher gets
+ * "unavailable", never a widened or a denied-by-guess scope.
  */
 export type SchedulerIdentity =
   | { scope: "admin"; orgId: string; staff: StaffRecord | null }
@@ -25,7 +27,10 @@ export type IdentityDeps = {
   isOwnerOf: () => Promise<string | null>;
   /** The caller's own live link, or null. */
   getLink: () => Promise<{ orgId: string; notionStaffId: string } | null>;
-  fetchStaff: () => Promise<StaffRecord[]>;
+  /** The local staff row for that Notion id in that org, or null. */
+  getStaff: (orgId: string, id: string) => Promise<StaffRecord | null>;
+  /** The last good people sync in that org, or null when there has never been one. */
+  syncedAt: (orgId: string) => Promise<string | null>;
 };
 
 export async function resolveSchedulerIdentity(deps: IdentityDeps): Promise<SchedulerIdentity> {
@@ -45,7 +50,7 @@ export async function resolveSchedulerIdentity(deps: IdentityDeps): Promise<Sche
     let staff: StaffRecord | null = null;
     if (link) {
       try {
-        staff = (await deps.fetchStaff()).find((s) => s.id === link.notionStaffId) ?? null;
+        staff = await deps.getStaff(link.orgId, link.notionStaffId);
       } catch {
         staff = null;
       }
@@ -54,13 +59,13 @@ export async function resolveSchedulerIdentity(deps: IdentityDeps): Promise<Sche
   }
 
   if (!link) return { scope: "none" };
-  let list: StaffRecord[];
+  let staff: StaffRecord | null;
   try {
-    list = await deps.fetchStaff();
+    if (!(await deps.syncedAt(link.orgId))) return { scope: "unavailable" };
+    staff = await deps.getStaff(link.orgId, link.notionStaffId);
   } catch {
     return { scope: "unavailable" };
   }
-  const staff = list.find((s) => s.id === link.notionStaffId);
   if (!staff || !isActiveTeachingStaff(staff)) return { scope: "none" };
   return { scope: "teacher", orgId: link.orgId, staff };
 }

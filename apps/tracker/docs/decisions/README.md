@@ -59,4 +59,5 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0052](0052-permission-matrix.md) | One permission matrix for every role, proven cell by cell | accepted |
 | [0053](0053-owner-setup-checklist.md) | The owner setup checklist reads only, and a failed read is never a zero | accepted |
 | [0054](0054-notion-export-outbox.md) | Notion exports go through an outbox in Postgres | accepted |
+| [0055](0055-people-sync.md) | Staff and student names come from a local copy synced from Notion | accepted |
 | [0056](0056-lesson-link-and-outcomes.md) | Log this class writes the class reference into Lessons, the owner reconciles form-logged rows, and outcomes live in the tracker | accepted |
