@@ -42,6 +42,18 @@ export function shortError(e: unknown, fallback: string): string {
   return (e instanceof GmailError || e instanceof NotionError ? e.message : fallback).slice(0, 300);
 }
 
+/**
+ * Everything a run reads from one message, parsed before any write. Mail is
+ * untrusted: if this throws, that message is counted failed and the run goes
+ * on, so one bad message never blocks the newer ones behind it. Store errors
+ * are not caught here and still fail the run.
+ */
+function readMessage(msg: GmailMessage) {
+  const headers = headerMap(msg.payload);
+  return { headers, from: parseFrom(headers.From ?? ""), snippet: snippetOf(msg.snippet), body: capBody(bodyText(msg.payload)) };
+}
+const UNREADABLE = "Could not read the message";
+
 async function pool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -101,8 +113,14 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
       store.saveThread(input.gmailThreadId, mergeThread(await store.findThread(input.gmailThreadId), input));
 
     for (const msg of fetched.filter((m): m is GmailMessage => m !== null).sort((a, b) => Number(a.internalDate) - Number(b.internalDate))) {
-      const headers = headerMap(msg.payload);
-      const from = parseFrom(headers.From ?? "");
+      let read: ReturnType<typeof readMessage>;
+      try {
+        read = readMessage(msg);
+      } catch {
+        counts.failed += 1;
+        continue;
+      }
+      const { headers, from, body } = read;
       const receivedMs = Number(msg.internalDate);
       const receivedAt = new Date(receivedMs).toISOString();
       const purgeAt = new Date(receivedMs + retention).toISOString();
@@ -114,7 +132,7 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
         fromName: from.name?.slice(0, 200) ?? null,
         receivedAt,
         purgeAt,
-        snippet: snippetOf(msg.snippet),
+        snippet: read.snippet,
         retryCount: 0,
         lastError: null,
         handledAt: null,
@@ -122,13 +140,16 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
       };
 
       // Charlie's own mail: a record in a known thread, never a new thread.
+      // Accepted risk: From is not authenticated, so mail forging the
+      // mailbox's address into a known thread is recorded as charlie_manual.
+      // It grants no access and is never sent; Iris 8/9, which reads these
+      // rows to decide what to send, must require Gmail's SENT label first.
       if (from.email === deps.mailbox) {
         const thread = await store.findThread(msg.threadId);
         if (!thread) {
           counts.skipped += 1;
           continue;
         }
-        const body = capBody(bodyText(msg.payload));
         const row: MessageInsert = { ...base, threadId: thread.id, direction: "outbound", source: "charlie_manual", bodyText: body.text, bodyTruncated: body.truncated, state: null, stateChangedAt: null, policyVersion: null };
         if ((await store.insertMessage(row)).inserted) {
           counts.stored += 1;
@@ -160,7 +181,6 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
         const match = matchSender(dir, from.email);
         thread = await saveThread(threadInput(match));
         if (match.state === "matched") {
-          const body = capBody(bodyText(msg.payload));
           row = { ...inbound, bodyText: body.text, bodyTruncated: body.truncated, state: "matched" };
         } else {
           row = { ...inbound, bodyText: null, bodyTruncated: false, state: "escalated", escalationReason: "unknown_sender" };
@@ -197,7 +217,16 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
         counts.failed += 1;
         continue;
       }
-      const from = parseFrom(headerMap(msg.payload).From ?? "");
+      let read: ReturnType<typeof readMessage>;
+      try {
+        read = readMessage(msg);
+      } catch {
+        await store.updateMessage(w.id, { state: "failed", stateChangedAt: at(), lastError: UNREADABLE });
+        counts.failed += 1;
+        await store.insertEvent({ kind: "failed", messageId: w.id, detail: { state: "failed", reason: "unreadable" } });
+        continue;
+      }
+      const { from, body } = read;
       const match = matchSender(dir, from.email);
       const receivedMs = Number(msg.internalDate);
       await saveThread({
@@ -205,12 +234,11 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
         matchState: match.state,
         notionStudentIds: match.state === "matched" ? match.studentIds : [],
         parentEmail: match.state === "matched" ? from.email : null,
-        subject: headerMap(msg.payload).Subject?.slice(0, 500) ?? null,
+        subject: read.headers.Subject?.slice(0, 500) ?? null,
         receivedAt: new Date(receivedMs).toISOString(),
         purgeAt: new Date(receivedMs + retention).toISOString(),
       });
       if (match.state === "matched") {
-        const body = capBody(bodyText(msg.payload));
         await store.updateMessage(w.id, { state: "matched", bodyText: body.text, bodyTruncated: body.truncated, stateChangedAt: at(), lastError: null });
         counts.matched += 1;
       } else {

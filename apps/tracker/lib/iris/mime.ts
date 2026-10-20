@@ -33,13 +33,17 @@ export function parseFrom(from: string): { email: string; name: string | null } 
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", "#39": "'" };
+/** A code point fromCodePoint accepts and that is not a lone surrogate. */
+const validCodePoint = (n: number) => Number.isInteger(n) && n >= 0 && n <= 0x10ffff && (n < 0xd800 || n > 0xdfff);
+
+/** Mail is untrusted input: an entity that names no valid character is left as written, never thrown on. */
 export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, code: string) => {
     const lower = code.toLowerCase();
     if (lower in ENTITIES) return ENTITIES[lower];
-    if (lower.startsWith("#x")) return String.fromCodePoint(parseInt(lower.slice(2), 16));
-    if (lower.startsWith("#")) return String.fromCodePoint(parseInt(lower.slice(1), 10));
-    return whole;
+    if (!lower.startsWith("#")) return whole;
+    const n = lower.startsWith("#x") ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10);
+    return validCodePoint(n) ? String.fromCodePoint(n) : whole;
   });
 }
 

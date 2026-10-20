@@ -21,3 +21,5 @@ Iris reads charlie@apacademy.ca. A Workspace mailbox can be reached by an OAuth 
 - The service account key is a long-lived secret in the tracker's Vercel env. Rotating it is a Google Cloud task in `docs/iris-operations.md`.
 - Mail Gmail files under Updates or Promotions is not read (spec decision 4).
 - `lib/iris/scan.test.ts` fails if any other scope or a Gmail write path appears under `lib/iris/`.
+- Mail from the mailbox's own address is matched on the From header, which is not authenticated. A message that forges that address into a known thread is stored as `charlie_manual` outbound. This is an accepted risk while Iris only reads: the row grants no access and nothing is sent from it. Iris 8/9, which first acts on outbound rows, must require Gmail's `SENT` label before treating a message as Charlie's.
+- Mail is untrusted input. A message that cannot be parsed (for example an HTML entity naming no valid character) is counted `failed` for that run and the loop continues; it never stops intake for the newer mail behind it.
