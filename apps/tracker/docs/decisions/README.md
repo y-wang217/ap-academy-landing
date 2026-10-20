@@ -59,3 +59,6 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0052](0052-permission-matrix.md) | One permission matrix for every role, proven cell by cell | accepted |
 | [0053](0053-owner-setup-checklist.md) | The owner setup checklist reads only, and a failed read is never a zero | accepted |
 | [0054](0054-notion-export-outbox.md) | Notion exports go through an outbox in Postgres | accepted |
+| [0056](0056-iris-tracker-module.md) | Iris is a tracker module with its own `iris` schema | accepted |
+| [0057](0057-iris-message-retention.md) | Iris stores parent mail for 90 days, with no audit copy | accepted |
+| [0058](0058-iris-gmail-read-only.md) | Gmail through a service account, read-only, with no SDK | accepted |

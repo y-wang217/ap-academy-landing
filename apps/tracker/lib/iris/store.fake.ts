@@ -18,10 +18,10 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
     calls.push(name);
     if (fail.has(name)) throw new Error(`${name} failed`);
   };
-  const pub = (): IrisSettings => {
-    const { leaseUntil: _lease, ...rest } = settings;
-    return { ...rest };
-  };
+  const pub = (): IrisSettings => ({
+    id: settings.id, orgId: settings.orgId, paused: settings.paused, retentionDays: settings.retentionDays,
+    lastPollAt: settings.lastPollAt, lastPollResult: settings.lastPollResult, lastError: settings.lastError,
+  });
 
   const store: IrisStore = {
     async getSettings() {

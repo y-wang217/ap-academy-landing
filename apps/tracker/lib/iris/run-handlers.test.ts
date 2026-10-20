@@ -29,7 +29,7 @@ function world(opts: { paused?: boolean; listFails?: boolean } = {}) {
   };
   const directoryCalls: number[] = [];
   const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca" };
-  const build = vi.fn((_org: string) => deps);
+  const build = vi.fn((org: string) => (org ? deps : null));
   const run = (authorization: string | null = AUTH, env = { secret: SECRET as string | undefined, orgId: ORG as string | undefined }) =>
     handleIrisRun({ authorization, env, build, now: () => new Date(T0) });
   return { db, gmailCalls, directoryCalls, build, run };

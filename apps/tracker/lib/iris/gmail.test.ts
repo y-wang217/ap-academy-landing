@@ -1,4 +1,4 @@
-import { createPublicKey, generateKeyPairSync, verify } from "node:crypto";
+import { generateKeyPairSync, verify } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { gmailBases, readGmailConfig } from "./config";
 import { GMAIL_SCOPE, GmailError, getAccessToken, getMessage, listMessageIds, signJwt } from "./gmail";
@@ -38,7 +38,7 @@ describe("signJwt", () => {
     expect(claims).toMatchObject({ iss: config.clientEmail, sub: "charlie@apacademy.ca", scope: "https://www.googleapis.com/auth/gmail.readonly", aud: "https://oauth2.googleapis.com/token" });
     expect(claims.iat).toBe(Math.floor(now.getTime() / 1000));
     expect(claims.exp - claims.iat).toBe(3600);
-    expect(verify("sha256", Buffer.from(`${h}.${c}`), createPublicKey(publicKey), Buffer.from(sig, "base64url"))).toBe(true);
+    expect(verify("sha256", Buffer.from(`${h}.${c}`), publicKey, Buffer.from(sig, "base64url"))).toBe(true);
     expect(GMAIL_SCOPE).toBe("https://www.googleapis.com/auth/gmail.readonly");
   });
 

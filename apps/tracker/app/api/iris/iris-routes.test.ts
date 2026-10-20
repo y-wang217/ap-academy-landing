@@ -16,7 +16,7 @@ const NOT_OWNERS: [string, SchedulerIdentity][] = [
 
 function fakeReader(over: Partial<IrisReader> = {}) {
   const calls: string[] = [];
-  const spy = <T,>(name: string, v: T) => async (..._a: unknown[]) => (calls.push(name), v);
+  const spy = <T,>(name: string, v: T) => async () => (calls.push(name), v);
   const reader: IrisReader = {
     getSettings: spy("getSettings", { paused: true, mailbox: null, lastPollAt: null, lastPollResult: null, lastError: null }),
     lastRun: spy("lastRun", null),
@@ -34,7 +34,7 @@ function fakeReader(over: Partial<IrisReader> = {}) {
 
 function deps(identity: SchedulerIdentity, over: Partial<IrisReader> = {}) {
   const r = fakeReader(over);
-  const readerFor = vi.fn((_org: string) => r.reader);
+  const readerFor = vi.fn<(org: string) => IrisReader>(() => r.reader);
   const d: IrisAdminDeps = { identity: async () => identity, reader: readerFor };
   return { d, readerFor, calls: r.calls };
 }
@@ -90,7 +90,7 @@ describe("PATCH /api/iris/settings", () => {
 
 describe("POST /api/iris/run-now", () => {
   const runResponse = { result: "ok", runId: "r1", seen: 1, stored: 1, matched: 1, escalated: 0, skipped: 0, failed: 0, purged: 0 };
-  const fetcherOf = (status: number, body: unknown) => vi.fn(async (_u: string, _i?: RequestInit) => new Response(JSON.stringify(body), { status }));
+  const fetcherOf = (status: number, body: unknown) => vi.fn<(u: string, i?: RequestInit) => Promise<Response>>(async () => new Response(JSON.stringify(body), { status }));
 
   for (const [who, identity] of NOT_OWNERS) {
     it(`a ${who} gets 403 and nothing is fetched`, async () => {

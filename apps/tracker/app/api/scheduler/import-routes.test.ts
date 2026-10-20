@@ -369,10 +369,11 @@ describe("routes and source scans (AC18, AC4, AC21)", () => {
       expect(src, file).not.toMatch(/6300f58a|payouts?\b/i);
     }
   });
-  it("only billing.ts, staff.ts, students.ts and work.ts call Notion; only students.ts (Weekly Schedule) and work.ts (Work, Work Log) write", () => {
+  it("only billing.ts, parents.ts, staff.ts, students.ts and work.ts call Notion; only students.ts (Weekly Schedule) and work.ts (Work, Work Log) write", () => {
     const hits = walk(root).filter((f) => !f.includes("/node_modules/") && !f.includes("/.next/") && readFileSync(f, "utf8").includes("api.notion.com")).map((f) => f.slice(root.length + 1)).sort();
-    expect(hits).toEqual(["lib/notion/billing.ts", "lib/notion/staff.ts", "lib/notion/students.ts", "lib/notion/work.ts"]);
+    expect(hits).toEqual(["lib/notion/billing.ts", "lib/notion/parents.ts", "lib/notion/staff.ts", "lib/notion/students.ts", "lib/notion/work.ts"]);
     expect(readFileSync(join(root, "lib/notion/staff.ts"), "utf8")).not.toMatch(/PATCH|PUT|DELETE/);
+    expect(readFileSync(join(root, "lib/notion/parents.ts"), "utf8")).not.toMatch(/PATCH|PUT|DELETE/);
     expect(readFileSync(join(root, "lib/notion/billing.ts"), "utf8")).not.toMatch(/PATCH|PUT|DELETE/);
   });
 });

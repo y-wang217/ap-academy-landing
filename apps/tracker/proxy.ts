@@ -1,7 +1,7 @@
 import { redirectKeepingCookies, updateSession } from "@ap-academy/db/middleware";
 import { NextResponse, type NextRequest } from "next/server";
 import { SITE_URL } from "./lib/config";
-import { allowedSiteHosts, isCrossSiteWrite } from "./lib/cross-site";
+import { ORIGIN_CHECKED_PREFIXES, allowedSiteHosts, isCrossSiteWrite } from "./lib/cross-site";
 import { loginRedirectFor } from "./lib/login-redirect";
 
 const SITE_HOSTS = allowedSiteHosts(SITE_URL);
@@ -10,12 +10,12 @@ const SITE_HOSTS = allowedSiteHosts(SITE_URL);
  * Next 16's proxy (formerly middleware). Refreshes the shared Supabase session
  * and keeps signed-out users out. The tracker never renders a login page: it
  * sends people to landing's /login. When Supabase isn't configured, requests
- * pass through and the page explains. Scheduler API writes are origin-checked
- * first, before the session is touched (tracker ADR 0042).
+ * pass through and the page explains. Scheduler and Iris API writes are
+ * origin-checked first, before the session is touched (tracker ADR 0042).
  */
 export async function proxy(request: NextRequest) {
   if (
-    request.nextUrl.pathname.startsWith("/api/scheduler/") &&
+    ORIGIN_CHECKED_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p)) &&
     isCrossSiteWrite({
       method: request.method,
       secFetchSite: request.headers.get("sec-fetch-site"),
@@ -33,9 +33,11 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Relative to basePath. "/" is listed on its own because the second pattern
   // compiles to /tracker/<something> and misses the bare /tracker. Static
-  // assets don't need a session. The scheduled-run endpoint is the one API path
-  // with no session: it authenticates itself with a bearer secret (REQ-8,
-  // tracker ADR 0039), and every other path still redirects when signed out.
+  // assets don't need a session. The two scheduled-run endpoints are the only
+  // API paths with no session: each authenticates itself with a bearer secret
+  // (daily-task/run, REQ-8, tracker ADR 0039; iris/run, REQ-42, tracker ADR
+  // 0056). The `$` keeps api/iris/run-now inside the matcher, and every other
+  // path still redirects when signed out.
   //
   // Prefetches skip the proxy. Next 16 prefetches every link in view, and on
   // Vercel a dynamic page's segment prefetch 404s anyway, so each one cost a
@@ -43,7 +45,7 @@ export const config = {
   // wizard). The real navigation still runs the proxy, and every page checks
   // the viewer itself, so a skipped prefetch neither refreshes nor grants a
   // session. Literal, not a shared constant: the config must be static.
-  // Scheduler API writes are origin-checked in proxy() (ADR 0042).
+  // Scheduler and Iris API writes are origin-checked in proxy() (ADR 0042).
   matcher: [
     {
       source: "/",
@@ -53,7 +55,7 @@ export const config = {
       ],
     },
     {
-      source: "/((?!_next/static|_next/image|favicon.ico|api/scheduler/daily-task/run$).*)",
+      source: "/((?!_next/static|_next/image|favicon.ico|api/scheduler/daily-task/run$|api/iris/run$).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },
