@@ -125,6 +125,11 @@ export default async function TrackerHome() {
             <Link href="/schedule?view=all" className={secondaryButtonClass}>
               Teacher schedules
             </Link>
+            {viewer.role === "owner" && (
+              <Link href="/scheduler/setup" className={secondaryButtonClass}>
+                Setup
+              </Link>
+            )}
             {outside !== null && (
               <Link href="/schedule/availability" className={secondaryButtonClass}>
                 Teacher availability
