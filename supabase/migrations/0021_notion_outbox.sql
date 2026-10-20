@@ -4,7 +4,7 @@
 -- the Notion call can no longer lose them. The app delivers rows later and
 -- renders from current state, so no payload is stored, and later edits win.
 -- Operational state only, like daily_tasks (0012): no audit trigger, and rows
--- are never deleted (tracker ADR 0053).
+-- are never deleted (tracker ADR 0054).
 -- Tested by supabase/tests/notion_outbox.sql.
 
 create table tracker.notion_outbox (
