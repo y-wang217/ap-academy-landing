@@ -1,38 +1,10 @@
 import { unstable_cache } from "next/cache";
 import { createBillingReader, schemaLookup, type BillingReader } from "./billing";
-import { readBillingConfig, readNotionConfig, readStudentsConfig } from "./config";
-import { fetchStudentNames } from "./students";
-import { fetchStaff, NotionError, type StaffRecord } from "./staff";
+import { readBillingConfig } from "./config";
+import { NotionError } from "./staff";
 
-/** Staff list, cached five minutes so a page load does not hit Notion. */
-const cachedStaff = unstable_cache(
-  async (): Promise<StaffRecord[]> => {
-    const config = readNotionConfig();
-    if (!config) throw new NotionError("Notion is not configured");
-    return fetchStaff(config);
-  },
-  ["notion-staff"],
-  { revalidate: 300, tags: ["notion-staff"] },
-);
-
-export function getStaffList(): Promise<StaffRecord[]> {
-  return cachedStaff();
-}
-
-/** Student names for the calendar, cached five minutes. Names only, never Weekly Schedule text. [id, name][] so the cache holds plain data. */
-const cachedStudentNames = unstable_cache(
-  async (): Promise<[string, string][]> => {
-    const config = readStudentsConfig();
-    if (!config) throw new NotionError("Notion is not configured");
-    return [...(await fetchStudentNames(config))];
-  },
-  ["notion-student-names"],
-  { revalidate: 300, tags: ["notion-student-names"] },
-);
-
-export function getStudentNames(): Promise<[string, string][]> {
-  return cachedStudentNames();
-}
+// Staff and student names are no longer read here: they come from the local
+// people copy (REQ-38, workspace ADR 0004). Only billing schema stays cached.
 
 /**
  * Property name to ID for one billing data source (REQ-25), cached five minutes.

@@ -17,7 +17,8 @@ function deps(over: Partial<IdentityDeps> = {}): IdentityDeps {
     claimLink: async () => {},
     isOwnerOf: async () => null,
     getLink: async () => ({ orgId: ORG, notionStaffId: T_ID }),
-    fetchStaff: async () => [staff(T_ID)],
+    getStaff: async (_org, id) => (id === T_ID ? staff(T_ID) : null),
+    syncedAt: async () => "2026-10-19T12:00:00Z",
     ...over,
   };
 }
@@ -38,15 +39,24 @@ describe("resolveSchedulerIdentity", () => {
   it("gives an unmapped user no scope (AC2)", async () => {
     expect(await resolveSchedulerIdentity(deps({ getLink: async () => null }))).toEqual({ scope: "none" });
   });
-  it("gives no scope when the Staff record is a setter, inactive, or missing from Notion (AC3)", async () => {
-    expect(await resolveSchedulerIdentity(deps({ fetchStaff: async () => [staff(T_ID, { functions: ["Setter"] })] }))).toEqual({ scope: "none" });
-    expect(await resolveSchedulerIdentity(deps({ fetchStaff: async () => [staff(T_ID, { status: "Inactive" })] }))).toEqual({ scope: "none" });
-    expect(await resolveSchedulerIdentity(deps({ fetchStaff: async () => [] }))).toEqual({ scope: "none" });
+  it("gives no scope when the local staff row is inactive, archived or missing, though the link is live (AC3, REQ-38 AC13)", async () => {
+    expect(await resolveSchedulerIdentity(deps({ getStaff: async () => staff(T_ID, { functions: ["Setter"] }) }))).toEqual({ scope: "none" });
+    // An inactive or archived local row maps to status Inactive (lib/data/people.ts toStaffRecord).
+    expect(await resolveSchedulerIdentity(deps({ getStaff: async () => staff(T_ID, { status: "Inactive", functions: [] }) }))).toEqual({ scope: "none" });
+    expect(await resolveSchedulerIdentity(deps({ getStaff: async () => null }))).toEqual({ scope: "none" });
+  });
+  it("reads the staff row of the link's org and id (REQ-38)", async () => {
+    const seen: string[] = [];
+    await resolveSchedulerIdentity(deps({ getStaff: async (org, id) => { seen.push(`${org}:${id}`); return staff(T_ID); } }));
+    expect(seen).toEqual([`${ORG}:${T_ID}`]);
+  });
+  it("gives a teacher unavailable when there has never been a good sync (REQ-38 AC13)", async () => {
+    expect(await resolveSchedulerIdentity(deps({ syncedAt: async () => null }))).toEqual({ scope: "unavailable" });
   });
   it("gives the owner admin scope with their own staff record, or null (AC4)", async () => {
     const own = staff(O_ID, { name: "Mr. Charlie", functions: ["Owner", "Teacher"] });
     const withLink = await resolveSchedulerIdentity(deps({
-      isOwnerOf: async () => ORG, getLink: async () => ({ orgId: ORG, notionStaffId: O_ID }), fetchStaff: async () => [own],
+      isOwnerOf: async () => ORG, getLink: async () => ({ orgId: ORG, notionStaffId: O_ID }), getStaff: async () => own,
     }));
     expect(withLink).toEqual({ scope: "admin", orgId: ORG, staff: own });
     const noLink = await resolveSchedulerIdentity(deps({ isOwnerOf: async () => ORG, getLink: async () => null }));
@@ -56,21 +66,31 @@ describe("resolveSchedulerIdentity", () => {
     expect(await resolveSchedulerIdentity(deps({ getUser: async () => null }))).toEqual({ scope: "signed_out" });
     expect(await resolveSchedulerIdentity(deps({ configured: false }))).toEqual({ scope: "unconfigured" });
   });
-  it("fails closed when the Notion read throws (AC12)", async () => {
-    const boom = async () => { throw new Error("notion down"); };
-    expect(await resolveSchedulerIdentity(deps({ fetchStaff: boom }))).toEqual({ scope: "unavailable" });
+  it("fails closed when the local read throws (AC12, REQ-38 AC13)", async () => {
+    const boom = async () => { throw new Error("db down"); };
+    expect(await resolveSchedulerIdentity(deps({ getStaff: boom }))).toEqual({ scope: "unavailable" });
+    expect(await resolveSchedulerIdentity(deps({ syncedAt: boom }))).toEqual({ scope: "unavailable" });
+  });
+  it("keeps an owner whose linked staff row is inactive as admin with staff null (REQ-38 AC13)", async () => {
+    const r = await resolveSchedulerIdentity(deps({
+      isOwnerOf: async () => ORG,
+      getLink: async () => ({ orgId: ORG, notionStaffId: O_ID }),
+      getStaff: async () => null,
+      syncedAt: async () => null,
+    }));
+    expect(r).toEqual({ scope: "admin", orgId: ORG, staff: null });
   });
   it("keeps admin scope with staff null when Notion fails for the owner (AC12)", async () => {
     const r = await resolveSchedulerIdentity(deps({
       isOwnerOf: async () => ORG,
       getLink: async () => ({ orgId: ORG, notionStaffId: O_ID }),
-      fetchStaff: async () => { throw new Error("notion down"); },
+      getStaff: async () => { throw new Error("db down"); },
     }));
     expect(r).toEqual({ scope: "admin", orgId: ORG, staff: null });
   });
-  it("does not call Notion for a user with no link", async () => {
+  it("does not read staff for a user with no link", async () => {
     let called = false;
-    await resolveSchedulerIdentity(deps({ getLink: async () => null, fetchStaff: async () => { called = true; return []; } }));
+    await resolveSchedulerIdentity(deps({ getLink: async () => null, getStaff: async () => { called = true; return null; } }));
     expect(called).toBe(false);
   });
 });

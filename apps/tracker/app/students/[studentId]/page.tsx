@@ -6,10 +6,11 @@ import { ComposerCard } from "@/components/teacher/composer-card";
 import { DraftHistory } from "@/components/teacher/draft-history";
 import { FlagList, InvitePanel, TaskManager } from "@/components/teacher/panels";
 import { ParentPanel } from "@/components/teacher/parent-panel";
+import { PeopleFreshness } from "@/components/people-freshness";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, GradeNote, Notice, Page, linkClass, secondaryButtonClass } from "@/components/ui";
 import { listDrafts, listParentLinks } from "@/lib/data/queries";
-import { getStudentNames } from "@/lib/notion/cached";
+import { createPeopleStore } from "@/lib/data/people";
 import { gap, percent, stamp, studentName, studentNumber } from "@/lib/format";
 import { staffStudent } from "@/lib/pages";
 
@@ -17,15 +18,27 @@ export const dynamic = "force-dynamic";
 // An AI draft (server action on this page) can take most of a minute.
 export const maxDuration = 120;
 
-/** Owners only. A failed lookup shows an empty section rather than breaking the page. */
-async function loadParentPanel(db: Parameters<typeof listParentLinks>[0], studentId: string) {
-  const [links, record, names] = await Promise.all([
+/**
+ * Owners only. A failed lookup shows an empty section rather than breaking the
+ * page. The Notion link picker lists active students from the local people
+ * copy (REQ-38 AC14), plus the currently linked record so an archived link
+ * still shows its name.
+ */
+async function loadParentPanel(db: Parameters<typeof listParentLinks>[0], studentId: string, orgId: string) {
+  const people = createPeopleStore(db.tracker, orgId);
+  const [links, record, active, all] = await Promise.all([
     listParentLinks(db, studentId).catch(() => []),
     db.tracker.from("students").select("notion_student_id").eq("id", studentId).maybeSingle(),
-    getStudentNames().catch(() => null),
+    people.activeStudents().catch(() => null),
+    people.studentNames().catch(() => null),
   ]);
   const notionStudentId = (record.data as { notion_student_id: string | null } | null)?.notion_student_id ?? null;
-  return { links, notionStudentId, names };
+  let names: [string, string][] | null = active ? active.map((a) => [a.id, a.name] as [string, string]) : null;
+  if (names && notionStudentId && !names.some(([id]) => id === notionStudentId)) {
+    const linked = all?.get(notionStudentId);
+    if (linked) names = [...names, [notionStudentId, linked]];
+  }
+  return { links, notionStudentId, names, syncedAt: people.syncedAt };
 }
 
 /** Teacher overview of one student: courses, priorities, invite, status. */
@@ -34,7 +47,7 @@ export default async function StudentPage({ params }: { params: Promise<{ studen
   const { viewer, view, orgName, loginEmail } = await staffStudent(studentId);
   const s = view.student;
   const drafts = await listDrafts(viewer.db, studentId);
-  const parentPanel = viewer.role === "owner" ? await loadParentPanel(viewer.db, studentId) : null;
+  const parentPanel = viewer.role === "owner" ? await loadParentPanel(viewer.db, studentId, viewer.orgId) : null;
   const courseCode = (courseId: string) => view.courses.find((c) => c.course.id === courseId)?.course.code ?? null;
 
   return (
@@ -100,6 +113,7 @@ export default async function StudentPage({ params }: { params: Promise<{ studen
 
         <InvitePanel view={view} orgName={orgName} loginEmail={loginEmail} canUnlink={viewer.role === "owner"} />
 
+        {parentPanel && <PeopleFreshness load={parentPanel.syncedAt} />}
         {parentPanel && (
           <ParentPanel
             student={{ id: s.id, firstName: s.firstName, notionStudentId: parentPanel.notionStudentId }}

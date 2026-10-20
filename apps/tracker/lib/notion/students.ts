@@ -20,6 +20,9 @@ const STAGE = "Stage";
 const SCHEDULE = "Weekly Schedule";
 export const MAX_SUMMARY_CHARS = 2000;
 
+/** The stages that count as a current student (tracker ADR 0037). */
+export const ACTIVE_STUDENT_STAGES = ["Active", "Onboarding"] as const;
+
 const plain = (v: { plain_text: string }[]) => v.map((t) => t.plain_text).join("");
 
 const Page = z.object({
@@ -79,7 +82,7 @@ const Response_ = z.object({
 /** Students at stage Active or Onboarding. Capped at 50 pages of 100, like fetchStaff. */
 export async function fetchScheduledStudents(config: NotionConfig, fetcher: typeof fetch = fetch): Promise<StudentRecord[]> {
   const ids = await propertyIds(config, fetcher);
-  const filter = { or: ["Active", "Onboarding"].map((name) => ({ property: STAGE, select: { equals: name } })) };
+  const filter = { or: ACTIVE_STUDENT_STAGES.map((name) => ({ property: STAGE, select: { equals: name } })) };
   const out: StudentRecord[] = [];
   let cursor: string | undefined;
   for (let guard = 0; guard < 50; guard++) {
@@ -108,7 +111,7 @@ const NamePage = z.object({ id: z.guid(), properties: z.object({ [NAME]: z.objec
  */
 export async function fetchStudentNames(config: NotionConfig, fetcher: typeof fetch = fetch): Promise<Map<string, string>> {
   const ids = await propertyIds(config, fetcher, [NAME]);
-  const filter = { or: ["Active", "Onboarding"].map((name) => ({ property: STAGE, select: { equals: name } })) };
+  const filter = { or: ACTIVE_STUDENT_STAGES.map((name) => ({ property: STAGE, select: { equals: name } })) };
   const out = new Map<string, string>();
   let cursor: string | undefined;
   for (let guard = 0; guard < 50; guard++) {
@@ -123,6 +126,47 @@ export async function fetchStudentNames(config: NotionConfig, fetcher: typeof fe
     for (const raw of parsed.data.results) {
       const page = NamePage.safeParse(raw);
       if (page.success) out.set(page.data.id, plain(page.data.properties[NAME].title).trim());
+    }
+    if (!parsed.data.has_more || !parsed.data.next_cursor) return out;
+    cursor = parsed.data.next_cursor;
+  }
+  throw new NotionError("Too many Notion pages");
+}
+
+/** What the people sync copies of one student (REQ-38): name and stage, every stage. */
+export type StudentPersonRecord = { id: string; name: string; stage: string };
+
+const PersonPage = z.object({
+  id: z.guid(),
+  properties: z.object({
+    [NAME]: z.object({ title: z.array(z.object({ plain_text: z.string() })) }),
+    [STAGE]: z.object({ select: z.object({ name: z.string() }).nullable() }).optional(),
+  }),
+});
+
+/**
+ * Every student page with Student Name and Stage only (filter_properties), no
+ * stage filter, so archived and churned students keep their names locally.
+ * Never asks for Weekly Schedule or any parent or billing property.
+ */
+export async function fetchStudentPeople(config: NotionConfig, fetcher: typeof fetch = fetch): Promise<StudentPersonRecord[]> {
+  const ids = await propertyIds(config, fetcher, [NAME, STAGE]);
+  const out: StudentPersonRecord[] = [];
+  let cursor: string | undefined;
+  for (let guard = 0; guard < 50; guard++) {
+    const res = await call(fetcher, `${BASE}/data_sources/${config.dataSourceId}/query?${filterQuery(ids)}`, {
+      method: "POST",
+      headers: headers(config, true),
+      body: JSON.stringify({ page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) }),
+    });
+    if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+    const parsed = Response_.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new NotionError("Unexpected Notion response");
+    for (const raw of parsed.data.results) {
+      const page = PersonPage.safeParse(raw);
+      if (page.success) {
+        out.push({ id: page.data.id, name: plain(page.data.properties[NAME].title).trim(), stage: page.data.properties[STAGE]?.select?.name ?? "" });
+      }
     }
     if (!parsed.data.has_more || !parsed.data.next_cursor) return out;
     cursor = parsed.data.next_cursor;
