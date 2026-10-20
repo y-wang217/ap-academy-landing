@@ -1255,9 +1255,14 @@ try {
     formRow && formRow.props["Class occurrence"].rich_text.map((t) => t.plain_text).join("") === lessonRef(-21)
       && formRow.props.Date.date.start === isoIn(-21) && formRow.props["Paid to Teacher"].checkbox === false && formRow.props["Duration (hrs)"].number === 0.83,
     JSON.stringify(formRow));
-  const linkPatches = (await lessonJournal()).filter((j) => j.method === "PATCH");
-  check("REQ-39: every Notion PATCH in the lesson flow names only Class occurrence",
+  // Only PATCHes to Lessons rows: the outbox drain (REQ-35) may deliver a daily-task export (blocks, the Work page) in the same window.
+  const lessonIds = new Set(lessonsAfter.map((l) => l.id));
+  const patches = (await lessonJournal()).filter((j) => j.method === "PATCH");
+  const linkPatches = patches.filter((j) => lessonIds.has(j.path.replace("/v1/pages/", "")));
+  check("REQ-39: every Notion PATCH to a Lessons row in the lesson flow names only Class occurrence",
     linkPatches.length === 1 && linkPatches.every((j) => JSON.stringify(Object.keys(j.body.properties)) === '["Class occurrence"]'), JSON.stringify(linkPatches));
+  check("REQ-39: no other PATCH in the lesson flow touches a payout field",
+    patches.every((j) => !/Paid to Teacher|Pay Period|Duration \(hrs\)/.test(JSON.stringify(j.body))), JSON.stringify(patches.map((j) => `${j.method} ${j.path}`)));
 
   if (lessonTablesBefore) {
     const after = snapshot();
