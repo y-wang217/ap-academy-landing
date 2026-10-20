@@ -136,3 +136,27 @@ property and a small set of secrets.
 - At the time of writing `pipeline.json` already has `wip_limit: 3`
   (ad047a6), so that condition is met. The queue is an open follow-up, not a
   done item.
+
+## Amendment 2026-10-20: numbers reserved against work in flight (REQ-51)
+
+- A migration or ADR number is reserved against `main`, every open `req/` PR
+  and the design of every board card that is neither Done nor Backlog, not
+  just `main`. The rule is the **Number reservation (REQ-51)** paragraph,
+  word for word the same in `designer.md`, `builder.md`, `reviewer.md` and
+  `PIPELINE.md`. The builder re-checks before committing the file, again
+  before opening the PR, and once more after; when two open PRs claim one
+  number, the lower PR number keeps it.
+- Motive: the 2026-10-19 batch, the first with `wip_limit: 3`, produced two
+  `0021_*.sql` migrations (both now live) and three tracker ADRs on 0053 and
+  0054 that were renumbered to 0054 to 0056 in review. The bot reviewer spent
+  rounds on stale numbers (PRs #93 and #97), PR #104 exists only to clean up
+  the comments, and PR #101 was found clashing on tracker ADR 0056 while this
+  was designed.
+- Reviewers treat a stale number cited in prose as a nit and a duplicate file
+  number as blocking. Migration PRs list `Depends on:` so a batch can be
+  applied in a safe order.
+- This extends the "Numbering" note in ADR 0004: open PRs and in-flight cards
+  now count, not only the file on `main`.
+- The numbering race is closed by reservation plus the builder re-check, so it
+  no longer needs a queue. The queue or lock for the `wip_limit` slot count
+  stays an open follow-up.
