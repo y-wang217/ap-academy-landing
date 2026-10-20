@@ -3,6 +3,8 @@ import {
   handleCancelOccurrence, handleCreateClass, handleEditOccurrence, handleOccurrences, handleStudentCancellations,
 } from "../../../lib/scheduler/schedule-handlers";
 import type { LockedWrite, ScheduleStore, SeriesRecord } from "../../../lib/scheduler/schedule-store";
+import { NotionError } from "../../../lib/notion/staff";
+import { syncStudentSummary } from "../../../lib/scheduler/summary-sync";
 import { fixture, KUBY, MIA, REQ, RYAN, S1, S2, teacher, WRITES } from "./booking-world.fake";
 
 const json = async (r: Response) => ({ status: r.status, body: await r.json() });
@@ -265,9 +267,12 @@ describe("AC14: the Weekly Schedule summary", () => {
     expect(cx).toMatchObject({ status: 200 });
     expect(f.notionWrites).toContain(S1);
   });
-  it("makes no Notion call for a this move, a this cancel, or a one-off edit", async () => {
+  it("writes nothing to Notion for a this move, a this cancel, or a one-off edit once the summary is current", async () => {
     const f = await fixture();
     const one = await f.seed({ kind: "one_off", studentId: S2, startDate: "2026-10-22", startTime: "18:00" });
+    // REQ-35: every class write delivers the summary, which reads Notion first and writes only when the weekly text changed.
+    const d = f.deps();
+    for (const id of [S1, S2]) await syncStudentSummary({ store: f.store, students: d.students!, fetchStaff: d.fetchStaff, today: d.today }, id);
     f.begin();
     await handleEditOccurrence(f.deps(), f.s1.id, "2026-10-26", edit(f.s1, { changes: { date: "2026-10-27", startTime: "16:00" } }));
     await handleCancelOccurrence(f.deps(), f.s1.id, "2026-11-02", { requestId: REQ(91), expectedUpdatedAt: f.s1.updatedAt, scope: "this" });
@@ -605,5 +610,76 @@ describe("REQ-31 AC11: the student's cancellations", () => {
     const { f } = await seedCancels();
     expect((await ask(f.deps(), "nope")).status).toBe(400);
     expect((await handleStudentCancellations(f.deps(), new URLSearchParams())).status).toBe(400);
+  });
+});
+
+// REQ-35: a save delivers the exports its own write enqueued (tracker ADR 0054). ------------
+
+describe("REQ-35 AC8: a save delivers its own exports", () => {
+  const ORG_KEY = `daily_task:${"10000000-0000-4000-8000-000000000001"}`;
+  const failingWrite = (f: Awaited<ReturnType<typeof fixture>>, error: Error) => {
+    const d = f.deps();
+    return { ...d, students: { ...d.students!, write: async () => { throw error; } } };
+  };
+
+  it("create, move and cancel responses carry exports, and findPending is asked for the touched student and today's task", async () => {
+    const f = await fixture();
+    const created = await json(await handleCreateClass(f.deps(), create()));
+    expect(created.body.exports).toEqual([
+      expect.objectContaining({ kind: "summary", status: "done" }),
+      expect.objectContaining({ kind: "daily_task", status: "done" }),
+    ]);
+    expect(created.body.summarySync).toBe("synced");
+    expect(f.outbox.asked.at(-1)).toEqual([ORG_KEY, `summary:${S2}`].sort());
+    const moved = await json(await handleEditOccurrence(f.deps(), f.s1.id, "2026-10-26", edit(f.s1, { requestId: REQ(60), changes: { date: "2026-10-27", startTime: "16:00" } })));
+    expect(moved.body.exports).toHaveLength(2);
+    expect(f.outbox.asked.at(-1)).toEqual([ORG_KEY, `summary:${S1}`].sort());
+    const cancelled = await json(await handleCancelOccurrence(f.deps(), f.s2.id, "2026-10-28", { requestId: REQ(61), expectedUpdatedAt: f.s2.updatedAt, scope: "this" }));
+    expect(cancelled.body.exports).toHaveLength(2);
+    expect(f.outbox.rows.every((r) => r.status === "done")).toBe(true);
+  });
+
+  it("a future edit that moves a class to another student passes both students' keys", async () => {
+    const f = await fixture();
+    const r = await json(await handleEditOccurrence(f.deps(), f.s1.id, "2026-11-09", edit(f.s1, { scope: "future", changes: { studentId: S2 } })));
+    expect(r.status).toBe(200);
+    expect(f.outbox.asked.at(-1)).toEqual([ORG_KEY, `summary:${S1}`, `summary:${S2}`].sort());
+    expect(r.body.exports.filter((e: { kind: string }) => e.kind === "summary")).toHaveLength(2);
+  });
+
+  it("a Notion 500 on the first attempt answers summarySync queued and leaves the row pending", async () => {
+    const f = await fixture();
+    const r = await json(await handleCreateClass(failingWrite(f, new NotionError("Notion returned 500", 500)), create()));
+    expect(r.status).toBe(201);
+    expect(r.body.summarySync).toBe("queued");
+    expect(f.outbox.rows.find((x) => x.kind === "summary")).toMatchObject({ status: "pending", attempts: 1 });
+  });
+
+  it("a Notion 404 answers summarySync failed", async () => {
+    const f = await fixture();
+    const r = await json(await handleCreateClass(failingWrite(f, new NotionError("Notion returned 404", 404)), create()));
+    expect(r.body.summarySync).toBe("failed");
+    expect(r.body.exports).toContainEqual(expect.objectContaining({ kind: "summary", status: "failed" }));
+  });
+
+  it("the retry branch of create delivers a row that is still pending", async () => {
+    const f = await fixture();
+    await handleCreateClass(failingWrite(f, new NotionError("Notion returned 500", 500)), create());
+    const row = f.outbox.rows.find((x) => x.kind === "summary")!;
+    row.nextAttemptAt = new Date(0).toISOString(); // due again
+    f.begin();
+    const again = await json(await handleCreateClass(f.deps(), create()));
+    expect(again.status).toBe(200);
+    expect(again.body.summarySync).toBe("synced");
+    expect(row.status).toBe("done");
+    expect(f.notionWrites).toEqual([S2]);
+  });
+
+  it("a save whose rows a concurrent drain already took reports queued", async () => {
+    const f = await fixture();
+    const d = f.deps();
+    const r = await json(await handleCreateClass({ ...d, outbox: { ...d.outbox!, findPending: async () => [] } }, create()));
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ summarySync: "queued", exports: [] });
   });
 });

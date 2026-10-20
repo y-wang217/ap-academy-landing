@@ -5,6 +5,8 @@
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
+// REQ-35 adds POST /__schedule/commit-then-fail (the next student-page PATCH is applied, then answered 504)
+// and GET /__schedule/writes (applied Weekly Schedule PATCHes per page).
 // REQ-33: a Students query whose filter holds a Weekly Schedule is_not_empty clause gets only students with schedule text.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -35,6 +37,8 @@ const STUDENTS = [
 // Weekly Schedule text per student, empty to start (so a first booking can adopt the student).
 const schedule = new Map(STUDENTS.map((s) => [s.id, ""]));
 let scheduleFails = false;
+let commitThenFail = false;
+const scheduleWrites = new Map();
 const studentPage = (id) => {
   const base = STUDENTS.find((s) => s.id === id);
   return {
@@ -278,6 +282,8 @@ http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/__journal") return res.end(JSON.stringify(journal));
   if (req.method === "POST" && req.url === "/__billing/fail") { billingFails = !billingFails; return res.end(JSON.stringify({ billingFails })); }
   if (req.method === "POST" && req.url === "/__schedule/fail") { scheduleFails = !scheduleFails; return res.end(JSON.stringify({ scheduleFails })); }
+  if (req.method === "POST" && req.url === "/__schedule/commit-then-fail") { commitThenFail = true; return res.end(JSON.stringify({ commitThenFail })); }
+  if (req.method === "GET" && req.url === "/__schedule/writes") return res.end(JSON.stringify(Object.fromEntries(scheduleWrites)));
   await bufferBody(req);
   if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
   // Read-only: the seeded lesson answers a GET and nothing else.
@@ -298,6 +304,13 @@ http.createServer(async (req, res) => {
     if (req.method === "PATCH") {
       const text = (await readBody(req)).properties?.["Weekly Schedule"]?.rich_text?.[0]?.text?.content ?? "";
       schedule.set(pageId, text);
+      scheduleWrites.set(pageId, (scheduleWrites.get(pageId) ?? 0) + 1);
+      if (commitThenFail) {
+        // Notion saved it, but the caller sees a gateway timeout.
+        commitThenFail = false;
+        res.statusCode = 504;
+        return res.end(JSON.stringify({ object: "error", status: 504 }));
+      }
       res.end(JSON.stringify(studentPage(pageId)));
       return;
     }

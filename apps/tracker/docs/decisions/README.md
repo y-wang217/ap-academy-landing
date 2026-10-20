@@ -58,3 +58,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0051](0051-class-purpose-and-past.md) | One-off classes say their purpose, and the parent calendar says past, not done | accepted |
 | [0052](0052-permission-matrix.md) | One permission matrix for every role, proven cell by cell | accepted |
 | [0053](0053-owner-setup-checklist.md) | The owner setup checklist reads only, and a failed read is never a zero | accepted |
+| [0054](0054-notion-export-outbox.md) | Notion exports go through an outbox in Postgres | accepted |
