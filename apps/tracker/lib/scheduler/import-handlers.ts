@@ -7,7 +7,9 @@ import { requireScheduler, type Allowed, type Denial } from "./guard";
 import { importRequestId } from "./request-id";
 import type { ScheduleDeps } from "./schedule-handlers";
 import { ImportPlanOut, ImportPreviewResponse, ImportRunResponse, MonthlyReviewResponse, SyncSummariesResponse } from "./schemas";
-import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
+import { syncStudentSummary, type StudentsPort } from "./summary-sync";
+import { deliverSummaries, type SummaryOutcome } from "./outbox-wiring";
+import { summaryKey } from "./outbox-store";
 
 /**
  * Admin-only endpoints for the Weekly Schedule import (REQ-4): preview and run
@@ -75,7 +77,7 @@ async function handleImportRunInner(deps: ScheduleDeps, body: unknown): Promise<
   if (!data) return unavailable();
   const summaries = await deps.store.listSummaries();
   const plan = planFor(deps, data.students, data.staff, new Set(summaries.map((s) => s.studentId)));
-  const results: { studentId: string; name: string; status: "adopted" | "failed"; summarySync: SyncResult }[] = [];
+  const results: { studentId: string; name: string; status: "adopted" | "failed"; summarySync: SummaryOutcome }[] = [];
   if (!parsed.data.dryRun) {
     const orgId = (g as Allowed).identity.orgId;
     for (const a of plan.adopt) {
@@ -91,8 +93,16 @@ async function handleImportRunInner(deps: ScheduleDeps, body: unknown): Promise<
         results.push({ studentId: a.studentId, name: a.name, status: "failed", summarySync: "skipped" });
         continue;
       }
-      const summarySync = await syncStudentSummary(deps as Required<Pick<ScheduleDeps, "students">> & ScheduleDeps, a.studentId);
+      // With the outbox, adoption enqueued the summary (0021) and it is delivered below.
+      const summarySync = deps.outbox ? "queued" : await syncStudentSummary(deps as Required<Pick<ScheduleDeps, "students">> & ScheduleDeps, a.studentId);
       results.push({ studentId: a.studentId, name: a.name, status: "adopted", summarySync });
+    }
+    const outbox = deps.outbox;
+    const adopted = results.filter((r) => r.status === "adopted").map((r) => r.studentId);
+    if (outbox && adopted.length > 0) {
+      const rows = await outbox.findPending(adopted.map(summaryKey));
+      const outcome = await deliverSummaries({ ...deps, outbox }, rows.map((r) => r.id));
+      for (const r of results) if (r.status === "adopted") r.summarySync = outcome.get(r.studentId) ?? "queued";
     }
   }
   return send(200, ImportRunResponse.parse({ dryRun: parsed.data.dryRun, plan: planBody(plan), results }));
@@ -111,7 +121,13 @@ async function handleSyncSummariesInner(deps: ScheduleDeps, body: unknown): Prom
     ? [parsed.data.studentId]
     : (await deps.store.listSummaries()).map((s) => s.studentId);
   if (parsed.data.studentId && !(await deps.store.getSummary(parsed.data.studentId))) return send(404, { error: "not_found" });
-  const results: { studentId: string; summarySync: SyncResult }[] = [];
+  const outbox = deps.outbox;
+  if (outbox) {
+    // REQ-35: "Sync all" goes through the outbox, so a failure is retried and shown like any other export.
+    const outcome = await deliverSummaries({ ...deps, outbox }, await outbox.enqueueSummaries(ids));
+    return send(200, SyncSummariesResponse.parse({ results: ids.map((studentId) => ({ studentId, summarySync: outcome.get(studentId) ?? "queued" })) }));
+  }
+  const results: { studentId: string; summarySync: SummaryOutcome }[] = [];
   for (const studentId of ids) results.push({ studentId, summarySync: await syncStudentSummary(deps as ScheduleDeps & { students: StudentsPort }, studentId) });
   return send(200, SyncSummariesResponse.parse({ results }));
 }

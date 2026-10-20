@@ -379,6 +379,20 @@ delete either raises `42501` or touches no row.
 | staff link + parent link | none. Neither role reads it |
 | grade teacher + parent link | none. Neither role reads it |
 
+### `occurrence_outcomes`
+
+| role | access |
+|---|---|
+| owner | read, write: insert, update, delete (org). `owner or that teacher reads occurrence outcomes`, `owner or that teacher records occurrence outcomes`, `owner or that teacher completes occurrence outcomes`, `owner clears occurrence outcomes`; update only `notion_lesson_id`, `lesson_date`, `claimed_at` |
+| grade teacher | none. Owner and the series' teacher only |
+| scheduling-only teacher | read, write: insert, update (own series). Inserts only a pending logged row or a no-show, with no lesson ID, for a linkable occurrence; completes only their own pending row; never deletes |
+| student | none. Owner and the series' teacher only |
+| parent | none. Owner and the series' teacher only |
+| owner + staff link | read, write: the union of the `owner` and `scheduling-only teacher` rows |
+| grade teacher + staff link | read, write: the union of the `grade teacher` and `scheduling-only teacher` rows |
+| staff link + parent link | read, write: the union of the `scheduling-only teacher` and `parent` rows |
+| grade teacher + parent link | none. Neither role reads it |
+
 ### `notion_outbox`
 
 | role | access |

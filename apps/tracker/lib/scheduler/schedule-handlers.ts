@@ -16,6 +16,9 @@ import {
 import type { BookingKey, BookingStamp, ScheduleStore, SeriesRecord, StoreError, StoreResult, WriteOp } from "./schedule-store";
 import { syncStudentSummary, type StudentsPort, type SyncResult } from "./summary-sync";
 import { ensureDailyTask, type DailyTaskDeps } from "./daily-task";
+import { drainOutbox, type Delivered } from "./outbox";
+import { drainDepsOf, summaryOutcome } from "./outbox-wiring";
+import { dailyTaskKey, summaryKey, type OutboxStore } from "./outbox-store";
 import { normaliseScheduleText } from "../domain/schedule/legacy-line";
 import type { PeopleStore } from "../data/people";
 
@@ -38,6 +41,15 @@ export type ScheduleDeps = HandlerDeps & {
   peopleStore?: () => Promise<PeopleStore>;
   /** Today's "Text teachers their schedules" task (REQ-8). Absent when Notion's Work database is not wired in. */
   dailyTask?: DailyTaskDeps;
+  /**
+   * The Notion export outbox (REQ-35), bound to the caller's org. A class write
+   * enqueues its exports in the database; the handler then delivers the rows
+   * that write owes. Absent (tests, or no database), the handler calls Notion
+   * directly as before.
+   */
+  outbox?: OutboxStore;
+  /** The pause between outbox deliveries; tests pass one that does not wait. */
+  sleep?: (ms: number) => Promise<void>;
 };
 
 const HEADERS = { "Cache-Control": "no-store" };
@@ -354,9 +366,13 @@ export async function handleWeek(deps: ScheduleDeps, q: URLSearchParams): Promis
 
 // Classes ------------------------------------------------------------------------
 
-const seriesBody = (s: SeriesRecord, summarySync?: SyncResult, dailyTask?: DailyTaskOutcomeValue) => ({
-  ...(summarySync ? { summarySync } : {}),
-  ...(dailyTask ? { dailyTask } : {}),
+type ExportRefValue = { id: string; kind: "summary" | "daily_task"; status: "pending" | "running" | "done" | "failed" | "uncertain" | "superseded" };
+type Owed = { summarySync?: SummarySyncValue; dailyTask?: DailyTaskOutcomeValue; exports?: ExportRefValue[] };
+
+const seriesBody = (s: SeriesRecord, owed: Owed = {}) => ({
+  ...(owed.summarySync ? { summarySync: owed.summarySync } : {}),
+  ...(owed.dailyTask ? { dailyTask: owed.dailyTask } : {}),
+  ...(owed.exports ? { exports: owed.exports } : {}),
   series: {
     id: s.id, staffId: s.staffId, studentId: s.studentId, subject: s.subject, kind: s.kind, startDate: s.startDate,
     startTime: s.startTime, durationMinutes: s.durationMinutes, effectiveUntil: s.effectiveUntil, splitFrom: s.splitFrom, updatedAt: s.updatedAt,
@@ -457,8 +473,9 @@ export async function handleCreateClass(deps: ScheduleDeps, body: unknown): Prom
     return deps.store.lockedWrite({ op: "create", requestId, stamps, series: fields });
   });
   if (isRes(written)) return written;
-  const summarySync = await syncStudents(deps, [written.series.studentId]);
-  return send(written.replayed ? 200 : 201, SeriesResponse.parse(seriesBody(written.series, summarySync, await refreshToday(deps))));
+  // A retry delivers what is still owed for its first write (the rows are already enqueued).
+  const owed = await deliverOwed(deps, [written.series.studentId], { summary: true });
+  return send(written.replayed ? 200 : 201, SeriesResponse.parse(seriesBody(written.series, owed)));
 }
 
 /**
@@ -492,7 +509,69 @@ async function syncStudents(deps: ScheduleDeps, studentIds: string[]): Promise<S
   return results.includes("failed") ? "failed" : results.includes("synced") ? "synced" : "skipped";
 }
 
-type DailyTaskOutcomeValue = "updated" | "unchanged" | "skipped" | "failed";
+type DailyTaskOutcomeValue = "updated" | "unchanged" | "skipped" | "failed" | "queued" | "uncertain";
+type SummarySyncValue = SyncResult | "queued";
+
+/**
+ * After a class write: deliver the Notion exports that write owes (REQ-35).
+ * The trigger has already enqueued them in the write's transaction; this finds
+ * the pending rows for the touched students and today's task, delivers only
+ * those, and reports each. A row not delivered now (a retryable failure, or a
+ * concurrent drain holding it) reads `queued`, and a later drain sends it.
+ * Without an outbox it calls Notion directly as before REQ-35; `legacy.summary`
+ * says whether that path regenerated the summary for this kind of write.
+ */
+async function deliverOwed(deps: ScheduleDeps, studentIds: string[], legacy: { summary: boolean }): Promise<Owed> {
+  if (!deps.outbox) {
+    return { summarySync: legacy.summary ? await syncStudents(deps, studentIds) : undefined, dailyTask: await refreshToday(deps) };
+  }
+  const students = [...new Set(studentIds)];
+  const outbox = deps.outbox;
+  const who = await deps.identity();
+  const keys = students.map(summaryKey);
+  if (who.scope === "admin") keys.push(dailyTaskKey(who.orgId));
+  let found: Awaited<ReturnType<OutboxStore["findPending"]>> = [];
+  try {
+    found = await outbox.findPending(keys);
+  } catch {
+    // The write stands; what it owes stays enqueued for the next drain.
+  }
+  const delivered = await drainOutbox(drainDepsOf({ ...deps, outbox }), { ids: found.map((f) => f.id), limit: found.length });
+  const byId = new Map(delivered.map((d) => [d.id, d]));
+  const exports: ExportRefValue[] = found.map((f) => ({ id: f.id, kind: f.kind, status: byId.get(f.id)?.status ?? "pending" }));
+
+  let summarySync: SummarySyncValue | undefined;
+  if (deps.students) {
+    const results: SummarySyncValue[] = [];
+    for (const id of students) {
+      const row = found.find((f) => f.kind === "summary" && f.targetId === id);
+      results.push(row ? summaryOutcome(byId.get(row.id)) : await notEnqueued(deps, id));
+    }
+    summarySync = (["failed", "queued", "synced", "skipped"] as const).find((r) => results.includes(r));
+  }
+  let dailyTask: DailyTaskOutcomeValue | undefined;
+  if (deps.dailyTask) {
+    const row = found.find((f) => f.kind === "daily_task");
+    dailyTask = row ? dailyOutcome(byId.get(row.id)) : "queued";
+  }
+  return { summarySync, dailyTask, exports };
+}
+
+function dailyOutcome(d: Delivered | undefined): DailyTaskOutcomeValue {
+  if (!d || d.status === "pending") return "queued";
+  if (d.status === "uncertain") return "uncertain";
+  if (d.status === "failed") return "failed";
+  return d.result === "created" || d.result === "updated" ? "updated" : d.result === "skipped" ? "skipped" : "unchanged";
+}
+
+/** No pending row for this student: not adopted (nothing owed), or a concurrent drain already took it. */
+async function notEnqueued(deps: ScheduleDeps, studentId: string): Promise<SummarySyncValue> {
+  try {
+    return (await deps.store.getSummary(studentId)) ? "queued" : "skipped";
+  } catch {
+    return "queued";
+  }
+}
 
 /**
  * After a class write: refresh today's task if it exists (never creates it).
@@ -647,8 +726,7 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
       (stamps) => attemptSplit(deps, series, date, p.data, stamps));
     if (isRes(written)) return written;
     if (written.replayed) return send(200, SeriesResponse.parse(seriesBody(written.series)));
-    const summarySync = await syncStudents(deps, [series.studentId, written.series.studentId]);
-    return send(200, SeriesResponse.parse(seriesBody(written.series, summarySync, await refreshToday(deps))));
+    return send(200, SeriesResponse.parse(seriesBody(written.series, await deliverOwed(deps, [series.studentId, written.series.studentId], { summary: true }))));
   }
 
   const written = await bookUnderStamps(deps, { requestId, keys: keysOf(series, { staffId: c.staffId }), ops: ["move", "edit_one_off"], target: seriesId }, async (stamps) => {
@@ -711,7 +789,7 @@ export async function handleEditOccurrence(deps: ScheduleDeps, seriesId: string,
     return deps.store.lockedWrite({ ...seen, op: "move", newDate, newStartTime: newStart });
   });
   if (isRes(written)) return written;
-  return send(200, SeriesResponse.parse(seriesBody(written.series, undefined, await refreshToday(deps))));
+  return send(200, SeriesResponse.parse(seriesBody(written.series, await deliverOwed(deps, [written.series.studentId], { summary: false }))));
 }
 
 /** "This class and future": the checks of a split, then the locked write. */
@@ -799,8 +877,7 @@ export async function handleCancelOccurrence(deps: ScheduleDeps, seriesId: strin
     return deps.store.lockedWrite({ op: "cancel", requestId, stamps, seriesId, expectedUpdatedAt, originalDate: date, expectedPosition: now });
   });
   if (isRes(written)) return written;
-  if (!ends) return send(200, SeriesResponse.parse(seriesBody(written.series, undefined, await refreshToday(deps))));
+  if (!ends) return send(200, SeriesResponse.parse(seriesBody(written.series, await deliverOwed(deps, [series.studentId], { summary: false }))));
   if (written.replayed) return send(200, SeriesResponse.parse(seriesBody(written.series)));
-  const summarySync = await syncStudents(deps, [series.studentId]);
-  return send(200, SeriesResponse.parse(seriesBody(written.series, summarySync, await refreshToday(deps))));
+  return send(200, SeriesResponse.parse(seriesBody(written.series, await deliverOwed(deps, [series.studentId], { summary: true }))));
 }

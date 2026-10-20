@@ -38,6 +38,14 @@ Background: [0053](decisions/0053-owner-setup-checklist.md).
 3. Not checked with "Could not read Notion" means Notion did not answer; reload in a minute. It never means zero.
 4. The page only reads. Fix each row on the screen its link opens, then reload the page.
 
+## 6. A Notion export did not go through
+Background: [0054](decisions/0054-notion-export-outbox.md).
+1. Open `/tracker/schedule`. A "Notion exports" strip above the week lists every export that is not done. It is hidden when there are none.
+2. **Failed** (for example Notion returned 404): fix the cause in Notion first, such as a student page that was moved or a teacher missing from Staff, then press Retry.
+3. **May have been updated**: today's task may already have the change. Open today's task in Notion, check the teacher's to-do, then press Retry. Retry rewrites from the schedule, so a duplicate to-do is the only thing to delete by hand.
+4. **Waiting since** a time: Notion was busy or down. It retries on its own, at most an hour apart. Retry now sends it at once.
+5. Nothing is ever deleted: a line leaves the strip once a Retry or a later save sends that export.
+
 ## 7. Names and the people sync
 Background: [0055](decisions/0055-people-sync.md), workspace ADR 0004.
 1. The tracker keeps a copy of staff names, subjects and active state, and student names and stage, from Notion. It never copies parent details, email, rates or notes. Edit people in Notion as before.

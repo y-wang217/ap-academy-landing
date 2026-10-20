@@ -146,6 +146,12 @@ insert into tracker.daily_task_teachers (task_id, org_id, notion_staff_id, block
 insert into tracker.schedule_writes (org_id, request_id, op, series_id, created_by) values
   ('10000000-0000-0000-0000-000000000001', gen_random_uuid(), 'cancel', '40000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001'),
   ('10000000-0000-0000-0000-000000000002', gen_random_uuid(), 'cancel', '40000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000002');
+-- Outcomes (0023) on 2026-09-28, a past date no exception touches: ST1's
+-- pending log on s1, the owner's reconciled link on s2, a no-show in Org Two.
+insert into tracker.occurrence_outcomes (org_id, series_id, original_date, outcome, link_source, notion_lesson_id, lesson_date, claimed_at, created_by) values
+  ('10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', '2026-09-28', 'delivered', 'logged', null, null, now(), 'd0000000-0000-0000-0000-000000000001'),
+  ('10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000002', '2026-09-28', 'delivered', 'reconciled', 'cccccccc-0000-4000-8000-000000000002', '2026-09-28', null, 'a0000000-0000-0000-0000-000000000001'),
+  ('10000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000007', '2026-09-28', 'no_show', null, null, null, null, 'a0000000-0000-0000-0000-000000000002');
 
 insert into tracker.parent_links (id, org_id, student_id, email, parent_user_id, claimed_at, invited_by) values
   ('80000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-00000000000a',
@@ -209,6 +215,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('owner', 'parent_links',            4, true,  false, false, 'remove_parent_link'),
   ('owner', 'booking_stamps',          8, false, false, false, null),
   ('owner', 'schedule_writes',         1, true,  true,  false, 'schedule_write'),
+  ('owner', 'occurrence_outcomes',      2, true,  true,  true,  null),
   ('owner', 'staff',                   6, false, false, false, 'apply_people_sync'),
   ('owner', 'student_people',          3, false, false, false, 'apply_people_sync'),
   ('owner', 'sync_runs',               1, false, false, false, 'apply_people_sync'),
@@ -237,6 +244,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('grade_teacher', 'parent_links',            0, false, false, false, null),
   ('grade_teacher', 'booking_stamps',          0, false, false, false, null),
   ('grade_teacher', 'schedule_writes',         0, false, false, false, null),
+  ('grade_teacher', 'occurrence_outcomes',      0, false, false, false, null),
   ('grade_teacher', 'staff',                   0, false, false, false, null),
   ('grade_teacher', 'student_people',          0, false, false, false, null),
   ('grade_teacher', 'sync_runs',               0, false, false, false, null),
@@ -265,6 +273,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('scheduling_teacher', 'parent_links',            0, false, false, false, null),
   ('scheduling_teacher', 'booking_stamps',          0, false, false, false, null),
   ('scheduling_teacher', 'schedule_writes',         0, false, false, false, null),
+  ('scheduling_teacher', 'occurrence_outcomes',      1, true,  true,  false, null),
   ('scheduling_teacher', 'staff',                   5, false, false, false, null),
   ('scheduling_teacher', 'student_people',          2, false, false, false, null),
   ('scheduling_teacher', 'sync_runs',               0, false, false, false, null),
@@ -293,6 +302,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('student', 'parent_links',            0, false, false, false, null),
   ('student', 'booking_stamps',          0, false, false, false, null),
   ('student', 'schedule_writes',         0, false, false, false, null),
+  ('student', 'occurrence_outcomes',      0, false, false, false, null),
   ('student', 'staff',                   0, false, false, false, null),
   ('student', 'student_people',          0, false, false, false, null),
   ('student', 'sync_runs',               0, false, false, false, null),
@@ -321,6 +331,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('parent', 'parent_links',            1, false, false, false, null),
   ('parent', 'booking_stamps',          0, false, false, false, null),
   ('parent', 'schedule_writes',         0, false, false, false, null),
+  ('parent', 'occurrence_outcomes',      0, false, false, false, null),
   ('parent', 'staff',                   2, false, false, false, null),
   ('parent', 'student_people',          1, false, false, false, null),
   ('parent', 'sync_runs',               0, false, false, false, null),
@@ -737,6 +748,7 @@ begin
         select count(*) into n from tracker.claim_daily_task(t.org_id, 'teacher_texts', '2026-10-03', 60); r := to_jsonb(nullif(n, 0));
       when 'setup_checks' then
         select count(*) into n from tracker.setup_checks(t.org_id); r := to_jsonb(nullif(n, 0));
+      when 'occurrence_is_linkable' then r := to_jsonb(nullif(tracker.occurrence_is_linkable(t.series_id, '2026-09-28'), false));
       when 'lock_booking_key' then perform tracker.lock_booking_key(t.org_id, 'student', t.notion_student_id);
       when 'schedule_write_context' then r := tracker.schedule_write_context(t.org_id, gen_random_uuid(), '[]');
       when 'is_my_series_student' then r := to_jsonb(nullif(tracker.is_my_series_student(t.org_id, t.notion_student_id), false));

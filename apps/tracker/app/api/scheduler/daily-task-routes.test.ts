@@ -4,11 +4,12 @@ import { describe, expect, it } from "vitest";
 import type { Occurrence } from "../../../lib/domain/schedule/recurrence";
 import { config as proxyConfig } from "../../../proxy";
 import type { StaffRecord } from "../../../lib/notion/staff";
-import type { DailyNotion, DailyTaskDeps } from "../../../lib/scheduler/daily-task";
+import { UNCERTAIN_TASK, type DailyNotion, type DailyTaskDeps } from "../../../lib/scheduler/daily-task";
 import { handleDailyTaskCreate, handleDailyTaskRun, handleDailyTaskStatus } from "../../../lib/scheduler/daily-task-handlers";
 import type { DailyTaskRow, DailyTaskStore } from "../../../lib/scheduler/daily-task-store";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
 import { handleCancelOccurrence, handleCreateClass, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
+import { fakeOutbox } from "../../../lib/scheduler/outbox.fake";
 import { lockedWrites } from "./series-writes.fake";
 import type { ScheduleStore, SeriesRecord, WindowRecord } from "../../../lib/scheduler/schedule-store";
 
@@ -164,6 +165,15 @@ describe("AC4: time of day, with an injected clock", () => {
     const w = dailyWorld({ notionDown: true });
     expect((await run(w, "2026-10-19T12:15:00Z")).status).toBe(502);
   });
+  it("REQ-35 AC7: an uncertain task is a 502 too, and the hourly run adds nothing to Notion", async () => {
+    const w = dailyWorld({ page: true });
+    const row = { ...(await w.daily.store.get(TODAY))!, state: "failed" as const, lastError: UNCERTAIN_TASK };
+    w.daily.store = { ...w.daily.store, get: async () => row, claim: async () => row };
+    const res = await run(w, "2026-10-19T12:15:00Z");
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ result: "uncertain" });
+    expect(w.notionCalls).toEqual([]);
+  });
   it("a bad configured time falls back to 06:00", async () => {
     const w = dailyWorld();
     expect(await (await run(w, "2026-10-19T09:30:00Z", "banana")).json()).toEqual({ result: "not_yet" });
@@ -281,5 +291,42 @@ describe("REQ-38 AC7: the run route syncs people first, every hour", () => {
     const denied = await run(w, "2026-10-19T10:05:00Z", async () => { called++; return "ok"; }, "Bearer wrong");
     expect(denied.status).toBe(401);
     expect(called).toBe(0);
+  });
+});
+
+describe("REQ-35 AC9: the hourly run drains the outbox first", () => {
+  const SECRET = "s3cret-value";
+  const outboxWorld = () => {
+    const out = fakeOutbox(ORG, () => Date.parse("2026-10-19T09:00:00Z"));
+    const id = out.enqueue("summary", STUDENT);
+    const drain = {
+      outbox: out.store, today: () => TODAY, now: () => new Date("2026-10-19T09:00:00Z"), sleep: async () => {},
+      summary: {
+        store: { getSummary: async () => null } as unknown as ScheduleStore,
+        students: { list: async () => [], get: async () => null, write: async () => {} }, fetchStaff: async () => [ryan], today: () => TODAY,
+      },
+    };
+    return { out, id, drain };
+  };
+  it("a 05:00 call returns not_yet with what it drained", async () => {
+    const w = dailyWorld();
+    const o = outboxWorld();
+    const res = await handleDailyTaskRun({
+      authorization: `Bearer ${SECRET}`, env: { secret: SECRET, orgId: ORG, time: undefined }, build: () => w.daily, drain: () => o.drain,
+      now: () => new Date("2026-10-19T09:00:00Z"), // 05:00 EDT
+    });
+    expect(await res.json()).toEqual({ result: "not_yet", drained: { done: 1, pending: 0, failed: 0, uncertain: 0 } });
+    expect(o.out.row(o.id)!.status).toBe("done");
+    expect(w.notionCalls).toEqual([]);
+  });
+  it("a bad bearer drains nothing", async () => {
+    const o = outboxWorld();
+    let asked = 0;
+    const res = await handleDailyTaskRun({
+      authorization: "Bearer wrong", env: { secret: SECRET, orgId: ORG, time: undefined }, build: () => null, drain: () => { asked++; return o.drain; },
+    });
+    expect(res.status).toBe(401);
+    expect(asked).toBe(0);
+    expect(o.out.calls).toEqual([]);
   });
 });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isDue } from "../domain/schedule/daily-texts";
 import { localHhmm, todayIso } from "../time";
 import { ensureDailyTask, type DailyTaskDeps } from "./daily-task";
+import { drainOutbox, type DrainDeps } from "./outbox";
 import type { DailyTaskRow } from "./daily-task-store";
 import { requireScheduler, type Denial } from "./guard";
 import { DailyTaskRunResponse, DailyTaskStatusResponse } from "./schemas";
@@ -43,7 +44,8 @@ export async function handleDailyTaskCreate(deps: ScheduleDeps, body: unknown): 
   const parsed = z.strictObject({ date: IsoDate, requestId: z.guid().optional() }).safeParse(body);
   if (!parsed.success || parsed.data.date !== deps.today()) return send(400, { error: "invalid_request" });
   if (!deps.dailyTask) return send(503, { error: "scheduler_not_configured" });
-  const result = await ensureDailyTask(deps.dailyTask, { date: parsed.data.date, mode: "create" });
+  // The owner pressed it after seeing the task, so an uncertain task may be sent again.
+  const result = await ensureDailyTask(deps.dailyTask, { date: parsed.data.date, mode: "create", ownerRetry: true });
   let row: DailyTaskRow | null = null;
   try {
     row = await deps.dailyTask.store.get(parsed.data.date);
@@ -71,6 +73,8 @@ export async function handleDailyTaskRun(input: {
   authorization: string | null;
   env: RunEnv;
   build: (orgId: string) => DailyTaskDeps | null;
+  /** The org's outbox, drained on every authorised call before the time check (REQ-35 AC9). */
+  drain?: (orgId: string) => DrainDeps | null;
   now?: () => Date;
   syncPeople?: (orgId: string) => Promise<"ok" | "failed" | "not_configured">;
 }): Promise<Response> {
@@ -89,7 +93,10 @@ export async function handleDailyTaskRun(input: {
       people = "failed";
     }
   }
-  const extra = people ? { people } : {};
+  // The drain runs after the sync, so a delivery renders the newest names.
+  const drainDeps = input.drain?.(orgId) ?? null;
+  const drained = drainDeps ? countDrained(await drainOutbox(drainDeps)) : undefined;
+  const extra = { ...(people ? { people } : {}), ...(drained ? { drained } : {}) };
 
   const now = (input.now ?? (() => new Date()))();
   if (!isDue(localHhmm(now), configured)) return send(200, { result: "not_yet", ...extra });
@@ -104,5 +111,12 @@ export async function handleDailyTaskRun(input: {
     // Reported without a status row.
   }
   // A failure is a 502 so the calling workflow shows red; the next hourly run retries.
-  return send(result === "failed" ? 502 : 200, DailyTaskRunResponse.parse({ result, status: statusOf(row), ...extra }));
+  // Uncertain is a 502 too: it waits for the owner, so it must not look green.
+  return send(result === "failed" || result === "uncertain" ? 502 : 200, DailyTaskRunResponse.parse({ result, status: statusOf(row), ...extra }));
+}
+
+function countDrained(rows: { status: "done" | "pending" | "failed" | "uncertain" }[]) {
+  const out = { done: 0, pending: 0, failed: 0, uncertain: 0 };
+  for (const r of rows) out[r.status] += 1;
+  return out;
 }

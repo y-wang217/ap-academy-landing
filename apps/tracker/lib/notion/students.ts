@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig } from "./config";
-import { NotionError } from "./staff";
+import { NotionError, notionHttpError } from "./staff";
 
 /**
  * Students & Parents from Notion, read and written with plain fetch (no SDK).
@@ -63,7 +63,7 @@ const Schema = z.object({ properties: z.record(z.string(), z.object({ id: z.stri
 /** filter_properties takes property IDs, so look the three IDs up from the schema. */
 async function propertyIds(config: NotionConfig, fetcher: typeof fetch, names: string[] = [NAME, STAGE, SCHEDULE]): Promise<string[]> {
   const res = await call(fetcher, `${BASE}/data_sources/${config.dataSourceId}`, { method: "GET", headers: headers(config) });
-  if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+  if (!res.ok) throw notionHttpError(res);
   const parsed = Schema.safeParse(await res.json().catch(() => null));
   if (!parsed.success) throw new NotionError("Unexpected Notion response");
   const ids = names.map((n) => parsed.data.properties[n]?.id);
@@ -91,7 +91,7 @@ export async function fetchScheduledStudents(config: NotionConfig, fetcher: type
       headers: headers(config, true),
       body: JSON.stringify({ page_size: 100, filter, ...(cursor ? { start_cursor: cursor } : {}) }),
     });
-    if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+    if (!res.ok) throw notionHttpError(res);
     const parsed = Response_.safeParse(await res.json().catch(() => null));
     if (!parsed.success) throw new NotionError("Unexpected Notion response");
     for (const raw of parsed.data.results) {
@@ -120,7 +120,7 @@ export async function fetchStudentNames(config: NotionConfig, fetcher: typeof fe
       headers: headers(config, true),
       body: JSON.stringify({ page_size: 100, filter, ...(cursor ? { start_cursor: cursor } : {}) }),
     });
-    if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+    if (!res.ok) throw notionHttpError(res);
     const parsed = Response_.safeParse(await res.json().catch(() => null));
     if (!parsed.success) throw new NotionError("Unexpected Notion response");
     for (const raw of parsed.data.results) {
@@ -216,7 +216,7 @@ export async function fetchStudentSchedule(config: NotionConfig, pageId: string,
   const ids = await propertyIds(config, fetcher);
   const res = await call(fetcher, `${BASE}/pages/${pageId}?${filterQuery(ids)}`, { method: "GET", headers: headers(config) });
   if (res.status === 404) return null;
-  if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+  if (!res.ok) throw notionHttpError(res);
   const body = await res.json().catch(() => null);
   const ok = Page.safeParse(body);
   if (!ok.success) throw new NotionError("Unexpected Notion response");
@@ -233,5 +233,5 @@ export async function writeWeeklySchedule(config: NotionConfig, pageId: string, 
     headers: headers(config, true),
     body: JSON.stringify({ properties: { [SCHEDULE]: { rich_text } } }),
   });
-  if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+  if (!res.ok) throw notionHttpError(res);
 }

@@ -8,6 +8,8 @@
 // REQ-38 adds the Staff schema (the people sync asks for property IDs), a Stage on every student, and
 // POST /__people/fail (toggles a 500 on the Staff and Students reads), /__people/rename (Ryan becomes
 // "Ryan Renamed") and /__people/inactive (toggles Ryan's Status between Active and Inactive).
+// REQ-35 adds POST /__schedule/commit-then-fail (the next student-page PATCH is applied, then answered 504)
+// and GET /__schedule/writes (applied Weekly Schedule PATCHes per page).
 // REQ-33: a Students query whose filter holds a Weekly Schedule is_not_empty clause gets only students with schedule text.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -41,6 +43,8 @@ let scheduleFails = false;
 let peopleFails = false;
 const RYAN_PAGE = STAFF[0];
 const STAFF_SCHEMA = { properties: { Name: { id: "title" }, Email: { id: "em" }, Status: { id: "st" }, Function: { id: "fn" }, Subjects: { id: "sb" } } };
+let commitThenFail = false;
+const scheduleWrites = new Map();
 const studentPage = (id) => {
   const base = STUDENTS.find((s) => s.id === id);
   return {
@@ -291,6 +295,8 @@ http.createServer(async (req, res) => {
     RYAN_PAGE.properties.Status = { select: { name: now } };
     return res.end(JSON.stringify({ status: now }));
   }
+  if (req.method === "POST" && req.url === "/__schedule/commit-then-fail") { commitThenFail = true; return res.end(JSON.stringify({ commitThenFail })); }
+  if (req.method === "GET" && req.url === "/__schedule/writes") return res.end(JSON.stringify(Object.fromEntries(scheduleWrites)));
   await bufferBody(req);
   if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
   // Read-only: the seeded lesson answers a GET and nothing else.
@@ -311,6 +317,13 @@ http.createServer(async (req, res) => {
     if (req.method === "PATCH") {
       const text = (await readBody(req)).properties?.["Weekly Schedule"]?.rich_text?.[0]?.text?.content ?? "";
       schedule.set(pageId, text);
+      scheduleWrites.set(pageId, (scheduleWrites.get(pageId) ?? 0) + 1);
+      if (commitThenFail) {
+        // Notion saved it, but the caller sees a gateway timeout.
+        commitThenFail = false;
+        res.statusCode = 504;
+        return res.end(JSON.stringify({ object: "error", status: 504 }));
+      }
       res.end(JSON.stringify(studentPage(pageId)));
       return;
     }

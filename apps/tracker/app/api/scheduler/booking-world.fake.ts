@@ -6,6 +6,7 @@ import type { ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
 import type {
   AvailabilityExceptionRecord, BookingStamp, LockedWrite, ScheduleStore, SeriesRecord, SummaryRecord, WindowRecord, WriteContext,
 } from "../../../lib/scheduler/schedule-store";
+import { fakeOutbox } from "../../../lib/scheduler/outbox.fake";
 import { lockedWrites } from "./series-writes.fake";
 
 // The booking fixture of the REQ-7 design: today is Mon 2026-10-19.
@@ -43,6 +44,8 @@ export function world() {
   );
   const notion = new Map<string, StudentRecord>([S1, S2].map((id) => [id, { id, name: id.slice(0, 2), stage: "Active", weeklySchedule: "" }]));
   const notionWrites: string[] = [];
+  // The outbox, with the 0021 trigger played by the store proxy below: a class write enqueues its exports.
+  const outbox = fakeOutbox(ORG);
 
   const locked = lockedWrites({ series, exceptions, newId: () => REQ(++n), stampOf: () => `2026-10-14T15:00:${String(++tick).padStart(2, "0")}.000Z` });
   // raceNext(fn): fn runs between the next readWriteContext and the lockedWrite after it, as another tab's change would.
@@ -79,7 +82,15 @@ export function world() {
           race = null;
           await fn();
         }
+        const before = key === "lockedWrite" && "seriesId" in (args[0] as LockedWrite) ? series.get((args[0] as { seriesId: string }).seriesId)?.studentId : undefined;
         const out = await (v as (...a: unknown[]) => unknown)(...args);
+        if (key === "lockedWrite") {
+          const r = out as Awaited<ReturnType<ScheduleStore["lockedWrite"]>>;
+          if (r.ok && r.created) {
+            for (const st of new Set([before, r.value.studentId])) if (st && summaries.has(st)) outbox.enqueue("summary", st);
+            outbox.enqueue("daily_task", ORG);
+          }
+        }
         if (key === "readWriteContext") {
           stampsSeen.read.push((out as WriteContext).stamps);
           if (race) race.armed = true;
@@ -90,7 +101,7 @@ export function world() {
   });
   const raceNext = (fn: () => void | Promise<void>) => { race = { fn, armed: false }; };
   const deps = (identity: SchedulerIdentity = admin): ScheduleDeps => ({
-    identity: async () => identity, fetchStaff: async () => staff, store, today: () => TODAY,
+    identity: async () => identity, fetchStaff: async () => staff, store, today: () => TODAY, outbox: outbox.store, sleep: async () => {},
     students: {
       list: async () => [...notion.values()], get: async (id) => notion.get(id) ?? null,
       write: async (id, text) => { notionWrites.push(id); notion.set(id, { ...notion.get(id)!, weeklySchedule: text }); },
@@ -103,7 +114,7 @@ export function world() {
     locked.bump({ kind: "staff", id: rec.staffId }, { kind: "student", id: rec.studentId });
     return rec;
   };
-  return { store, series, exceptions, writes, calls, stampsSeen, notionWrites, deps, seed, raceNext, bump: locked.bump, log: locked.log };
+  return { store, series, exceptions, writes, calls, stampsSeen, notionWrites, notion, outbox, deps, seed, raceNext, bump: locked.bump, log: locked.log };
 }
 
 export async function fixture() {
