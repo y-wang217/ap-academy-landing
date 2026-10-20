@@ -7,6 +7,9 @@ export const NOTION_VERSION = "2025-09-03";
 export const DEFAULT_STAFF_DATA_SOURCE_ID = "eaf8e9be-9ec3-4e0d-9442-f2c2ce111925";
 export const DEFAULT_STUDENTS_DATA_SOURCE_ID = "fe3d651a-70c6-4d1e-8a38-656163d6bc63";
 
+/** The token variable's name, for messages that say a setting is missing (REQ-33). Never its value. */
+export const notionTokenVariable = "NOTION_TOKEN";
+
 export type NotionConfig = { token: string; dataSourceId: string };
 
 export function readNotionConfig(): NotionConfig | null {

@@ -1,4 +1,4 @@
-# 0053: Notion exports go through an outbox in Postgres
+# 0054: Notion exports go through an outbox in Postgres
 Status: accepted
 Date: 2026-10-19
 

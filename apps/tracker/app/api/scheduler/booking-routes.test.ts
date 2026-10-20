@@ -613,7 +613,7 @@ describe("REQ-31 AC11: the student's cancellations", () => {
   });
 });
 
-// REQ-35: a save delivers the exports its own write enqueued (tracker ADR 0053). ------------
+// REQ-35: a save delivers the exports its own write enqueued (tracker ADR 0054). ------------
 
 describe("REQ-35 AC8: a save delivers its own exports", () => {
   const ORG_KEY = `daily_task:${"10000000-0000-4000-8000-000000000001"}`;

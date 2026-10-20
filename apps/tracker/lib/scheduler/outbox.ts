@@ -5,7 +5,7 @@ import { syncStudentSummaryDetail, type SyncDeps, type SyncResult } from "./summ
 
 /**
  * Delivers the Notion exports the outbox says are owed (REQ-35, tracker ADR
- * 0053). Every delivery renders from current state, so an older delivery can
+ * 0054). Every delivery renders from current state, so an older delivery can
  * never carry stale text, and the summary write reads Notion first, so a retry
  * after a write that landed writes nothing. Injected ports only.
  */

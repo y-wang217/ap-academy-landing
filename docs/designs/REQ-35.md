@@ -4,7 +4,7 @@ Copied from the approved design on the Notion card (Feedback 7, approved after r
 
 ## Build notes (differences from the design, decided at build time)
 - **Migration number.** The design says 0019 by default or the next free number. 0019 and 0020 are on `main`, so the file is `supabase/migrations/0021_notion_outbox.sql`, shipped first in its own PR (`req/REQ-35-migration`).
-- **ADR number.** 0050 to 0052 are taken, so the ADR is `apps/tracker/docs/decisions/0053-notion-export-outbox.md`.
+- **ADR number.** 0050 to 0052 are taken, so the ADR was built as 0053; at merge REQ-33 held 0053 on `main`, so it ships as `apps/tracker/docs/decisions/0054-notion-export-outbox.md`.
 - **Permission matrix.** `supabase/tests/permission_matrix.sql` fails for any tracker table it does not classify (REQ-32), so the migration PR adds the `notion_outbox` rows and the three new functions there and in `apps/tracker/docs/permission-matrix.md`.
 - **AC13 not built.** Decision 6: REQ-33's setup page is not on `main` at build time, so the "Notion exports" setup row is skipped. A follow-up card can add it once REQ-33 lands.
 - **Retry now.** The UI sketch shows "[Retry now]" on a waiting row, and the e2e row presses Retry on a row left pending by a 500. AC12 listed only failed and uncertain rows as retryable, so `retry_notion_outbox` also accepts a `pending` row and makes it due now. Running, done and superseded rows are still 409 `not_retryable`.

@@ -1,5 +1,5 @@
 /**
- * The Notion export outbox (REQ-35, tracker ADR 0053): one row per export a
+ * The Notion export outbox (REQ-35, tracker ADR 0054): one row per export a
  * class write still owes, written by a database trigger in the same
  * transaction as the write. The app claims rows, delivers them from current
  * state, and records how each attempt ended. Rows are never deleted.

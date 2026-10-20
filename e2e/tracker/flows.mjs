@@ -42,6 +42,19 @@ function isoIn(days) {
 
 const section = (page, title) => page.locator("section", { has: page.getByRole("heading", { name: title, exact: true }) });
 
+// REQ-33: the setup checklist rows as { key, title, state, count, text }, in page order.
+const setupRows = (page) => page.evaluate(() => [...document.querySelectorAll('section[id^="setup-"]')].map((s) => ({
+  key: s.id.slice("setup-".length),
+  title: s.querySelector("h2")?.textContent ?? "",
+  state: s.querySelector("[data-state]")?.getAttribute("data-state") ?? "",
+  count: s.querySelector("[data-count]")?.textContent ?? "",
+  text: s.textContent ?? "",
+})));
+const SETUP_ORDER = ["teachers", "availability", "schedules", "parents", "notionRecords", "dailyTask", "guard"];
+const SETUP_TITLES = ["Teachers approved", "Teacher availability", "Student schedules adopted", "Parent links", "Notion records on tracker students", "Daily task", "Notion link guard (migration 0017)"];
+const rowOf = (rows, key) => rows.find((r) => r.key === key) ?? { state: "absent", count: "", text: "" };
+const sameRow = (row, state, count) => row.state === state && row.count === count;
+
 async function openDetails(scope, summary) {
   const details = scope.locator("details", { has: scope.page().getByText(summary, { exact: true }) });
   if (!(await details.evaluate((d) => d.open))) await details.locator("summary").click();
@@ -59,6 +72,24 @@ try {
   const teacher = await signedIn(browser, "teacher@example.com");
   await teacher.goto(`${BASE}`);
   check("teacher home lists students", (await teacher.locator("h1").textContent()) === "Students");
+
+  // REQ-33: the owner's setup checklist before anything is set up (seed: one unclaimed link for Ryan, no students).
+  check("REQ-33: the owner's home links Setup", (await teacher.getByRole("link", { name: "Setup", exact: true }).count()) === 1);
+  await teacher.goto(`${BASE}/scheduler/setup`);
+  await teacher.getByRole("heading", { name: "Setup checklist" }).waitFor({ timeout: 15000 });
+  const fresh = await setupRows(teacher);
+  check("REQ-33: seven rows in order", JSON.stringify(fresh.map((r) => r.key)) === JSON.stringify(SETUP_ORDER) && JSON.stringify(fresh.map((r) => r.title)) === JSON.stringify(SETUP_TITLES), JSON.stringify(fresh.map((r) => r.title)));
+  const freshTeachers = rowOf(fresh, "teachers");
+  check("REQ-33: fresh Teachers approved is Partial, 1 of 2, missing Kuby Test", sameRow(freshTeachers, "partial", "1 of 2 active teachers linked. 0 signed in.") && freshTeachers.text.includes("Missing: Kuby Test"), JSON.stringify(freshTeachers));
+  check("REQ-33: fresh Teacher availability is Missing, 0 of 1", sameRow(rowOf(fresh, "availability"), "missing", "0 of 1 linked teachers entered hours."), JSON.stringify(rowOf(fresh, "availability")));
+  check("REQ-33: fresh Student schedules adopted is Missing with no Weekly Schedule yet", sameRow(rowOf(fresh, "schedules"), "missing", "No active students have a Weekly Schedule yet.") && rowOf(fresh, "schedules").text.includes("Students with no Weekly Schedule are adopted by their first booking."), JSON.stringify(rowOf(fresh, "schedules")));
+  check("REQ-33: fresh Parent links and Notion records are Missing, no students yet", sameRow(rowOf(fresh, "parents"), "missing", "No students yet.") && sameRow(rowOf(fresh, "notionRecords"), "missing", "No students yet."));
+  check("REQ-33: fresh Daily task is Missing, names DAILY_TASK_ORG_ID only", sameRow(rowOf(fresh, "dailyTask"), "missing", "Not set: DAILY_TASK_ORG_ID."), JSON.stringify(rowOf(fresh, "dailyTask")));
+  check("REQ-33: the Notion link guard is Done", sameRow(rowOf(fresh, "guard"), "done", "Present."), JSON.stringify(rowOf(fresh, "guard")));
+  check("REQ-33: the page names no variable value", !(await teacher.content()).includes("e2e-cron-secret") && !(await teacher.content()).includes("test-token-for-the-local-mock"));
+  await teacher.goto(`${BASE}/schedule`);
+  check("REQ-33: /schedule links the Setup checklist for the owner", (await teacher.getByRole("link", { name: "Setup checklist", exact: true }).count()) === 1);
+  await teacher.goto(`${BASE}`);
 
   // Step 4: wizard. Create the student.
   await teacher.getByRole("link", { name: "Add a student" }).click();
@@ -1181,6 +1212,68 @@ try {
   await parent.goto(`${BASE}/parent/${adaId}/grades`);
   check("after removal the parent gets not-found for Ada", await parent.getByText("This page could not be found").isVisible());
 
+  // REQ-33 step A: after the flows above, every row agrees with the database and the mock Notion.
+  const SETUP_STAFF = ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0002"];
+  const SETUP_STUDENTS = ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003"];
+  const num = (sql) => Number(psql(sql));
+  const inList = (ids) => ids.map((i) => `'${i}'`).join(",");
+  const liveLinks = `from tracker.staff_links where org_id = '${ORG}' and revoked_at is null`;
+  const kids = `from tracker.students s where s.org_id = '${ORG}' and s.status <> 'archived'`;
+  const countState = (done, of) => (done === 0 || of === 0 ? "missing" : done >= of ? "done" : "partial");
+  const expectedSetup = async () => {
+    const today = isoIn(0);
+    const linked = num(`select count(distinct notion_staff_id) ${liveLinks} and notion_staff_id in (${inList(SETUP_STAFF)})`);
+    const linkedAll = num(`select count(distinct notion_staff_id) ${liveLinks}`);
+    const signed = num(`select count(*) ${liveLinks} and user_id is not null`);
+    const entered = num(`select count(distinct w.notion_staff_id) from tracker.availability_windows w where w.org_id = '${ORG}' and (w.effective_until is null or w.effective_until >= '${today}') and w.notion_staff_id in (select notion_staff_id ${liveLinks})`);
+    const scheduled = [];
+    for (const id of SETUP_STUDENTS) {
+      const p = await (await fetch(`${MOCK_NOTION}/v1/pages/${id}`, { headers: { "x-e2e-probe": "1" } })).json();
+      if ((p.properties?.["Weekly Schedule"]?.rich_text ?? []).length > 0) scheduled.push(id);
+    }
+    const adopted = scheduled.length ? num(`select count(*) from tracker.schedule_summaries where org_id = '${ORG}' and notion_student_id in (${inList(scheduled)})`) : 0;
+    const failedSync = scheduled.length ? num(`select count(*) from tracker.schedule_summaries where org_id = '${ORG}' and sync_state = 'failed' and notion_student_id in (${inList(scheduled)})`) : 0;
+    const students = num(`select count(*) ${kids}`);
+    const claimed = num(`select count(*) ${kids} and exists (select 1 from tracker.parent_links p where p.student_id = s.id and p.claimed_at is not null)`);
+    const invitedOnly = num(`select count(*) ${kids} and exists (select 1 from tracker.parent_links p where p.student_id = s.id) and not exists (select 1 from tracker.parent_links p where p.student_id = s.id and p.claimed_at is not null)`);
+    const anyLink = num(`select count(*) ${kids} and exists (select 1 from tracker.parent_links p where p.student_id = s.id)`) > 0;
+    const withNotion = num(`select count(*) ${kids} and s.notion_student_id is not null`);
+    const schedState = countState(adopted, scheduled.length);
+    return {
+      teachers: [countState(linked, 2), `${linked} of 2 active teachers linked. ${signed} signed in.`],
+      availability: [countState(entered, linkedAll), linkedAll === 0 ? "No teachers linked yet." : `${entered} of ${linkedAll} linked teachers entered hours.`],
+      schedules: [schedState === "done" && failedSync > 0 ? "partial" : schedState,
+        scheduled.length === 0 ? "No active students have a Weekly Schedule yet." : `${adopted} of ${scheduled.length} active students adopted.${failedSync ? ` ${failedSync} failed to sync.` : ""}`],
+      parents: [students === 0 || !anyLink ? "missing" : claimed >= students ? "done" : "partial",
+        students === 0 ? "No students yet." : `${claimed} of ${students} students have a parent signed in. ${invitedOnly} invited, not signed in yet.`],
+      notionRecords: [countState(withNotion, students), students === 0 ? "No students yet." : `${withNotion} of ${students} students linked to Notion.`],
+      dailyTask: ["missing", "Not set: DAILY_TASK_ORG_ID."],
+      guard: ["done", "Present."],
+      facts: { linked, signed, entered, linkedAll, scheduled: scheduled.length, adopted, students, claimed, withNotion },
+    };
+  };
+  const checkSetup = async (label, keys = SETUP_ORDER) => {
+    await teacher.goto(`${BASE}/scheduler/setup`);
+    await teacher.getByRole("heading", { name: "Setup checklist" }).waitFor({ timeout: 15000 });
+    const [rows, want] = [await setupRows(teacher), await expectedSetup()];
+    for (const key of keys) {
+      const [state, count] = want[key];
+      check(`REQ-33 ${label}: ${key} is ${state}, "${count}"`, sameRow(rowOf(rows, key), state, count), JSON.stringify(rowOf(rows, key)));
+    }
+    return want;
+  };
+  const stepA = await checkSetup("after the flows");
+  check("REQ-33 after the flows: Ryan signed in, entered hours and at least one schedule is adopted", stepA.facts.signed >= 1 && stepA.facts.entered >= 1 && stepA.facts.adopted >= 1, JSON.stringify(stepA.facts));
+  check("REQ-33 after the flows: students without a Notion record are named", stepA.facts.withNotion === stepA.facts.students || rowOf(await setupRows(teacher), "notionRecords").text.includes("Missing:"));
+
+  // REQ-33: nobody but the owner gets the page.
+  const setupStatus = async (who) => (await who.context().request.get(`${BASE}/scheduler/setup`, { maxRedirects: 0 })).status();
+  check("REQ-33: Ryan (scheduling teacher) gets 404 on the setup page", (await setupStatus(ryan)) === 404);
+  check("REQ-33: teacher2 (membership teacher) gets 404 on the setup page", (await setupStatus(teacher2)) === 404);
+  check("REQ-33: the parent gets 404 on the setup page", (await setupStatus(parent)) === 404);
+  await teacher2.goto(`${BASE}`);
+  check("REQ-33: teacher2's home has no Setup link", (await teacher2.getByRole("link", { name: "Setup", exact: true }).count()) === 0);
+
   // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.
   const timing = teacher;
   const timingRes = await timing.context().request.get(`${BASE}/api/scheduler/me`);
@@ -1228,6 +1321,18 @@ try {
   check("REQ-32: after removal the parent gets [] for that child", isEmpty(await restAs("parent@example.com", `students?id=eq.${diId}`)));
   psql("delete from tracker.memberships where user_id = (select id from auth.users where email = 'teacher2@example.com')");
   check("REQ-32: after the membership is deleted teacher2 gets [] from students", isEmpty(await restAs("teacher2@example.com", "students")));
+
+  // REQ-33 step B: fill every gap by psql, then the five rows turn Done with exact counts. Runs last: it links the parent to every child.
+  for (const [staffId, email] of [[SETUP_STAFF[0], "ryan@example.com"], [SETUP_STAFF[1], "kuby@example.com"]]) {
+    psql(`insert into tracker.staff_links (org_id, notion_staff_id, email, approved_by) select '${ORG}', '${staffId}', '${email}', '00000000-0000-0000-0000-00000000aaaa' where not exists (select 1 ${liveLinks} and notion_staff_id = '${staffId}')`);
+  }
+  psql(`update tracker.students set notion_student_id = gen_random_uuid() where org_id = '${ORG}' and status <> 'archived' and notion_student_id is null`);
+  psql(`insert into tracker.parent_links (org_id, student_id, email, parent_user_id, claimed_at, invited_by) select s.org_id, s.id, 'parent@example.com', (select id from auth.users where email = 'parent@example.com'), now(), '00000000-0000-0000-0000-00000000aaaa' ${kids} and not exists (select 1 from tracker.parent_links p where p.student_id = s.id and p.claimed_at is not null) on conflict (student_id, email) do update set parent_user_id = excluded.parent_user_id, claimed_at = excluded.claimed_at`);
+  const stepB = await checkSetup("after the top-up", ["teachers", "availability", "schedules", "parents", "notionRecords"]);
+  check("REQ-33 after the top-up: teachers, parent links and Notion records are Done", stepB.teachers[0] === "done" && stepB.parents[0] === "done" && stepB.notionRecords[0] === "done", JSON.stringify(stepB.facts));
+  psql(`insert into tracker.availability_windows (org_id, request_id, notion_staff_id, weekday, start_time, end_time, effective_from, created_by) select '${ORG}', gen_random_uuid(), l.notion_staff_id, 3, '09:00', '17:00', '${isoIn(0)}', '00000000-0000-0000-0000-00000000aaaa' from tracker.staff_links l where l.org_id = '${ORG}' and l.revoked_at is null and not exists (select 1 from tracker.availability_windows w where w.notion_staff_id = l.notion_staff_id and (w.effective_until is null or w.effective_until >= '${isoIn(0)}'))`);
+  const stepC = await checkSetup("after hours for every teacher", ["availability"]);
+  check("REQ-33 after hours for every teacher: Teacher availability is Done, 2 of 2", stepC.availability[0] === "done" && stepC.availability[1] === "2 of 2 linked teachers entered hours.", JSON.stringify(stepC.availability));
 } catch (error) {
   check("flow ran to the end", false, String(error).split("\n")[0]);
 } finally {

@@ -7,6 +7,7 @@
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
 // REQ-35 adds POST /__schedule/commit-then-fail (the next student-page PATCH is applied, then answered 504)
 // and GET /__schedule/writes (applied Weekly Schedule PATCHes per page).
+// REQ-33: a Students query whose filter holds a Weekly Schedule is_not_empty clause gets only students with schedule text.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -322,7 +323,9 @@ http.createServer(async (req, res) => {
     return;
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`)) {
-    res.end(JSON.stringify({ results: STUDENTS, has_more: false, next_cursor: null }));
+    const wantsScheduled = JSON.stringify((await readBody(req)).filter ?? {}).includes('{"property":"Weekly Schedule","rich_text":{"is_not_empty":true}}');
+    const results = wantsScheduled ? STUDENTS.filter((s) => schedule.get(s.id)) : STUDENTS;
+    res.end(JSON.stringify({ results, has_more: false, next_cursor: null }));
     return;
   }
   if (req.method === "POST" && /^\/v1\/data_sources\/[^/]+\/query$/.test(req.url ?? "")) {

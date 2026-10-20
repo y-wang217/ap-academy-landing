@@ -31,8 +31,15 @@ Background: [0036](decisions/0036-availability-conflicts-computed.md).
 3. Either move the class on `/tracker/schedule` (drag it, or open it and edit), or ask the teacher to change their hours on `/tracker/schedule/availability`.
 4. Reload the conflicts page. The entry disappears once the class fits; conflicts are computed on each visit, nothing needs clearing.
 
-## 5. A Notion export did not go through
-Background: [0053](decisions/0053-notion-export-outbox.md).
+## 5. Check what is still missing
+Background: [0053](decisions/0053-owner-setup-checklist.md).
+1. Open [`/tracker/scheduler/setup`](https://www.apacademy.ca/tracker/scheduler/setup) (owners only; also linked as Setup on the home page and Setup checklist on `/tracker/schedule`).
+2. Each row shows Done, Partial, Missing or Not checked, a count, who is affected while it is missing, and a link to where it is fixed.
+3. Not checked with "Could not read Notion" means Notion did not answer; reload in a minute. It never means zero.
+4. The page only reads. Fix each row on the screen its link opens, then reload the page.
+
+## 6. A Notion export did not go through
+Background: [0054](decisions/0054-notion-export-outbox.md).
 1. Open `/tracker/schedule`. A "Notion exports" strip above the week lists every export that is not done. It is hidden when there are none.
 2. **Failed** (for example Notion returned 404): fix the cause in Notion first, such as a student page that was moved or a teacher missing from Staff, then press Retry.
 3. **May have been updated**: today's task may already have the change. Open today's task in Notion, check the teacher's to-do, then press Retry. Retry rewrites from the schedule, so a duplicate to-do is the only thing to delete by hand.
