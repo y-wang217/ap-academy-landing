@@ -114,7 +114,9 @@ describe("handleIrisRun: the end of every run (AC20)", () => {
     expect(res.status).toBe(502);
     const body = await res.json();
     expect(body.result).toBe("failed");
-    expect(JSON.stringify(body)).not.toContain("403");
+    // The run id is a random UUID and can contain "403" by chance, so leave it out.
+    expect(JSON.stringify({ ...body, runId: undefined })).not.toContain("403");
+    expect(JSON.stringify(body)).not.toContain("Gmail");
     expect(w.db.runs[0]).toMatchObject({ result: "failed", error: "Gmail returned 403" });
     expect(w.db.settings).toMatchObject({ lastPollResult: "failed", lastError: "Gmail returned 403", leaseUntil: null });
     expect(w.db.calls.filter((c) => c === "purge")).toHaveLength(1);
