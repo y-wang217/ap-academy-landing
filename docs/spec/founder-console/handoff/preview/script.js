@@ -1,0 +1,11 @@
+// Offline, fictional design demonstration ONLY. Never connect this preview to real records.
+const leads=[{name:'Priya Sharma',detail:'Grade 11 Mathematics · Parent contact',reason:'NEW LEAD',time:'NEXT',dot:'var(--coral)'},{name:'James Chen',detail:'Grade 12 Physics · Callback',reason:'CALLBACK',time:'TODAY',dot:'var(--amber)'},{name:'Aisha Khan',detail:'Grade 11 Chemistry · After trial',reason:'POST-TRIAL',time:'TODAY',dot:'var(--cyan)'},{name:'Michael Tan',detail:'Grade 12 Functions · Follow-up',reason:'FOLLOW-UP',time:'TOMORROW',dot:'var(--pink)'},{name:'Sarah Wilson',detail:'Grade 11 Biology · Earlier lead',reason:'OLDER',time:'LATER',dot:'var(--pink)'}];
+let current=0;
+const $=s=>document.querySelector(s);
+function renderLead(){const l=leads[current];$('#lead-name').textContent=l.name;$('#lead-detail').textContent=l.detail;document.querySelector('.focus-meta .eyebrow').textContent=`PRIORITY 0${current+1} · ${l.reason}`;$('#queue-list').innerHTML=leads.filter((_,i)=>i!==current).slice(0,3).map((x)=>`<div class="lead-row"><i style="background:${x.dot}"></i><span><b>${x.name}</b><small>${x.detail}</small></span><em>${x.time}</em></div>`).join('');}
+$('#advance').addEventListener('click',()=>{current=(current+1)%leads.length;renderLead()});
+function switchMode(mode){for(const view of document.querySelectorAll('.mode-view'))view.classList.toggle('shown',view.id===mode);for(const b of document.querySelectorAll('[data-mode]')){const active=b.dataset.mode===mode;b.classList.toggle('selected',active);b.classList.toggle('active',active);if(b.getAttribute('role')==='tab')b.setAttribute('aria-selected',String(active));}$('#mode-heading').textContent=mode.toUpperCase();}
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>switchMode(b.dataset.mode)));
+const heights=[32,45,34,55,68,42,77,59,42,36,70,80,54,65,88,70,77,60];
+for(const key of ['#bars','#op-bars']){const el=$(key);el.innerHTML=heights.map((h,i)=>`<i style="height:${key==='#bars'?h:(heights[(i+6)%heights.length]*.75)}%;opacity:${i%4===0?'.7':'1'}"></i>`).join('')}
+function setClock(){const f=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',hour:'2-digit',minute:'2-digit',hour12:false});$('#clock').textContent=f.format(new Date());}setClock();setInterval(setClock,60000);renderLead();
