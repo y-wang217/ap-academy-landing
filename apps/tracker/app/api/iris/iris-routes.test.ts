@@ -29,10 +29,10 @@ function fakeReader(over: Partial<IrisReader> = {}) {
     getSettings: spy("getSettings", { paused: true, mailbox: null, lastPollAt: null, lastPollResult: null, lastError: null, confidenceThreshold: 0.85 }),
     lastRun: spy("lastRun", null),
     listNeedsYou: spy("listNeedsYou", [
-      { id: "m1", gmailThreadId: "g1", fromEmail: "ann@example.com", subject: "Question", snippet: "Hi", receivedAt: "2026-10-20T10:00:00Z", state: "escalated" as const, escalationReason: "unknown_sender", notionStudentIds: [] },
+      { id: "m1", gmailThreadId: "g1", fromEmail: "ann@example.com", subject: "Question", snippet: "Hi", receivedAt: "2026-10-20T10:00:00Z", state: "escalated" as const, escalationReason: "unknown_sender", intent: null, flags: [], notionStudentIds: [] },
     ]),
     listRecent: spy("listRecent", [
-      { id: "m2", gmailThreadId: "g2", fromEmail: "pat@example.com", subject: "Re: Tuesday", snippet: "ok", receivedAt: "2026-10-20T11:00:00Z", state: "matched" as const, escalationReason: null, notionStudentIds: [S1] },
+      { id: "m2", gmailThreadId: "g2", fromEmail: "pat@example.com", subject: "Re: Tuesday", snippet: "ok", receivedAt: "2026-10-20T11:00:00Z", state: "matched" as const, escalationReason: null, intent: null, flags: [], notionStudentIds: [S1] },
     ]),
     updatePaused: spy("updatePaused", 1),
     getMessage: spy("getMessage", DETAIL as MessageDetail | null),

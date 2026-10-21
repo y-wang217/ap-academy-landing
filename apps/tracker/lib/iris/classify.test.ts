@@ -10,7 +10,7 @@ const ok = (parsed: unknown, stop = "end_turn") => ({ model: AI_MODEL, stop_reas
 const wire = { intents: ["general_question"], primary: "general_question", confidence: 0.92, flags: [], child_name: "", summary: "Asks about Tuesday." };
 
 function client(result: unknown | (() => never)) {
-  const parse = vi.fn(async (_body: unknown, _opts?: unknown) => (typeof result === "function" ? (result as () => never)() : result));
+  const parse = vi.fn<(body: unknown, opts?: unknown) => Promise<unknown>>(async () => (typeof result === "function" ? (result as () => never)() : result));
   return { c: { beta: { messages: { parse } } } as unknown as ClassifyClient, parse };
 }
 const headers = new Headers();

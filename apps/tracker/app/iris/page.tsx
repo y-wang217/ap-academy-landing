@@ -8,16 +8,18 @@ import { createPeopleStore } from "@/lib/data/people";
 import { irisMailbox } from "@/lib/iris/config";
 import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { loadInbox, type InboxRow } from "@/lib/iris/handlers";
-import { IRIS_TEXT, ageText, gmailThreadUrl, stateLabel } from "@/lib/view/iris-text";
+import { IRIS_TEXT, ageText, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
 
 function Row({ row, now, mailbox }: { row: InboxRow; now: number; mailbox: string | null }) {
   return (
     <li className="flex flex-col gap-1 py-2 text-sm" data-message={row.id}>
-      <span className="font-medium">
-        {row.family} · {row.subject ?? "(no subject)"} · {ageText(row.receivedAt, now)} · {stateLabel(row.state, row.escalationReason)}
-      </span>
+      {/* Same app: next/link to the message page (REQ-43). */}
+      <Link href={`/iris/messages/${row.id}`} className="font-medium underline-offset-2 hover:underline">
+        {row.family} · {row.subject ?? "(no subject)"} · {ageText(row.receivedAt, now)} · {row.intent ? `${intentLabel(row.intent)} · ` : ""}
+        {stateLabel(row.state, row.escalationReason, { flags: row.flags, intent: row.intent })}
+      </Link>
       {row.snippet && <span className="text-text-muted">&ldquo;{row.snippet}&rdquo;</span>}
       {/* Plain anchor: Gmail is outside the app. */}
       <a href={gmailThreadUrl(mailbox, row.gmailThreadId)} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">

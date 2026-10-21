@@ -1,5 +1,7 @@
 import { getServiceClient } from "@ap-academy/db/service";
+import { aiConfigured } from "@/lib/ai/config";
 import { createIrisStore } from "@/lib/data/iris";
+import { classifyMessage } from "@/lib/iris/classify";
 import { readGmailConfig, readIrisRunEnv } from "@/lib/iris/config";
 import { gmailPort } from "@/lib/iris/gmail";
 import { handleIrisRun } from "@/lib/iris/handlers";
@@ -15,7 +17,8 @@ export const maxDuration = 60;
  * secret, because the tracker's proxy lets this one path through without a
  * session. The second of exactly two importers of the service-role client: it
  * writes one org's `iris` rows with it, and reads the family directory from
- * Notion once per run.
+ * Notion once per run. With ANTHROPIC_API_KEY set it then classifies matched
+ * mail with Claude (REQ-43).
  */
 export async function POST(request: Request) {
   return handleIrisRun({
@@ -31,6 +34,7 @@ export async function POST(request: Request) {
         gmail: gmailPort(gmail),
         directory: () => fetchFamilyDirectory(students),
         mailbox: gmail.mailbox,
+        classify: aiConfigured() ? classifyMessage : null,
       };
     },
   });

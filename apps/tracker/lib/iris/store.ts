@@ -11,12 +11,14 @@ export type IrisSettings = {
   orgId: string;
   paused: boolean;
   retentionDays: number;
+  /** Under this confidence a classification escalates (REQ-43). */
+  confidenceThreshold: number;
   lastPollAt: string | null;
   lastPollResult: PollResult | null;
   lastError: string | null;
 };
 
-export type MessageState = "received" | "matched" | "escalated" | "failed";
+export type MessageState = "received" | "matched" | "classified" | "escalated" | "failed";
 
 export type StoredThread = {
   id: string;
@@ -70,9 +72,36 @@ export type MessageInsert = {
   purgeAt: string;
 };
 
-export type MessagePatch = Partial<Pick<MessageInsert, "bodyText" | "bodyTruncated" | "state" | "stateChangedAt" | "escalationReason" | "handledAt" | "retryCount" | "lastError">>;
+export type MessagePatch = Partial<
+  Pick<MessageInsert, "bodyText" | "bodyTruncated" | "state" | "stateChangedAt" | "escalationReason" | "policyVersion" | "handledAt" | "retryCount" | "lastError"> & {
+    intent: string | null;
+    confidence: number | null;
+    flags: string[];
+  }
+>;
 
 export type RetryableMessage = { id: string; gmailMessageId: string; threadId: string; retryCount: number; lastError: string | null };
+
+/** A matched inbound message waiting for the classifier (REQ-43). */
+export type ClassifiableMessage = { id: string; threadId: string; receivedAt: string; bodyText: string | null; retryCount: number };
+
+/** One earlier row of a thread, as the classifier's history line is built from it. */
+export type ThreadHistoryRow = { receivedAt: string; direction: "inbound" | "outbound"; intent: string | null; snippet: string | null };
+
+/** One iris.ai_calls row: tokens and outcome, never prompt or answer text. */
+export type AiCallRecord = {
+  messageId: string | null;
+  purpose: "classify";
+  model: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  policyVersion: number;
+  outcome: "ok" | "refused" | "error";
+  error: string | null;
+};
+
+/** Event detail: ids, states, reason codes and code lists only. */
+export type EventDetail = Record<string, string | number | boolean | null | string[]>;
 
 export type RunRecord = {
   startedAt: string;
@@ -81,6 +110,7 @@ export type RunRecord = {
   seen: number;
   stored: number;
   matched: number;
+  classified: number;
   escalated: number;
   skipped: number;
   failed: number;
@@ -104,9 +134,14 @@ export interface IrisStore {
   insertMessage(m: MessageInsert): Promise<{ inserted: boolean; id: string | null }>;
   /** Inbound messages at `received` with retry_count below the cap, oldest first. */
   listRetryable(maxRetries: number, limit: number): Promise<RetryableMessage[]>;
+  /** Inbound messages at `matched` with retry_count below the cap, oldest first (REQ-43). */
+  listClassifiable(maxRetries: number, limit: number): Promise<ClassifiableMessage[]>;
+  /** The thread's student ids, and up to `limit` of its messages received before `before`, oldest first. */
+  threadContext(threadId: string, before: string, limit: number): Promise<{ studentIds: string[]; history: ThreadHistoryRow[] }>;
+  insertAiCall(c: AiCallRecord): Promise<void>;
   updateMessage(id: string, patch: MessagePatch): Promise<void>;
   /** detail holds ids, states and reason codes only. */
-  insertEvent(e: { kind: string; messageId: string | null; detail: Record<string, string | number | boolean | null> }): Promise<void>;
+  insertEvent(e: { kind: string; messageId: string | null; detail: EventDetail }): Promise<void>;
   insertRun(r: RunRecord): Promise<string>;
   /** iris.purge_expired: the number of rows deleted. */
   purge(): Promise<number>;
