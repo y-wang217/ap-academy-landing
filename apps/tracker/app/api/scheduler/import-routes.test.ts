@@ -369,10 +369,11 @@ describe("routes and source scans (AC18, AC4, AC21)", () => {
       expect(src, file).not.toMatch(/6300f58a|payouts?\b/i);
     }
   });
-  it("only billing.ts, lessons.ts, staff.ts, students.ts and work.ts call Notion; only students.ts (Weekly Schedule), work.ts (Work, Work Log) and lessons.ts (Lessons, REQ-39) write", () => {
+  it("only billing.ts, lessons.ts, parents.ts, staff.ts, students.ts and work.ts call Notion; only students.ts (Weekly Schedule), work.ts (Work, Work Log) and lessons.ts (Lessons, REQ-39) write", () => {
     const hits = walk(root).filter((f) => !f.includes("/node_modules/") && !f.includes("/.next/") && readFileSync(f, "utf8").includes("api.notion.com")).map((f) => f.slice(root.length + 1)).sort();
-    expect(hits).toEqual(["lib/notion/billing.ts", "lib/notion/lessons.ts", "lib/notion/staff.ts", "lib/notion/students.ts", "lib/notion/work.ts"]);
+    expect(hits).toEqual(["lib/notion/billing.ts", "lib/notion/lessons.ts", "lib/notion/parents.ts", "lib/notion/staff.ts", "lib/notion/students.ts", "lib/notion/work.ts"]);
     expect(readFileSync(join(root, "lib/notion/staff.ts"), "utf8")).not.toMatch(/PATCH|PUT|DELETE/);
+    expect(readFileSync(join(root, "lib/notion/parents.ts"), "utf8")).not.toMatch(/PATCH|PUT|DELETE/);
     expect(readFileSync(join(root, "lib/notion/billing.ts"), "utf8")).not.toMatch(/PATCH|PUT|DELETE/);
   });
   it("REQ-39 AC13: lessons.ts never deletes, puts, archives or trashes, and uses only GET, POST and PATCH", () => {

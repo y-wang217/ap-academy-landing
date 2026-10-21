@@ -1,0 +1,68 @@
+# Iris operations (Iris 2/9)
+
+How to set up, run, pause and clean up Iris's read-only inbox (REQ-42,
+tracker ADRs 0057 to 0059, workspace ADR 0005). Iris starts paused and sends
+nothing in this slice.
+
+## One-time setup (Charlie, after migration 0024 is applied)
+
+1. **Google Cloud project and Gmail API.** Create or reuse an AP Academy
+   project and enable the Gmail API.
+2. **Service account and key.** Create the service account `iris-mail` and one
+   JSON key. Copy `client_email` and `private_key` into the tracker Vercel
+   project as `IRIS_GMAIL_CLIENT_EMAIL` and `IRIS_GMAIL_PRIVATE_KEY` (pasting
+   the key with literal `\n` is fine), then delete the local file.
+3. **Domain-wide delegation.** Enable it on the service account. In the
+   Workspace Admin console (Security, Access and data control, API controls,
+   Domain-wide delegation), add its client id with exactly
+   `https://www.googleapis.com/auth/gmail.readonly`. Nothing else: Iris has no
+   write path until Iris 8/9.
+4. **Tracker env vars** in the tracker Vercel project:
+   - `IRIS_GMAIL_MAILBOX=charlie@apacademy.ca`
+   - `IRIS_ORG_ID`: the same value as `DAILY_TASK_ORG_ID`
+   - `IRIS_CRON_SECRET`: a long random string
+   - `SUPABASE_SERVICE_ROLE_KEY` is already set for the daily task.
+5. **Supabase.** Under API settings, Exposed schemas, add `iris`. Until then
+   the run answers 503 `iris_unavailable` and the pages say "Could not load
+   Iris".
+6. **Repository secret and workflow.** Add the repository secret
+   `IRIS_CRON_SECRET` with the same value, then add
+   `.github/workflows/iris-poll.yml` (the YAML is in
+   [`docs/designs/REQ-42.md`](../../../docs/designs/REQ-42.md)). It calls the
+   run every 15 minutes.
+7. **Check.** Open `/tracker/iris/settings`. "Not set up" should be absent.
+   Press Run now: it answers "paused". Unpause once the privacy page is live
+   and families write to the mailbox.
+
+## What a run does
+
+Every 15 minutes, while unpaused: it lists `in:inbox category:primary
+newer_than:3d`, stores at most 50 new messages (oldest first, each once),
+matches each sender to a family in Students & Parents, and purges expired
+rows. Mail Gmail files under Updates or Promotions is not read. A Notion
+outage leaves new mail at "Waiting for Notion" with no body; the next run
+that reads Notion finishes it, and after three failed runs it shows "Failed".
+
+## Pause
+
+Press Pause on `/tracker/iris/settings`. A paused run reads no mail and
+writes nothing.
+
+## Delete a family's mail now
+
+Until Iris 4/9 adds a button: find the thread id in the inbox (or with
+`select id, subject from iris.threads where ...` in the SQL editor), then, in
+the SQL editor signed in as the org owner's role:
+
+```sql
+select iris.delete_thread('<thread id>');
+```
+
+`iris.delete_thread` deletes the thread and its messages, writes one
+`thread_deleted` event, and refuses anyone but the org owner. Everything else
+is purged on schedule: messages after 90 days, events after 365.
+
+## Rotate the key
+
+Create a new key for `iris-mail`, replace `IRIS_GMAIL_PRIVATE_KEY` in Vercel,
+redeploy, press Run now, then delete the old key in Google Cloud.

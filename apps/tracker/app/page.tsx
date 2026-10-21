@@ -130,6 +130,11 @@ export default async function TrackerHome() {
                 Setup
               </Link>
             )}
+            {viewer.role === "owner" && (
+              <Link href="/iris" className={secondaryButtonClass}>
+                Iris inbox
+              </Link>
+            )}
             {outside !== null && (
               <Link href="/schedule/availability" className={secondaryButtonClass}>
                 Teacher availability

@@ -44,4 +44,16 @@ export const TUNING = {
   peopleStaleMinutes: 120,
   /** Sync now is refused this soon after the last run started, so taps do not hammer Notion. */
   peopleSyncCooldownSeconds: 60,
+  /** Iris reads mail this many days back on every poll (REQ-42). */
+  irisPollWindowDays: 3,
+  /** New messages Iris fetches in one poll, oldest first. */
+  irisMaxMessagesPerRun: 50,
+  /** Longest message body Iris stores, in characters. */
+  irisBodyMaxChars: 20000,
+  /** Longest snippet Iris stores. */
+  irisSnippetChars: 200,
+  /** Polls that may fail to read the family directory before a message is marked failed. */
+  irisMaxRetries: 3,
+  /** The poll lease: a crashed run frees it after this long. */
+  irisPollLeaseSeconds: 300,
 } as const;
