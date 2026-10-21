@@ -1,7 +1,7 @@
 # Iris operations (Iris 2/9)
 
 How to set up, run, pause and clean up Iris's read-only inbox (REQ-42,
-tracker ADRs 0056 to 0058, workspace ADR 0005). Iris starts paused and sends
+tracker ADRs 0057 to 0059, workspace ADR 0005). Iris starts paused and sends
 nothing in this slice.
 
 ## One-time setup (Charlie, after migration 0024 is applied)

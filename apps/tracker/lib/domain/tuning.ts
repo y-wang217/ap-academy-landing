@@ -40,6 +40,10 @@ export const TUNING = {
   aiMaxFileBytes: 8 * 1024 * 1024,
   /** Longest edge of a photo sent to the model, in pixels. The API downscales past this anyway. */
   aiImageMaxEdge: 1568,
+  /** People copy (REQ-38): names older than this show "Names last updated ...". */
+  peopleStaleMinutes: 120,
+  /** Sync now is refused this soon after the last run started, so taps do not hammer Notion. */
+  peopleSyncCooldownSeconds: 60,
   /** Iris reads mail this many days back on every poll (REQ-42). */
   irisPollWindowDays: 3,
   /** New messages Iris fetches in one poll, oldest first. */

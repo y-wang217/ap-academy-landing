@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { isActiveTeachingStaff } from "../domain/staff";
 import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig } from "./config";
 
 /**
@@ -87,6 +88,56 @@ export async function fetchStaff(config: NotionConfig, fetcher: typeof fetch = f
     for (const raw of parsed.data.results) {
       const rec = Page.safeParse(raw);
       if (rec.success) out.push(parseStaffPage(raw));
+    }
+    if (!parsed.data.has_more || !parsed.data.next_cursor) return out;
+    cursor = parsed.data.next_cursor;
+  }
+  throw new NotionError("Too many Notion pages");
+}
+
+/** What the people sync copies of one Staff page (REQ-38, workspace ADR 0004). Never Email. */
+export type StaffSyncRecord = { id: string; name: string; subjects: string[]; active: boolean };
+
+const SYNC_PROPERTIES = ["Name", "Status", "Function", "Subjects"] as const;
+
+/**
+ * Every Staff page, asking Notion for Name, Status, Function and Subjects only
+ * (filter_properties). Status and Function are folded into one `active`
+ * boolean here and not returned. Same 50-page cap and errors as fetchStaff.
+ */
+export async function fetchStaffForSync(config: NotionConfig, fetcher: typeof fetch = fetch): Promise<StaffSyncRecord[]> {
+  const base = `${notionApiBaseOverride() ?? "https://api.notion.com"}/v1/data_sources/${config.dataSourceId}`;
+  const headers = { Authorization: `Bearer ${config.token}`, "Notion-Version": NOTION_VERSION };
+  const call = async (url: string, init: RequestInit) => {
+    try {
+      return await fetcher(url, { ...init, cache: "no-store" });
+    } catch {
+      throw new NotionError("Notion request failed");
+    }
+  };
+  const schemaRes = await call(base, { method: "GET", headers });
+  if (!schemaRes.ok) throw new NotionError(`Notion returned ${schemaRes.status}`, schemaRes.status);
+  const schema = z.object({ properties: z.record(z.string(), z.object({ id: z.string() })) }).safeParse(await schemaRes.json().catch(() => null));
+  if (!schema.success) throw new NotionError("Unexpected Notion response");
+  const ids = SYNC_PROPERTIES.map((n) => schema.data.properties[n]?.id);
+  if (ids.some((i) => !i)) throw new NotionError("Staff database is missing a needed property");
+  const query = ids.map((i) => `filter_properties[]=${i}`).join("&");
+
+  const out: StaffSyncRecord[] = [];
+  let cursor: string | undefined;
+  for (let guard = 0; guard < 50; guard++) {
+    const res = await call(`${base}/query?${query}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) }),
+    });
+    if (!res.ok) throw new NotionError(`Notion returned ${res.status}`, res.status);
+    const parsed = Response_.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new NotionError("Unexpected Notion response");
+    for (const raw of parsed.data.results) {
+      if (!Page.safeParse(raw).success) continue;
+      const rec = parseStaffPage(raw);
+      out.push({ id: rec.id, name: rec.name, subjects: rec.subjects, active: isActiveTeachingStaff(rec) });
     }
     if (!parsed.data.has_more || !parsed.data.next_cursor) return out;
     cursor = parsed.data.next_cursor;

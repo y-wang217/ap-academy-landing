@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(__dirname, "..", "..", "..");
 const DECISIONS = join(ROOT, "apps/tracker/docs/decisions");
 const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
-const ADRS = ["0056-iris-tracker-module.md", "0057-iris-message-retention.md", "0058-iris-gmail-read-only.md"];
+const ADRS = ["0057-iris-tracker-module.md", "0058-iris-message-retention.md", "0059-iris-gmail-read-only.md"];
 
 describe("Iris ADRs", () => {
   for (const file of ADRS) {

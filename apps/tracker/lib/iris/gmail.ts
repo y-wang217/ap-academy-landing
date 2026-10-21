@@ -6,7 +6,7 @@ import type { GmailPort } from "./intake";
 import type { GmailPart } from "./mime";
 
 /**
- * Gmail, read-only (REQ-42, tracker ADR 0058). A service account with
+ * Gmail, read-only (REQ-42, tracker ADR 0059). A service account with
  * domain-wide delegation acts as the mailbox. The JWT is signed with
  * node:crypto and every call is plain fetch with a 10 second timeout, parsed
  * with Zod. The only calls are messages.list and messages.get: Iris cannot

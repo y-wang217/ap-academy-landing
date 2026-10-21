@@ -22,6 +22,7 @@ Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 | `e2e/` | browser tests across apps | `sso/` (mock auth) and `tracker/` (Postgres, PostgREST 14.5, mock auth). |
 | `docs/adr/` | workspace-level decisions | App-level decisions live inside each app. |
 | `docs/spec/` | workspace-level prompts, committed verbatim before work begins | |
+| `docs/readiness.md` | findings register and audience gates, from merged to released | [`docs/readiness.md`](docs/readiness.md). Builder updates Production status when a card ships. Only Charlie releases a gate. |
 
 ## Where new work goes
 

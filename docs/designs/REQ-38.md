@@ -26,6 +26,7 @@ Card: https://app.notion.com/p/3fbd6ae73dd7818ba1faccf5f76aca96 (Feedback 9, Ris
 - AC16: (admin email) `toAdminStaff` takes `email` from the live `tracker.staff_links` row, or null. No email is copied from Notion.
 - AC17: (docs) a tracker ADR records the tables, the RPC, the cadence, which reads are local and which stay live, and the rollout step. `scheduler-operations.md` gains a "Names and the people sync" section. No UI string or doc added by this card has an em-dash.
 
+## Approach, migration, test plan, decisions
 ## Migration
 
 Copied from the card, with the shipped file name. The build notes below record where the file differs from this text.
@@ -62,7 +63,7 @@ As on the card: Notion readers `fetchStaffForSync` and `fetchStudentPeople`; pur
 
 ## Build notes
 
-- Migration number 0022 and tracker ADR 0053: 0018 to 0021 and ADRs 0050 to 0052 were taken by REQ-30 to REQ-33 when this was built (0021 went to REQ-33 setup_checks while this was in review).
+- Migration number 0022 and tracker ADR 0055 (built as 0053; at merge REQ-33 held 0053 on `main` and REQ-35 takes 0054): 0018 to 0021 and ADRs 0050 to 0052 were taken by REQ-30 to REQ-33 when this was built (0021 went to REQ-33 setup_checks while this was in review).
 - `write_audit()` keys rows by an `id` column, which these tables do not have, so the migration adds `tracker.write_audit_keyed(<key column>)` for the conditional audit triggers.
 - `apply_people_sync` checks `auth.role() = 'service_role'`; `supabase/tests/supabase-stub.sql` gains `auth.role()` as hosted Supabase has it.
 - The permission matrix (SQL test and doc) classifies the three new tables, as the matrix test requires for any new table.

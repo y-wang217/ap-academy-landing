@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Notice, Page, secondaryButtonClass } from "@/components/ui";
 import { getViewer } from "@/lib/data/queries";
+import { getDb } from "@/lib/data/client";
+import { createPeopleStore } from "@/lib/data/people";
 import { irisMailbox } from "@/lib/iris/config";
 import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { loadInbox, type InboxRow } from "@/lib/iris/handlers";
-import { getStudentNames } from "@/lib/notion/cached";
 import { IRIS_TEXT, ageText, gmailThreadUrl, stateLabel } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,12 @@ function Row({ row, now, mailbox }: { row: InboxRow; now: number; mailbox: strin
 
 /** Charlie's Iris inbox (REQ-42 AC26). Owner only: anyone else goes home before any Iris read. */
 export default async function IrisInboxPage() {
-  const inbox = await loadInbox({ ...realIrisAdminDeps(), studentNames: async () => new Map(await getStudentNames()) });
+  // Names come from the local people copy on the owner's own client (REQ-38); the page never reads Notion.
+  const studentNames = async (orgId: string) => {
+    const db = await getDb();
+    return db ? createPeopleStore(db.tracker, orgId).studentNames() : new Map<string, string>();
+  };
+  const inbox = await loadInbox({ ...realIrisAdminDeps(), studentNames });
   if (inbox.kind === "denied") redirect("/");
   const viewer = await getViewer();
   const email = viewer.kind === "signed_out" || viewer.kind === "not_configured" ? undefined : viewer.email;

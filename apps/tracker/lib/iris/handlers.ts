@@ -169,8 +169,8 @@ function pageGate(who: SchedulerIdentity): { kind: "denied" } | { kind: "error" 
   return { kind: "ok", orgId: who.orgId };
 }
 
-/** The /iris page. Family labels come from the cached names-only map; no parent field is read on page load. */
-export async function loadInbox(deps: IrisAdminDeps & { studentNames: () => Promise<Map<string, string>> }): Promise<InboxResult> {
+/** The /iris page. Family labels come from the local people copy (REQ-38), read for the owner's org; no parent field is read on page load. */
+export async function loadInbox(deps: IrisAdminDeps & { studentNames: (orgId: string) => Promise<Map<string, string>> }): Promise<InboxResult> {
   const gate = pageGate(await deps.identity());
   if (gate.kind !== "ok") return gate;
   try {
@@ -179,7 +179,7 @@ export async function loadInbox(deps: IrisAdminDeps & { studentNames: () => Prom
       reader.getSettings(),
       reader.listNeedsYou(50),
       reader.listRecent(50),
-      deps.studentNames().catch(() => new Map<string, string>()),
+      deps.studentNames(gate.orgId).catch(() => new Map<string, string>()),
     ]);
     if (!settings) return { kind: "error" };
     const label = (m: InboxMessage): InboxRow => ({

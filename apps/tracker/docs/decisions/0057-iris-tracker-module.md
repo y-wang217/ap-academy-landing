@@ -1,4 +1,4 @@
-# 0056: Iris is a tracker module with its own `iris` schema
+# 0057: Iris is a tracker module with its own `iris` schema
 Status: accepted
 Date: 2026-10-20
 

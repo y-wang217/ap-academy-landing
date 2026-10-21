@@ -28,6 +28,7 @@ export function saveErrorMessage(f: ApiFailure, teacherName: string): string {
   if (f.stale) return f.message;
   if (f.error === "booking_conflict") return bookingMessage(f.problems ?? [], f.more ?? 0, teacherName);
   if (f.error === "past_occurrence") return "Not saved: that class has already started or passed.";
+  if (f.error === "has_outcome") return f.message;
   if (f.error === "moved_occurrence") return "Not saved: this class was already moved, so change only this class.";
   return `Not saved. ${f.message}`;
 }

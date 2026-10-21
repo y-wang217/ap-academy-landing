@@ -2,6 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AllTeachersWeek } from "@/components/scheduler/all-teachers-week";
 import { DailyTaskStatus, type DailyTaskView } from "@/components/scheduler/daily-task-status";
+import { PeopleSyncStatus } from "@/components/scheduler/people-sync-status";
+import { PeopleFreshness } from "@/components/people-freshness";
+import type { SyncRunsView } from "@/lib/view/people-freshness";
 import { WeekControls } from "@/components/scheduler/week-controls";
 import { WeekEditor } from "@/components/scheduler/week-editor";
 import { WeekGrid } from "@/components/scheduler/week-grid";
@@ -49,14 +52,23 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   if (who.scope === "admin") {
     teachers = (await deps.fetchStaff().catch(() => [])).filter(isActiveTeachingStaff).map((s) => ({ id: s.id, name: s.name }));
   }
-  // Charlie's per-teacher week can book and move classes; his student picker is names only, loaded on the server.
+  // Charlie's per-teacher week can book and move classes; his student picker is active students only (REQ-38 AC14), loaded on the server.
   let students: { id: string; name: string }[] | null = null;
   if (who.scope === "admin" && !all) {
     try {
-      const names = deps.studentNames ? await deps.studentNames() : null;
-      students = names ? [...names].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)) : null;
+      students = deps.activeStudents ? await deps.activeStudents() : null;
     } catch {
       students = null;
+    }
+  }
+  // Charlie's people sync line (REQ-38 AC15).
+  let syncRuns: SyncRunsView | null = null;
+  if (who.scope === "admin" && deps.peopleStore) {
+    try {
+      const runs = await (await deps.peopleStore()).lastRuns();
+      syncRuns = { lastOk: runs.lastOk, lastFailure: runs.lastFailure };
+    } catch {
+      syncRuns = null;
     }
   }
   // Charlie's one-line status for today's Notion task (REQ-8). Nothing is shown when Work is not wired in.
@@ -69,23 +81,34 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       daily = null;
     }
   }
+  // Lesson logging (REQ-39): what the class dialog offers this viewer.
+  const lessonMode = !body.lessonsEnabled ? "off" as const : !body.outcomesLoaded ? "unloaded" as const : who.scope === "admin" ? "owner" as const : "teacher" as const;
   const rows = body.teachers.map((t) => ({
     staff: { id: t.staff.id, name: t.staff.name },
     days: t.days,
     totals: t.totals,
-    occurrences: t.occurrences.map((o) => ({ ...o })),
+    occurrences: t.occurrences.map((o) => ({ ...o, lessonMode })),
   }));
   const shown = rows[0];
   const title = who.scope === "teacher" ? "Your week" : all ? "All teachers" : shown ? `${shown.staff.name}'s week` : "Schedule";
 
   return shell(
     <>
+      <PeopleFreshness load={deps.peopleSyncedAt} />
       {who.scope === "admin" && (
-        <Link href="/scheduler/setup" className={`${linkClass} text-sm`}>
-          Setup checklist
-        </Link>
+        <div className="flex flex-wrap gap-4">
+          <Link href="/scheduler/setup" className={`${linkClass} text-sm`}>
+            Setup checklist
+          </Link>
+          {body.lessonsEnabled && (
+            <Link href="/schedule/lessons" className={`${linkClass} text-sm`}>
+              Unlinked lessons
+            </Link>
+          )}
+        </div>
       )}
       {daily && <DailyTaskStatus key={daily.state} date={body.today} time={process.env.DAILY_TASK_TIME || "06:00"} initial={daily} />}
+      {syncRuns && <PeopleSyncStatus initial={syncRuns} />}
       <WeekControls weekStart={body.weekStart} today={body.today} staffId={shown?.staff.id} all={all} teachers={teachers} />
       <h2 className="text-lg font-medium">Week of {formatDayHeading(body.weekStart)}, {body.weekStart.slice(0, 4)}</h2>
       {!body.namesLoaded && <Notice tone="warn">Student names could not be loaded.</Notice>}

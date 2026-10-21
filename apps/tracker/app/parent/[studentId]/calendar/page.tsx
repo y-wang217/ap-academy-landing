@@ -1,9 +1,10 @@
 import { ParentCalendar } from "@/components/parent-calendar";
+import { PeopleFreshness } from "@/components/people-freshness";
 import { Card, Empty, Notice } from "@/components/ui";
 import { loadChildCalendar, teacherNames } from "@/lib/data/parent-calendar";
+import { createPeopleStore } from "@/lib/data/people";
 import { createScheduleStore } from "@/lib/data/schedule";
 import { buildMonth, parseMonth } from "@/lib/domain/schedule/month";
-import { getStaffList } from "@/lib/notion/cached";
 import { parentChild } from "@/lib/pages";
 import { todayIso } from "@/lib/time";
 
@@ -43,16 +44,21 @@ export default async function ParentCalendarPage({ params, searchParams }: { par
     now: new Date().toISOString(),
   });
   const shown = [...view.weeks.flat().flatMap((d) => d.classes), ...view.thisWeek].map((c) => c.staffId);
-  const staff = await teacherNames([...new Set(shown)], getStaffList);
+  // Teacher names from the local people copy on the parent's own client (REQ-38): RLS gives only the child's teachers.
+  const people = createPeopleStore(viewer.db.tracker, child.orgId);
+  const staff = await teacherNames([...new Set(shown)], people.listStaff);
 
   return (
-    <ParentCalendar
-      key={view.month}
-      view={view}
-      path={`/parent/${child.id}/calendar`}
-      names={staff.names}
-      namesFailed={staff.failed}
-      header={data.header}
-    />
+    <>
+      <PeopleFreshness load={people.syncedAt} />
+      <ParentCalendar
+        key={view.month}
+        view={view}
+        path={`/parent/${child.id}/calendar`}
+        names={staff.names}
+        namesFailed={staff.failed}
+        header={data.header}
+      />
+    </>
   );
 }

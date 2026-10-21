@@ -36,7 +36,7 @@ export const config = {
   // assets don't need a session. The two scheduled-run endpoints are the only
   // API paths with no session: each authenticates itself with a bearer secret
   // (daily-task/run, REQ-8, tracker ADR 0039; iris/run, REQ-42, tracker ADR
-  // 0056). The `$` keeps api/iris/run-now inside the matcher, and every other
+  // 0057). The `$` keeps api/iris/run-now inside the matcher, and every other
   // path still redirects when signed out.
   //
   // Prefetches skip the proxy. Next 16 prefetches every link in view, and on

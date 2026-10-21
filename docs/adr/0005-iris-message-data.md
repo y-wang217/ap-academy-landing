@@ -25,7 +25,7 @@ same string as a Parent Email when the sender is a parent. Left as is, ADR
 - The From address and display name of a stored email are message data, not
   a synced people field. They come from the email header, live in the `iris`
   schema for at most 90 days, are readable by the org owner only, and are
-  purged on schedule (tracker ADR 0057).
+  purged on schedule (tracker ADR 0058).
 - Mail from an unknown or automated sender is stored without a body.
 - ADR 0004's decision text is unchanged. Its status line now reads
   "Accepted, amended in part by ADR 0005", and its Readers and writers table

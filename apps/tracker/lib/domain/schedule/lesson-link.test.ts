@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isLinkable, occurrenceRef, parseOccurrenceRef } from "./lesson-link";
+import { isLinkable, lessonHours, occurrenceRef, parseOccurrenceRef, planLog, reconcile, type LessonRow } from "./lesson-link";
 import { expandOccurrences, planSplit, type ClassException, type ClassSeries } from "./recurrence";
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -61,7 +61,7 @@ describe("AC3: linkable", () => {
   });
 });
 
-describe("AC4: extension point only", () => {
+describe("REQ-39: the link is wired, and still pure (supersedes ADR 0040 AC4)", () => {
   const dir = join(__dirname, "..", "..", "..");
   const source = readFileSync(join(__dirname, "lesson-link.ts"), "utf8");
   it("is pure and names no Lessons data source", () => {
@@ -70,17 +70,83 @@ describe("AC4: extension point only", () => {
     expect(source).not.toMatch(/6300f58a/);
     expect(source).toMatch(/export type LessonLinkPort/);
   });
-  it("is imported by no non-test file", () => {
+  it("is imported only by the lesson handlers, the Notion adapter, the outcome store and the week files", () => {
     const hits: string[] = [];
     const walk = (d: string) => {
       for (const name of readdirSync(d)) {
         if (name === "node_modules" || name.startsWith(".")) continue;
         const p = join(d, name);
         if (statSync(p).isDirectory()) walk(p);
-        else if (/\.(ts|tsx)$/.test(name) && !/\.test\.|lesson-link\.ts$/.test(name) && /lesson-link/.test(readFileSync(p, "utf8"))) hits.push(p);
+        else if (/\.(ts|tsx)$/.test(name) && !/\.test\.|\.fake\.|lesson-link\.ts$/.test(name) && /lesson-link/.test(readFileSync(p, "utf8"))) hits.push(p.slice(dir.length + 1));
       }
     };
     for (const sub of ["app", "lib", "components"]) { try { walk(join(dir, sub)); } catch { /* absent */ } }
-    expect(hits).toEqual([]);
+    const allowed = [
+      "lib/scheduler/lesson-handlers.ts", "lib/notion/lessons.ts", "lib/scheduler/outcome-store.ts", "lib/data/outcomes.ts",
+      "lib/scheduler/schedule-handlers.ts", "lib/scheduler/deps.ts",
+    ];
+    for (const h of hits) expect(allowed, h).toContain(h);
+    expect(hits).toContain("lib/scheduler/lesson-handlers.ts");
+    expect(hits).toContain("lib/notion/lessons.ts");
+  });
+});
+
+describe("REQ-39: lessonHours", () => {
+  it("rounds minutes / 60 to 2 decimals", () => {
+    expect(lessonHours(60)).toBe(1);
+    expect(lessonHours(50)).toBe(0.83);
+    expect(lessonHours(90)).toBe(1.5);
+    expect(lessonHours(55)).toBe(0.92);
+  });
+});
+
+describe("REQ-39: planLog", () => {
+  const now = Date.parse("2026-10-19T12:00:00Z");
+  const pending = (secondsAgo: number) => ({ outcome: "delivered" as const, notionLessonId: null, claimedAt: new Date(now - secondsAgo * 1000).toISOString() });
+  it("covers every state", () => {
+    expect(planLog(null, now)).toBe("claim");
+    expect(planLog(pending(10), now)).toBe("busy");
+    expect(planLog(pending(61), now)).toBe("resume");
+    expect(planLog({ outcome: "delivered", notionLessonId: NEW_ID, claimedAt: null }, now)).toBe("replay");
+    expect(planLog({ outcome: "no_show", notionLessonId: null, claimedAt: null }, now)).toBe("conflict");
+  });
+  it("a pending row with no claim time is stale", () => {
+    expect(planLog({ outcome: "delivered", notionLessonId: null, claimedAt: null }, now)).toBe("resume");
+  });
+});
+
+describe("REQ-39: reconcile", () => {
+  const STAFF = series.staffId;
+  const STUDENT = series.studentId;
+  const OTHER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const occs = expandOccurrences([series], [], { from: "2026-10-19", to: "2026-10-26" });
+  const lesson = (id: string, date: string, staff = STAFF, student = STUDENT): LessonRow => ({
+    id, date, staffIds: [staff.replaceAll("-", "")], studentIds: [student], ref: "",
+  });
+  const L1 = "d1d1d1d1-d1d1-4d1d-8d1d-d1d1d1d1d1d1";
+  const L2 = "d2d2d2d2-d2d2-4d2d-8d2d-d2d2d2d2d2d2";
+  const L3 = "d3d3d3d3-d3d3-4d3d-8d3d-d3d3d3d3d3d3";
+  it("matches only on equal teacher, student and date (dash-insensitive IDs)", () => {
+    const r = reconcile(occs, [], [lesson(L1, "2026-10-19"), lesson(L2, "2026-10-19", STAFF, OTHER), lesson(L3, "2026-10-20")]);
+    expect(r.unlinked.map((u) => [u.occurrence.date, u.candidates.map((c) => c.id)])).toEqual([["2026-10-19", [L1]], ["2026-10-26", []]]);
+    expect(r.doubles).toEqual([]);
+  });
+  it("lists two candidates and chooses neither", () => {
+    const r = reconcile(occs.slice(0, 1), [], [lesson(L1, "2026-10-19"), lesson(L2, "2026-10-19")]);
+    expect(r.unlinked[0].candidates.map((c) => c.id)).toEqual([L1, L2]);
+  });
+  it("a delivered occurrence's same-day row lands in doubles; a no-show's leaves the list", () => {
+    const r = reconcile(occs, [
+      { seriesId: ID, originalDate: "2026-10-19", outcome: "delivered" },
+      { seriesId: ID, originalDate: "2026-10-26", outcome: "no_show" },
+    ], [lesson(L1, "2026-10-19")]);
+    expect(r.unlinked).toEqual([]);
+    expect(r.doubles.map((d) => [d.occurrence.date, d.lesson.id])).toEqual([["2026-10-19", L1]]);
+  });
+  it("a moved occurrence matches on its new date", () => {
+    const moved: ClassException = { seriesId: ID, originalDate: "2026-10-19", kind: "moved", newDate: "2026-10-21", newStartTime: "16:00" };
+    const [o] = expandOccurrences([series], [moved], { from: "2026-10-19", to: "2026-10-25" });
+    const r = reconcile([o], [], [lesson(L1, "2026-10-19"), lesson(L2, "2026-10-21")]);
+    expect(r.unlinked[0].candidates.map((c) => c.id)).toEqual([L2]);
   });
 });

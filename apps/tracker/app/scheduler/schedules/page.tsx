@@ -1,4 +1,5 @@
 import { Notice, Page } from "@/components/ui";
+import { PeopleFreshness } from "@/components/people-freshness";
 import { ScheduleImport } from "@/components/scheduler/schedule-import";
 import { realDeps } from "@/lib/scheduler/deps";
 
@@ -7,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 /** Admin page for the Weekly Schedule import (REQ-4). Anyone else sees one notice; the APIs also refuse them. */
 export default async function SchedulesPage() {
-  const identity = await realDeps().identity();
+  const deps = realDeps();
+  const identity = await deps.identity();
   if (identity.scope !== "admin") {
     return (
       <Page title="Not available">
@@ -17,6 +19,7 @@ export default async function SchedulesPage() {
   }
   return (
     <Page title="Weekly schedules">
+      <PeopleFreshness load={async () => (await deps.peopleStore()).syncedAt()} />
       <ScheduleImport />
     </Page>
   );

@@ -24,6 +24,16 @@ describe("api-client (AC11)", () => {
     const c = createApiClient(vi.fn(async () => json(409, { error: "stale" })) as never);
     expect(await c.send("PATCH", "/windows/1", "k", {})).toMatchObject({ ok: false, stale: true });
   });
+  it("REQ-39: 409 has_outcome is not stale and keeps its code", async () => {
+    const c = createApiClient(vi.fn(async () => json(409, { error: "has_outcome" })) as never);
+    expect(await c.send("POST", "/classes/x/occurrences/2026-10-19/cancel", "k", {})).toMatchObject({ ok: false, stale: false, error: "has_outcome", message: "This class is already logged or marked. Ask Charlie to clear it first." });
+  });
+  it("REQ-39: act sends no requestId and returns refusals by name", async () => {
+    const bodies: unknown[] = [];
+    const c = createApiClient(vi.fn(async (_u: string, init: RequestInit) => { bodies.push(JSON.parse(init.body as string)); return json(409, { error: "log_in_progress" }); }) as never);
+    expect(await c.act("POST", "/lessons", { seriesId: "s", originalDate: "2026-10-12" })).toEqual({ ok: false, status: 409, error: "log_in_progress" });
+    expect(bodies).toEqual([{ seriesId: "s", originalDate: "2026-10-12" }]);
+  });
   it("a retry of the same action reuses its requestId; success frees it", async () => {
     const seen: string[] = [];
     let fail = true;

@@ -5,7 +5,7 @@ import type { Database } from "./types.ts";
 /**
  * A client that uses the Supabase service role key, which BYPASSES RLS. It
  * exists for two scheduled-run routes in the tracker (daily-task/run, REQ-8,
- * tracker ADR 0039; iris/run, REQ-42, tracker ADR 0056), each of which
+ * tracker ADR 0039; iris/run, REQ-42, tracker ADR 0057), each of which
  * authenticates itself with a bearer secret and works on one org's rows.
  * Never import it from anything a browser can reach, and never from a route
  * that acts for a signed-in user; the tracker has a source-scan test that

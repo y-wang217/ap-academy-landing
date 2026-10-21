@@ -56,7 +56,7 @@ How it runs once set up:
 | the approver sets Revise | `ap-design` | same |
 | the bot reviewer requests changes (under 3 rounds) | `ap-build` | `scripts/fire-routine.mjs` from `claude-review.yml` |
 | a `req/` PR merges | `ap-design` (its sweep marks Done and unblocks dependents) | the routine's GitHub trigger |
-| end of design-next: Approved or Changes Requested cards wait and WIP allows | `ap-build` | `workflow_dispatch` on `kick.yml`, inputs `routine`, `chain`, `from`, `card`; the workflow runs `scripts/fire-routine.mjs` with the secrets |
+| end of design-next: Approved or Changes Requested cards wait and WIP allows (fewer Building cards with an empty PR property than `wip_limit`) | `ap-build` | `workflow_dispatch` on `kick.yml`, inputs `routine`, `chain`, `from`, `card`; the workflow runs `scripts/fire-routine.mjs` with the secrets |
 | end of design-next: Ready or Revise cards remain | `ap-design` | `workflow_dispatch` on `kick.yml` |
 | end of build-next: Ready or Revise cards remain | `ap-design` | `workflow_dispatch` on `kick.yml` |
 

@@ -1,4 +1,4 @@
-# 0058: Gmail through a service account, read-only, with no SDK
+# 0059: Gmail through a service account, read-only, with no SDK
 Status: accepted
 Date: 2026-10-20
 

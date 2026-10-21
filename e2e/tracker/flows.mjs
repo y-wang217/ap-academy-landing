@@ -80,7 +80,7 @@ try {
   const fresh = await setupRows(teacher);
   check("REQ-33: seven rows in order", JSON.stringify(fresh.map((r) => r.key)) === JSON.stringify(SETUP_ORDER) && JSON.stringify(fresh.map((r) => r.title)) === JSON.stringify(SETUP_TITLES), JSON.stringify(fresh.map((r) => r.title)));
   const freshTeachers = rowOf(fresh, "teachers");
-  check("REQ-33: fresh Teachers approved is Partial, 1 of 2, missing Kuby Test", sameRow(freshTeachers, "partial", "1 of 2 active teachers linked. 0 signed in.") && freshTeachers.text.includes("Missing: Kuby Test"), JSON.stringify(freshTeachers));
+  check("REQ-33: fresh Teachers approved is Missing until the first people sync (REQ-38)", sameRow(freshTeachers, "missing", "No active teachers in Notion."), JSON.stringify(freshTeachers));
   check("REQ-33: fresh Teacher availability is Missing, 0 of 1", sameRow(rowOf(fresh, "availability"), "missing", "0 of 1 linked teachers entered hours."), JSON.stringify(rowOf(fresh, "availability")));
   check("REQ-33: fresh Student schedules adopted is Missing with no Weekly Schedule yet", sameRow(rowOf(fresh, "schedules"), "missing", "No active students have a Weekly Schedule yet.") && rowOf(fresh, "schedules").text.includes("Students with no Weekly Schedule are adopted by their first booking."), JSON.stringify(rowOf(fresh, "schedules")));
   check("REQ-33: fresh Parent links and Notion records are Missing, no students yet", sameRow(rowOf(fresh, "parents"), "missing", "No students yet.") && sameRow(rowOf(fresh, "notionRecords"), "missing", "No students yet."));
@@ -394,6 +394,23 @@ try {
   await whole.getByRole("button", { name: "Discard" }).click();
   await whole.getByRole("button", { name: "Draft changes" }).waitFor({ timeout: 15000 });
 
+  // REQ-38: the seed has no people rows, so the owner's first Sync now is the backfill. Until then a teacher has no scope.
+  const syncNow = async () => {
+    await teacher.goto(`${BASE}/schedule`);
+    await teacher.getByRole("button", { name: "Sync now" }).click();
+    await teacher.getByRole("button", { name: "Sync now" }).waitFor({ timeout: 15000 });
+  };
+  await teacher.goto(`${BASE}/schedule`);
+  check("REQ-38: before the first sync the owner sees no names loaded yet",
+    await teacher.getByText("Names have not been synced yet.").isVisible() && await teacher.getByText("Names have not been loaded yet.").isVisible());
+  await syncNow();
+  await teacher.getByText("Names synced just now.").waitFor({ timeout: 15000 });
+  check("REQ-38: Sync now shows the synced line and clears the notice",
+    await teacher.getByText("Names have not been loaded yet.").waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false));
+  const peopleSql = (sql) => execSync(`psql -X -A -t "${process.env.PG_URL}" -c "${sql}"`).toString().trim();
+  // Sync now refuses taps within a minute of the last run; the later steps move the clock back instead of waiting.
+  const ageSyncs = (interval) => peopleSql(`update tracker.sync_runs set started_at = started_at - interval '${interval}', finished_at = finished_at - interval '${interval}'`);
+
   // Scheduler availability (REQ-5) ---------------------------------------------------
   const ryan = await signedIn(browser, "ryan@example.com");
   await ryan.goto(`${BASE}`);
@@ -495,7 +512,7 @@ try {
   check("a student with no class in the week never appears", (await teacher.getByText("Nobody Booked").count()) === 0);
 
   // REQ-9: snapshot every tracker table the scheduler may not touch, after sign-in and before the first booking step.
-  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers", "booking_stamps", "schedule_writes", "notion_outbox"];
+  const SCHEDULER_TABLES = ["class_series", "class_exceptions", "schedule_summaries", "audit_log", "daily_tasks", "daily_task_teachers", "booking_stamps", "schedule_writes", "staff", "student_people", "sync_runs", "notion_outbox"];
   const psql = (sql) => execSync(`psql -X -A -t "${process.env.PG_URL}" -c "${sql}"`).toString().trim();
   const otherTables = () =>
     psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' order by 1")
@@ -811,6 +828,8 @@ try {
   });
   const oneOff = teacher.getByRole("button", { name: /Nobody Booked/ }).filter({ hasText: "MHF4U" }).first();
   await oneOff.waitFor({ timeout: 15000 });
+  // The page above the grid grew (daily task, people sync, setup link): bring the card on screen before a coordinate drag.
+  await oneOff.scrollIntoViewIfNeeded();
   const atBox = await oneOff.boundingBox();
   await teacher.mouse.move(atBox.x + atBox.width / 2, atBox.y + 8);
   await teacher.mouse.down();
@@ -1106,6 +1125,18 @@ try {
     psql("grant select on tracker.class_exceptions to authenticated");
   }
 
+  // REQ-38: the parent calendar names teachers from the local copy, and says when it is stale.
+  await parent.goto(calendarUrl(adaId));
+  await parent.locator("[data-grid]").first().waitFor({ timeout: 15000 });
+  check("REQ-38: the parent calendar names Ryan from the local copy with no stale notice",
+    (await parent.locator("main").innerText()).includes("Ryan") && (await parent.getByText(/Names last updated/).count()) === 0);
+  ageSyncs("3 hours");
+  await parent.goto(calendarUrl(adaId));
+  await parent.getByText("Names last updated 3 hours ago").waitFor({ timeout: 15000 });
+  check("REQ-38: a stale copy shows the notice and the calendar still names the teacher",
+    (await parent.locator("main").innerText()).includes("Ryan") && (await parent.locator("[data-grid]").count()) > 0);
+  ageSyncs("-3 hours");
+
   // AC10: a published, linked child with no scheduler link sees the not-available state.
   psql(`insert into tracker.students (org_id, teacher_id, email, first_name, last_initial, grade_level, status, published_at) values ('${ORG}', '00000000-0000-0000-0000-00000000aaaa', 'di@example.com', 'Di', 'S', 10, 'active', now())`);
   const diId = kid("Di");
@@ -1194,6 +1225,93 @@ try {
   await parent.goto(billingUrl(diId));
   await parent.getByText("Billing not available yet").waitFor({ timeout: 15000 });
   check("a child with no Notion link sees Billing not available yet and no cards", (await parent.locator("[data-invoice-card]").count()) === 0 && (await parent.getByRole("heading", { name: "Credits" }).count()) === 0);
+
+  // REQ-39: Log this class, Mark no-show, Unlinked lessons and the freeze. A weekly class for Ryan and Sam on the
+  // weekday of 21 days ago, ending today: occurrences at -21 (logged through the form, cccc…0002), -14 (left), -7 and today.
+  const LESSON_SERIES = psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, effective_until, created_by) values ('${ORG}', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001', 'MCV4U', 'weekly', '${isoIn(-21)}', '16:00', 50, '${isoIn(0)}', '00000000-0000-0000-0000-00000000aaaa') returning id`).split("\n")[0];
+  const lessonRef = (offset) => `sched:${LESSON_SERIES}:${isoIn(offset)}`;
+  const lessonTablesBefore = process.env.PG_URL ? snapshot() : null;
+  const lessonJournalStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+  const lessonJournal = async () => (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(lessonJournalStart);
+  const isLessonCreate = (j) => j.method === "POST" && j.path === "/v1/pages" && j.body?.parent?.data_source_id === "6300f58a-8b8c-4789-88c1-e44272079b0f";
+  const lessonCard = (who) => who.getByRole("button", { name: /Sam Student.*MCV4U/s });
+
+  await ryan.setViewportSize({ width: 1200, height: 900 });
+  await ryan.goto(`${BASE}/schedule?date=${isoIn(0)}`);
+  await lessonCard(ryan).waitFor({ timeout: 15000 });
+  await lessonCard(ryan).click();
+  const ryanDialog = ryan.getByRole("dialog").filter({ hasText: "MCV4U" });
+  await ryanDialog.getByRole("button", { name: "Log this class" }).click();
+  await ryan.getByTestId("outcome-badge").filter({ hasText: "Logged" }).first().waitFor({ timeout: 15000 });
+  const logged1 = await lessonJournal();
+  const creates1 = logged1.filter(isLessonCreate);
+  const firstCreate = logged1.findIndex(isLessonCreate);
+  const findBefore = logged1.slice(0, firstCreate).some((j) => j.path.startsWith("/v1/data_sources/6300f58a-8b8c-4789-88c1-e44272079b0f/query") && j.body?.filter?.rich_text?.equals === lessonRef(0));
+  check("REQ-39: Ryan logs today's class and the journal shows one Lessons create carrying the ref, after one find query",
+    creates1.length === 1 && findBefore && creates1[0].body.properties["Class occurrence"].rich_text[0].text.content === lessonRef(0)
+      && JSON.stringify(Object.keys(creates1[0].body.properties).sort()) === JSON.stringify(["Class occurrence", "Date", "Duration (hrs)", "Lesson", "Related to Students & Parents (Lessons 1)", "Teacher"])
+      && creates1[0].body.properties["Duration (hrs)"].number === 0.83,
+    JSON.stringify(logged1.map((j) => `${j.method} ${j.path}`)));
+  await ryan.reload();
+  await lessonCard(ryan).waitFor({ timeout: 15000 });
+  check("REQ-39: after a reload the card face says Logged", (await lessonCard(ryan).innerText()).includes("Logged"));
+  const logAgain = await ryan.evaluate(async ([base, body]) => { const r = await fetch(`${base}/api/scheduler/lessons`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json() }; },
+    [BASE, { seriesId: LESSON_SERIES, originalDate: isoIn(0) }]);
+  check("REQ-39: a second log answers 200 and creates nothing", logAgain.status === 200 && logAgain.body.created === false && (await lessonJournal()).filter(isLessonCreate).length === 1, JSON.stringify(logAgain));
+
+  const beforeNoShow = (await lessonJournal()).length;
+  await ryan.goto(`${BASE}/schedule?date=${isoIn(-7)}`);
+  await lessonCard(ryan).waitFor({ timeout: 15000 });
+  await lessonCard(ryan).click();
+  ryan.once("dialog", (d) => d.accept());
+  await ryan.getByRole("dialog").filter({ hasText: "MCV4U" }).getByRole("button", { name: "Mark no-show" }).click();
+  await ryan.getByTestId("outcome-badge").filter({ hasText: "No-show" }).first().waitFor({ timeout: 15000 });
+  const afterNoShow = (await lessonJournal()).slice(beforeNoShow);
+  check("REQ-39: Ryan marks last week's class No-show and Notion hears nothing about Lessons",
+    !afterNoShow.some((j) => j.path.includes("6300f58a") || /\/v1\/pages\/[0-9a-f-]{36}$/.test(j.path) && j.method !== "GET"), JSON.stringify(afterNoShow.map((j) => `${j.method} ${j.path}`)));
+  const ryanUnlinked = await ryan.evaluate(async (base) => (await fetch(`${base}/api/scheduler/lessons/unlinked`)).status, BASE);
+  check("REQ-39: Ryan gets 403 from the Unlinked lessons API", ryanUnlinked === 403);
+
+  await teacher.setViewportSize({ width: 1200, height: 900 });
+  await teacher.goto(`${BASE}/schedule/lessons?from=${isoIn(-27)}&to=${isoIn(0)}`);
+  await teacher.getByRole("heading", { name: "Unlinked classes" }).waitFor({ timeout: 15000 });
+  const unlinkedText = await teacher.locator('[data-testid="unlinked-classes"]').innerText();
+  check("REQ-39: Unlinked lessons lists the form row under its class and says No matching lesson for the other",
+    (await teacher.getByTestId("link-cccccccc-cccc-4ccc-8ccc-cccccccc0002").count()) === 1 && unlinkedText.includes("No matching lesson in Notion."), unlinkedText.replaceAll("\n", " | "));
+  await teacher.getByTestId("link-cccccccc-cccc-4ccc-8ccc-cccccccc0002").click();
+  await teacher.getByTestId("link-cccccccc-cccc-4ccc-8ccc-cccccccc0002").waitFor({ state: "detached", timeout: 15000 });
+  const lessonsAfter = await (await fetch(`${MOCK_NOTION}/__lessons`, { headers: { "x-e2e-probe": "1" } })).json();
+  const formRow = lessonsAfter.find((l) => l.id === "cccccccc-cccc-4ccc-8ccc-cccccccc0002");
+  check("REQ-39: Link changed only Class occurrence on the form row",
+    formRow && formRow.props["Class occurrence"].rich_text.map((t) => t.plain_text).join("") === lessonRef(-21)
+      && formRow.props.Date.date.start === isoIn(-21) && formRow.props["Paid to Teacher"].checkbox === false && formRow.props["Duration (hrs)"].number === 0.83,
+    JSON.stringify(formRow));
+  // Only PATCHes to Lessons rows: the outbox drain (REQ-35) may deliver a daily-task export (blocks, the Work page) in the same window.
+  const lessonIds = new Set(lessonsAfter.map((l) => l.id));
+  const patches = (await lessonJournal()).filter((j) => j.method === "PATCH");
+  const linkPatches = patches.filter((j) => lessonIds.has(j.path.replace("/v1/pages/", "")));
+  check("REQ-39: every Notion PATCH to a Lessons row in the lesson flow names only Class occurrence",
+    linkPatches.length === 1 && linkPatches.every((j) => JSON.stringify(Object.keys(j.body.properties)) === '["Class occurrence"]'), JSON.stringify(linkPatches));
+  check("REQ-39: no other PATCH in the lesson flow touches a payout field",
+    patches.every((j) => !/Paid to Teacher|Pay Period|Duration \(hrs\)/.test(JSON.stringify(j.body))), JSON.stringify(patches.map((j) => `${j.method} ${j.path}`)));
+
+  if (lessonTablesBefore) {
+    const after = snapshot();
+    const changed = Object.keys(after).filter((t) => t !== "occurrence_outcomes" && after[t] !== lessonTablesBefore[t]);
+    check("REQ-39: outside occurrence_outcomes and audit_log, no tracker table changed", changed.length === 0, changed.join(","));
+    check("REQ-39: three outcomes are stored: logged today, no-show last week, linked three weeks ago",
+      psql(`select string_agg(outcome || ':' || coalesce(link_source, '-'), ',' order by original_date) from tracker.occurrence_outcomes where series_id = '${LESSON_SERIES}'`) === "delivered:reconciled,no_show:-,delivered:logged");
+  } else {
+    check("REQ-39: outside occurrence_outcomes and audit_log, no tracker table changed (PG_URL missing)", false);
+  }
+
+  const seriesStamp = psql(`select to_json(updated_at) #>> '{}' from tracker.class_series where id = '${LESSON_SERIES}'`);
+  const frozen = await teacher.evaluate(async ([base, id, date, stamp]) => {
+    const r = await fetch(`${base}/api/scheduler/classes/${id}/occurrences/${date}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ requestId: crypto.randomUUID(), expectedUpdatedAt: stamp, scope: "this" }) });
+    return { status: r.status, body: await r.json() };
+  }, [BASE, LESSON_SERIES, isoIn(0), seriesStamp]);
+  check("REQ-39: the owner's cancel of the logged class answers 409 has_outcome", frozen.status === 409 && frozen.body.error === "has_outcome", JSON.stringify(frozen));
+  check("REQ-39: the seeded paid lesson cccc…0001 was never requested", !(await lessonJournal()).some((j) => j.path.includes("cccccccc-cccc-4ccc-8ccc-cccccccc0001")));
 
   // Teachers, owners and students are sent back to the tracker home.
   await teacher.goto(`${BASE}/parent`);
@@ -1406,6 +1524,50 @@ try {
 
     // 13. No tracker table changed (the audit log records the pause changes by design; the outbox drains in the background).
     check("REQ-42: every tracker table is unchanged across the Iris section", JSON.stringify(trackerSnapshot()) === JSON.stringify(trackerBefore));
+  }
+
+  // REQ-38: Notion down, then back with a rename, then Ryan inactive. Names stay; scope follows the copy.
+  {
+    const people = (what) => fetch(`${MOCK_NOTION}/__people/${what}`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+    const ryanWeek = `${BASE}/schedule?date=${classDay}`;
+    check("REQ-38: the mock now fails the people reads", (await people("fail")).peopleFails === true);
+    ageSyncs("3 hours");
+    await ryan.goto(ryanWeek);
+    await ryan.getByRole("button", { name: /Sam Student/ }).first().waitFor({ timeout: 15000 });
+    check("REQ-38: with Notion down Ryan's week still names his student, under the stale notice",
+      await ryan.getByText("Names last updated 3 hours ago").isVisible());
+    await syncNow();
+    await teacher.getByText(/^Last sync failed at \d\d:\d\d\. Names are from \d\d:\d\d\.$/).waitFor({ timeout: 15000 });
+    check("REQ-38: a failed Sync now says so and names stay",
+      await teacher.getByText("Names could not be synced. Try again.").isVisible() && await teacher.getByText("Names last updated 3 hours ago").isVisible());
+    await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${classDay}`);
+    check("REQ-38: after the failed sync the owner's week still shows Ryan and Sam",
+      await teacher.getByRole("heading", { name: "Ryan Test's week" }).isVisible() && (await teacher.getByText("Sam Student").count()) > 0);
+
+    check("REQ-38: the mock recovers", (await people("fail")).peopleFails === false);
+    await people("rename");
+    ageSyncs("2 minutes");
+    await syncNow();
+    await teacher.getByText("Names synced just now.").waitFor({ timeout: 15000 });
+    await teacher.goto(`${BASE}/schedule?staffId=${RYAN_ID}&date=${classDay}`);
+    check("REQ-38: after recovery and a sync the renamed teacher shows the new name, no stale notice",
+      await teacher.getByRole("heading", { name: "Ryan Renamed's week" }).isVisible() && (await teacher.getByText(/Names last updated/).count()) === 0);
+
+    check("REQ-38: the mock sets Ryan inactive", (await people("inactive")).status === "Inactive");
+    ageSyncs("2 minutes");
+    await syncNow();
+    await teacher.getByText("Names synced just now.").waitFor({ timeout: 15000 });
+    const live = psql("select count(*) from tracker.staff_links where notion_staff_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001' and revoked_at is null");
+    await ryan.goto(ryanWeek);
+    check("REQ-38: an inactive teacher loses the schedule on the next load though the link is live",
+      live === "1" && await ryan.getByText("This page could not be found").isVisible());
+    check("REQ-38: the mock restores Ryan", (await people("inactive")).status === "Active");
+    ageSyncs("2 minutes");
+    await syncNow();
+    await teacher.getByText("Names synced just now.").waitFor({ timeout: 15000 });
+    await ryan.goto(ryanWeek);
+    check("REQ-38: a sync gives Ryan his scope back",
+      await ryan.getByRole("button", { name: /Sam Student/ }).first().waitFor({ timeout: 15000 }).then(() => true, () => false));
   }
 
   // REQ-32 direct API: PostgREST with real JWTs, no UI, so RLS alone decides. Runs last because it revokes access.

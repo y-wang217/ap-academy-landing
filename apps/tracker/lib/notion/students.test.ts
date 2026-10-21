@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fetchScheduledStudentNames, fetchScheduledStudents, fetchStudentNames, fetchStudentSchedule, parseStudentPage, writeWeeklySchedule } from "./students";
+import { ACTIVE_STUDENT_STAGES, fetchScheduledStudentNames, fetchScheduledStudents, fetchStudentNames, fetchStudentPeople, fetchStudentSchedule, parseStudentPage, writeWeeklySchedule } from "./students";
 import { NotionError } from "./staff";
 
 const S1 = "11111111-1111-4111-8111-111111111111";
@@ -189,8 +189,37 @@ describe("source scan", () => {
     expect(src.match(/method: "PATCH"/g)).toHaveLength(1);
     expect(src).not.toMatch(/lessons|payout/i);
   });
-  it("only billing.ts (read-only, REQ-25), parents.ts (read-only, REQ-42), staff.ts, students.ts and work.ts call api.notion.com", () => {
+  it("only billing.ts (read-only, REQ-25), lessons.ts (REQ-39), parents.ts (read-only, REQ-42), staff.ts, students.ts and work.ts call api.notion.com", () => {
     const hits = readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && read(f).includes("api.notion.com")).sort();
-    expect(hits).toEqual(["billing.ts", "parents.ts", "staff.ts", "students.ts", "work.ts"]);
+    expect(hits).toEqual(["billing.ts", "lessons.ts", "parents.ts", "staff.ts", "students.ts", "work.ts"]);
+  });
+});
+
+describe("fetchStudentPeople (REQ-38 AC3)", () => {
+  it("asks for Student Name and Stage only, over every stage, and never returns Weekly Schedule", async () => {
+    const { calls, fetcher } = recorder((c) => (c.method === "GET" ? json(SCHEMA) : json({ results: [page(S1, " Sam Lee ", "Lost", "private text")], has_more: false })));
+    const people = await fetchStudentPeople(cfg, fetcher);
+    expect(people).toEqual([{ id: S1, name: "Sam Lee", stage: "Lost" }]);
+    const q = calls.find((c) => c.method === "POST")!;
+    expect(new URL(q.url).searchParams.getAll("filter_properties[]")).toEqual(["title", "st:g"]);
+    expect(q.body).not.toHaveProperty("filter");
+    expect(JSON.stringify(people)).not.toMatch(/private|parent@|555/);
+  });
+  it("paginates", async () => {
+    const S2 = "22222222-2222-4222-8222-222222222222";
+    let n = 0;
+    const { calls, fetcher } = recorder((c) => {
+      if (c.method === "GET") return json(SCHEMA);
+      n += 1;
+      return n === 1 ? json({ results: [page(S1, "A", "Active", "")], has_more: true, next_cursor: "c2" }) : json({ results: [page(S2, "B", null, "")], has_more: false });
+    });
+    expect((await fetchStudentPeople(cfg, fetcher)).map((p) => [p.id, p.stage])).toEqual([[S1, "Active"], [S2, ""]]);
+    expect((calls[2].body as { start_cursor: string }).start_cursor).toBe("c2");
+  });
+  it("fails clearly when Notion errors", async () => {
+    await expect(fetchStudentPeople(cfg, recorder(() => json({}, 500)).fetcher)).rejects.toBeInstanceOf(NotionError);
+  });
+  it("names the active stages once", () => {
+    expect(ACTIVE_STUDENT_STAGES).toEqual(["Active", "Onboarding"]);
   });
 });
