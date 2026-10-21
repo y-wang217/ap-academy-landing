@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const base = "app/api/scheduler";
 const routes = [
   "me", "staff", "staff/[staffId]", "week", "classes/occurrences",
-  "conflicts", "availability", "import", "monthly-review",
+  "conflicts", "availability", "import", "monthly-review", "monthly-billing-input",
 ];
 
 // REQ-30 AC12a: the class write routes too.
