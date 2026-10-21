@@ -1313,6 +1313,48 @@ try {
   check("REQ-39: the owner's cancel of the logged class answers 409 has_outcome", frozen.status === 409 && frozen.body.error === "has_outcome", JSON.stringify(frozen));
   check("REQ-39: the seeded paid lesson cccc…0001 was never requested", !(await lessonJournal()).some((j) => j.path.includes("cccccccc-cccc-4ccc-8ccc-cccccccc0001")));
 
+  // REQ-40: the owner's billing input and billing check read local tables only. Teachers and parents are refused.
+  const billingInputJournalStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+  const billingMonth = isoIn(0).slice(0, 7);
+  const getJson = (who, path) => who.evaluate(async ([base, p]) => { const r = await fetch(`${base}${p}`); return { status: r.status, body: await r.json().catch(() => null) }; }, [BASE, path]);
+  const exportPath = `/api/scheduler/monthly-billing-input?month=${billingMonth}`;
+  // A one-off class today for the adopted student, so the month surely holds a class of theirs.
+  const billedStudent = psql(`select notion_student_id from tracker.schedule_summaries where org_id = '${ORG}' order by adopted_at limit 1`);
+  const BILLED_SERIES = psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, effective_until, created_by) values ('${ORG}', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001', '${billedStudent}', 'SBI4U', 'one_off', '${isoIn(0)}', '07:00', 60, null, '00000000-0000-0000-0000-00000000aaaa') returning id`).split("\n")[0];
+  const ownerExport = await getJson(teacher, exportPath);
+  const exported = ownerExport.body?.students ?? [];
+  const adoptedCount = Number(psql(`select count(*) from tracker.schedule_summaries where org_id = '${ORG}'`));
+  const exportedSeries = [...new Set(exported.flatMap((s) => s.occurrences.map((o) => o.seriesId)))];
+  const knownSeries = exportedSeries.length ? Number(psql(`select count(*) from tracker.class_series where id in (${exportedSeries.map((id) => `'${id}'`).join(",")})`)) : 0;
+  check("REQ-40: the owner's export answers 200 with versions 1, one entry per adopted student and the month's classes",
+    ownerExport.status === 200 && ownerExport.body.schemaVersion === 1 && ownerExport.body.rulesVersion === 1 && exported.length === adoptedCount && adoptedCount >= 1
+      && exportedSeries.includes(BILLED_SERIES) && knownSeries === exportedSeries.length
+      && exported.find((s) => s.studentId === billedStudent)?.occurrences.some((o) => o.seriesId === BILLED_SERIES && o.schedulerState === "one_off" && o.date === isoIn(0)),
+    JSON.stringify({ status: ownerExport.status, students: exported.length, adoptedCount, exportedSeries: exportedSeries.length, knownSeries, billedStudent }));
+  check("REQ-40: every exported class has a charge state and no names or emails",
+    exported.every((s) => s.occurrences.every((o) => ["chargeable", "credit_owed", "made_up", "forfeit_pending", "not_charged"].includes(o.chargeState)))
+      && !/@example\.com|Ryan|Kuby|Sam Student/.test(JSON.stringify(ownerExport.body)));
+  const ryanExport = await getJson(ryan, exportPath);
+  const parentExport = await getJson(parent, exportPath);
+  check("REQ-40: Ryan and the parent get 403 from the export", ryanExport.status === 403 && parentExport.status === 403, `${ryanExport.status}/${parentExport.status}`);
+  await teacher.goto(`${BASE}/scheduler/billing?month=${billingMonth}`);
+  await teacher.getByTestId("billing-agree").waitFor({ timeout: 15000 });
+  const billingText = await teacher.locator("main").innerText();
+  check("REQ-40: the owner's billing check shows both counts per student and the Download JSON link",
+    /agree for \d+ of \d+ students/.test(billingText) && /Text: \d+ class/.test(billingText) && /Structured: \d+ class/.test(billingText)
+      && (await teacher.getByRole("link", { name: "Download JSON" }).getAttribute("href")) === `/tracker${exportPath}`,
+    billingText.replaceAll("\n", " | ").slice(0, 400));
+  for (const [who, label] of [[ryan, "Ryan"], [parent, "the parent"]]) {
+    await who.goto(`${BASE}/scheduler/billing?month=${billingMonth}`);
+    check(`REQ-40: ${label} gets not-found for the billing check`, await who.getByText("This page could not be found").isVisible());
+  }
+  const billingInputJournal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(billingInputJournalStart);
+  const moneyRe = /Invoices|Missed Sessions|Credits|Payouts|6300f58a/i;
+  // A non-GET here can only be the owner's background outbox drain (REQ-35) delivering a Weekly Schedule or daily-task export.
+  check("REQ-40: the billing loads asked Notion nothing about Invoices, Credits, Lessons or Payouts, and any write is an outbox export",
+    !billingInputJournal.some((j) => moneyRe.test(j.path) || moneyRe.test(JSON.stringify(j.body ?? {})) || LESSONS_RE.test(j.path)) && !billingInputJournal.some((j) => j.method !== "GET" && !/\/query$/.test(j.path) && !/\/v1\/(blocks|pages)/.test(j.path)),
+    JSON.stringify(billingInputJournal.map((j) => `${j.method} ${j.path}`)));
+
   // Teachers, owners and students are sent back to the tracker home.
   await teacher.goto(`${BASE}/parent`);
   check("an owner opening /tracker/parent is redirected", new URL(teacher.url()).pathname.replace(/\/$/, "") === "/tracker");
