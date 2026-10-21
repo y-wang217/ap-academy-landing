@@ -1,0 +1,341 @@
+{
+  "package_version": "2026-10-21",
+  "description": "Seed cards for existing Notion Dev Requirements pipeline; FC IDs MUST be replaced with actual REQ IDs",
+  "cards": [
+    {
+      "seed_id": "FC-01",
+      "title": "Founder Console source-of-truth audit and route decision",
+      "suggested_priority": "P0",
+      "risk": "Low",
+      "blocked_by_seed_ids": [],
+      "goal": "Record the exact existing auth, CRM, scheduling, trial, follow-up, payment, media-task and event contracts needed by the console, with a decisive app placement plan.",
+      "scope": [
+        "Read current root/per-app CLAUDE.md, ADRs, open req PRs and all relevant implementations",
+        "Identify source systems, stable identifiers, data freshness and existing permissions",
+        "Choose same-origin path/app strategy, surface design decisions, and record missing evidence",
+        "Do not change app code or live data; deliver a concise ADR/spec or equivalent allowed docs change"
+      ],
+      "acceptance_criteria": [
+        "AC1: Decision record gives a current file path, function/API and authority for each of the 8 core data domains, or marks as undiscovered with reproducible evidence.",
+        "AC2: Proposed console route reuses the current one-domain auth/session pattern and identifies how unauthorized staff are rejected server-side.",
+        "AC3: Existing overlap with planned/in-progress REQ cards is reconciled and mapped, not duplicated.",
+        "AC4: Freshness, missing-source and external side-effect risks are documented and mapped to downstream cards.",
+        "AC5: A source-backed strategy exists for verified recurring-hour computation or a defined \"unverifiable\" fallback."
+      ],
+      "test_plan": [
+        "T1: Reviewer inspects source-path citations for AC1/AC2 and can reproduce at least one data-flow trace.",
+        "T2: Docs scope test verifies no app/DB/schema changes were made for this card.",
+        "T3: Independent reviewer checks every downstream assumption against documented unknowns."
+      ],
+      "non_goals": [
+        "No new product UI, schema, permissions or external integrations."
+      ],
+      "status_seed": "Ready"
+    },
+    {
+      "seed_id": "FC-02",
+      "title": "Founder-only same-origin console route and secure app boundary",
+      "suggested_priority": "P0",
+      "risk": "High",
+      "blocked_by_seed_ids": [
+        "FC-01"
+      ],
+      "goal": "A founder may reach a protected console shell at the chosen path, while everyone else is denied at both render and API access layers.",
+      "scope": [
+        "Implement route per approved architecture; reuse central auth callback and existing sessions",
+        "Use server/data access checks against actual founder permission model",
+        "Render loading/access denied and expiry states, with no student PII leakage",
+        "Reuse present deployment/proxy patterns, avoiding a second auth pool or login"
+      ],
+      "acceptance_criteria": [
+        "AC1: Founder navigation loads the chosen same-origin console route without an independent sign-in flow.",
+        "AC2: Unauthenticated access redirects to central login with safe return path.",
+        "AC3: teacher, student, parent and revoked account cannot retrieve console PII or call console private endpoints.",
+        "AC4: Cookie/session behavior and cross-app navigation remain intact.",
+        "AC5: Test fixtures prove no sensitive data is rendered during failed permission checks."
+      ],
+      "test_plan": [
+        "T1: HTTP and browser tests for founder, guest, teacher, parent, student, revoked account.",
+        "T2: Direct API/data-path permission tests independent of hidden UI links.",
+        "T3: SSO regression + build/typecheck/tests indicated by changed paths."
+      ],
+      "non_goals": [
+        "No new signup or third-party identity service; no broad role permission changes."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-03",
+      "title": "Truthful console read models and verified weekly-hours metric",
+      "suggested_priority": "P0",
+      "risk": "Medium",
+      "blocked_by_seed_ids": [
+        "FC-01",
+        "FC-02"
+      ],
+      "goal": "Panel queries return minimal authorized, provenance-rich data and never display fabricated metrics.",
+      "scope": [
+        "Implement typed server-side read adapters against discovered canonical sources",
+        "Add per-panel status ready/empty/loading/stale/error/unverifiable, timestamps and safe retries",
+        "Compute verified net-new recurring teacher-hours by adopted business evidence; when unavailable report unverified with links",
+        "Deduplicate stable IDs, preserve time-zone boundaries and avoid expensive full-table copies"
+      ],
+      "acceptance_criteria": [
+        "AC1: Real read models exist for leads/follow-ups, trial events, teacher hours, content work, payment status and north-star KPI when supported by current sources.",
+        "AC2: All panels expose source ID and freshness, with unauthorized fields withheld.",
+        "AC3: Net-new weekly hours excludes trials, unpaid/unverified enrollments, duplicate occurrences, one-offs, and reductions are subtracted.",
+        "AC4: Incomplete source evidence yields an explicit \"unverifiable\" state; never fake zero or approximate paid hours.",
+        "AC5: Partial provider failure does not replace other successful panel data with zeros.",
+        "AC6: Identifiers and joins are stable-record based, not name matching."
+      ],
+      "test_plan": [
+        "T1: Unit tests of 7-day time windows including Toronto DST; positive/reduction/empty/unknown edge cases.",
+        "T2: Integration tests of source adapter fixtures and partial provider failure.",
+        "T3: Data minimization/security tests plus mutation-free read behavior.",
+        "T4: Reviewer verifies counted evidence links and actual implementation file paths."
+      ],
+      "non_goals": [
+        "No additional CRM DB or new analytic warehouse without separate design."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-04",
+      "title": "Cinematic command-bridge shell and scalable instrument kit",
+      "suggested_priority": "P1",
+      "risk": "Low",
+      "blocked_by_seed_ids": [
+        "FC-02"
+      ],
+      "goal": "Create a beautiful responsive console shell matching the approved concept, with semantic reusable data surfaces and no hardcoded fictional business results.",
+      "scope": [
+        "Implement static illustrated skyline as separate art layer; panel borders, header, focus rail, mode switch",
+        "Build common Gauge, Radar, Status, InstrumentPanel, Metric, QueueRow and FailureState components",
+        "Implement accessibility, color tokens, responsive 1920/1440/1280/390 breakpoints and reduced-motion",
+        "Use truthful empty/loading placeholders awaiting FC-03 integration; demo data permitted only in isolated preview/tests"
+      ],
+      "acceptance_criteria": [
+        "AC1: Screen has identifiable sunset command-bridge identity, header, main panel grid and physical-instrument trim, without baking data into an image.",
+        "AC2: Sales, Creation and Operations mode tabs are keyboard navigable and reflect selection.",
+        "AC3: All major components have dedicated ready/empty/loading/stale/error variants without fabricated successful data.",
+        "AC4: 1440\u00d7900/1920\u00d71080 resemble reference in hierarchy, color and density; captured screenshots attached to PR.",
+        "AC5: 390\u00d7844 and 1280\u00d7720 keep primary content reachable without sideways scroll.",
+        "AC6: Radar has accessible textual equivalents and honors reduced-motion."
+      ],
+      "test_plan": [
+        "T1: Component visual snapshots for modes + status variants.",
+        "T2: Playwright/screenshots for desktop/laptop/mobile widths and keyboard traversal.",
+        "T3: Automated check for fake hardcoded reference KPIs/names in production sources."
+      ],
+      "non_goals": [
+        "No 3D game engine, no decorative buttons presented as working controls."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-05",
+      "title": "Sales radar and prioritised next-lead Rolodex",
+      "suggested_priority": "P0",
+      "risk": "Medium",
+      "blocked_by_seed_ids": [
+        "FC-03",
+        "FC-04"
+      ],
+      "goal": "Give the founder a real next-best-person-to-call view that retains unresolved leads and explains prioritization.",
+      "scope": [
+        "Implement deduped queue from canonical lead and follow-up data",
+        "Deterministic ranking: new \u2192 urgent callback \u2192 post-trial \u2192 due follow-up \u2192 older, respecting opt-outs",
+        "Show selected lead, last verified touch, trial notes/diagnosis, owner, due time, canonical source links",
+        "Filters and keyboard shortcuts; no contact sends in this card"
+      ],
+      "acceptance_criteria": [
+        "AC1: Queue always points to exactly one highest-ranked eligible item or an honest empty/error state.",
+        "AC2: Ranking matches published priority with human-readable reason and stable ordering on ties.",
+        "AC3: Resolved, opted-out and cancelled cases do not repeatedly re-enter; duplicate-source records are handled.",
+        "AC4: Trial diagnosis displayed when available; missing notes shown as missing and never generated as facts.",
+        "AC5: Clicking a link opens the correct canonical record; privacy scope respected.",
+        "AC6: Leads remain queued on network failure or incomplete response; errors are visible."
+      ],
+      "test_plan": [
+        "T1: Table-driven priority tests incl identical timestamps/opt-outs/deduping.",
+        "T2: Integration test with stale provider failure and incomplete pagination.",
+        "T3: Browser founder use: filter, next lead, open record, keyboard navigate."
+      ],
+      "non_goals": [
+        "No autonomous calls, texts, AI lead scoring or source record edits."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-06",
+      "title": "Explicit call outcomes, next-action follow-ups and safe queue progression",
+      "suggested_priority": "P0",
+      "risk": "High",
+      "blocked_by_seed_ids": [
+        "FC-05"
+      ],
+      "goal": "After a real call, the founder can explicitly record a truthful result and scheduled follow-up in the existing authoritative system, then advance the Rolodex.",
+      "scope": [
+        "Use existing write-through adapter/Notion Work/CRM policy where authorized",
+        "Offer safe actions or canonical deep link when no supported write path exists",
+        "Validate idempotency/stale state; read after write; leave unresolved items with owner + next date",
+        "Separate draft message/call notes from any external sending; no auto-send"
+      ],
+      "acceptance_criteria": [
+        "AC1: Founder can choose explicit outcome and due date; server verifies permission and existing authoritative transition.",
+        "AC2: After verified write the queue updates and does not lose unresolved contacts; failed writes remain visible and retry-safe.",
+        "AC3: Duplicate action submits do not create duplicate follow-up cases, or unsupported retries are blocked with verification guidance.",
+        "AC4: \"Paid\" requires payment/enrolment evidence and cannot be set from verbal consent or trial completion alone.",
+        "AC5: External message/call is never sent merely by opening or logging the case.",
+        "AC6: Mutations produce existing audit/evidence record, with source ID and actual result."
+      ],
+      "test_plan": [
+        "T1: Allowed/disallowed transition matrix and server auth/CSRF-equivalent checks.",
+        "T2: Duplicate submit + timeout-after-commit + read-back recovery tests.",
+        "T3: Browser safe test fixture logs call outcome and proves queue advances and reload persists."
+      ],
+      "non_goals": [
+        "No bulk outbound communication, payment writes or appointment modifications."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-07",
+      "title": "Teacher load, trial funnel, verified financial readouts and delivery gaps",
+      "suggested_priority": "P1",
+      "risk": "Medium",
+      "blocked_by_seed_ids": [
+        "FC-03",
+        "FC-04"
+      ],
+      "goal": "Make staffing availability, trial outcomes, lesson-log gaps and payment verification visually inspectable without assuming unverified facts.",
+      "scope": [
+        "Read from existing teacher roster, adopted schedules/availability and completed lesson logs",
+        "Show confirmed hours versus availability, no denominator guess, and links to actual conflicts",
+        "Compute trials booked/completed and verified enrolments separately",
+        "Finance panel shows CAD collected vs sent/outstanding only where evidence supports; no billing mutation"
+      ],
+      "acceptance_criteria": [
+        "AC1: Teacher load excludes cancelled occurrences and distinguishes scheduled from delivered lessons.",
+        "AC2: Missing teacher availability yields unknown utilization, not 0%/100%.",
+        "AC3: Trial attendance is verified by its actual completion evidence, never clock-time elapsed.",
+        "AC4: Lesson gaps show stable occurrence links, owner, next action and actual source timestamp.",
+        "AC5: Invoice sent/open/paid/refunded are distinguished; only verified paid amounts count as cash collected.",
+        "AC6: All cards have error/partial freshness states and canonical deep links."
+      ],
+      "test_plan": [
+        "T1: Schedule-exception and changed-occurrence aggregation fixtures.",
+        "T2: Attendance/lesson-log mismatch fixtures.",
+        "T3: Paid/unpaid/refund/currency fixtures.",
+        "T4: Desktop/mobile panel browser acceptance and provider outage."
+      ],
+      "non_goals": [
+        "No new teacher scheduler, attendance logger, invoicing service or payment processor."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-08",
+      "title": "Creation mode backed by the existing marketing work system",
+      "suggested_priority": "P1",
+      "risk": "Medium",
+      "blocked_by_seed_ids": [
+        "FC-03",
+        "FC-04"
+      ],
+      "goal": "A clear creation-mode queue surfaces scripts, filming, edits and the weekly media review without making a second CMS.",
+      "scope": [
+        "Read current Work/Content Library tasks with stages and due dates",
+        "Prioritise open creative deliverables while honouring urgent-lead interruption",
+        "Open canonical task/asset/script via deep link; optional approved one-step status action",
+        "Expose missing metadata and stale sources honestly"
+      ],
+      "acceptance_criteria": [
+        "AC1: Creation mode surfaces next real task, stage, due date, owner, source link and available details.",
+        "AC2: Weekly review task appears if it exists or indicates none found, without auto-creating unrelated tasks.",
+        "AC3: Task completion reflects canonical record and can only update via approved write action.",
+        "AC4: Critical fresh-lead signal can be surfaced but does not silently switch or discard creative work.",
+        "AC5: No recording/publishing happens without separate explicit user choice."
+      ],
+      "test_plan": [
+        "T1: Open/completed/stale task ordering fixtures.",
+        "T2: Browser mode switching and state persistence for a session.",
+        "T3: Confirm creation of no shadow records and no unsolicited publishing API invocation."
+      ],
+      "non_goals": [
+        "No complex video editor, content scheduling SaaS, publishing robot."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-09",
+      "title": "Event-backed actionable signals, interruption policy and integration health",
+      "suggested_priority": "P1",
+      "risk": "Medium",
+      "blocked_by_seed_ids": [
+        "FC-05",
+        "FC-07"
+      ],
+      "goal": "Surface newly actionable leads and actual operational exceptions without false always-on surveillance or interruptions during teaching.",
+      "scope": [
+        "Reuse existing events/realtime/polling where reliable, otherwise bounded polling with freshness",
+        "Implement text-rich new-lead notification and snooze/quiet behavior while in protected delivery mode",
+        "Alerts for stale follow-ups, missing post-trial decision, missing lesson log and provider failures",
+        "Deduplicate, persist as appropriate via existing work records, and link source evidence"
+      ],
+      "acceptance_criteria": [
+        "AC1: A fresh lead arrives at most once per stable source event and remains accessible after snooze.",
+        "AC2: Focus mode and protected teaching time do not auto-call, auto-send or auto-book; deferred alerts are recoverable.",
+        "AC3: Every alert identifies actual source/check time and next action; stale providers cannot claim \"all clear\".",
+        "AC4: Dismissal means dismissed display, not completed business outcome; unresolved cases persist canonically.",
+        "AC5: Inaccessible alert target does not leak personal information across roles."
+      ],
+      "test_plan": [
+        "T1: Duplicate/out-of-order/offline event fixtures.",
+        "T2: Browser foreground/background, quiet-mode and missed alert recovery flows.",
+        "T3: Failed provider check keeps warning, never silent success."
+      ],
+      "non_goals": [
+        "No independent notification platform or unauthorized background phone/messaging activity."
+      ],
+      "status_seed": "Backlog"
+    },
+    {
+      "seed_id": "FC-10",
+      "title": "Visual fidelity, accessible operation and founder release acceptance",
+      "suggested_priority": "P1",
+      "risk": "Medium",
+      "blocked_by_seed_ids": [
+        "FC-05",
+        "FC-06",
+        "FC-07",
+        "FC-08",
+        "FC-09"
+      ],
+      "goal": "Harden the finished bridge, prove it is both beautiful and truthful, and prepare it for a founder-controlled launch.",
+      "scope": [
+        "Compare browser captures with reference aesthetic at prescribed resolutions",
+        "Test all paneled states, keyboard, zoom, screen readers, reduced motion and latency",
+        "Verify end-to-end sales, media and operations flows with sanitized realistic fixtures",
+        "Record final evidence and founder-only release gate, no auto-release"
+      ],
+      "acceptance_criteria": [
+        "AC1: Screenshots at 1920\u00d71080 and 1440\u00d7900 show required visual signature; 1280\u00d7720 and 390\u00d7844 remain usable.",
+        "AC2: All controls and gauges work with keyboard, announce label/status, and honor reduced-motion.",
+        "AC3: No demo contact names, financial metrics, fake status or hardcoded illustrative date appear in deployed production.",
+        "AC4: Founder-only API access holds under direct route probing; integration failures degrade safely.",
+        "AC5: At least one end-to-end safe record loop succeeds and is supported by audit/readback evidence.",
+        "AC6: Readiness explicitly states whether deployed, verified and founder-approved, not just PR merged."
+      ],
+      "test_plan": [
+        "T1: Screenshot side-by-side review at 4 sizes.",
+        "T2: Automated E2E and auth/RLS regression pack.",
+        "T3: Manual founder dry-run checklist and release receipt."
+      ],
+      "non_goals": [
+        "No auto-launch, no new scope or feature backlog expansion in polish card."
+      ],
+      "status_seed": "Backlog"
+    }
+  ]
+}
