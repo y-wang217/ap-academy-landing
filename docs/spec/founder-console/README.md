@@ -11,7 +11,9 @@ Track = Console, REQ-52 to REQ-63).
   the Notion workspace, observed versus proposed.
 - [`02-intake-receipt.md`](02-intake-receipt.md): seed to REQ mapping,
   dependency order, source-of-truth table, decisions for Charlie.
-- `02-data-contracts.md`: written by REQ-52 (the first card).
+- [`02-data-contracts.md`](02-data-contracts.md): the data contract per
+  domain, the lead write contract and the north-star rule (REQ-52).
+- Placement and the owner gate: [workspace ADR 0006](../../adr/0006-founder-console-placement.md).
 - `03-release-receipt.md`: written by REQ-63 and filled in by Charlie.
 
 The reference renders contain fictional names, figures and a wrong date.
