@@ -13,6 +13,8 @@
 // REQ-33: a Students query whose filter holds a Weekly Schedule is_not_empty clause gets only students with schedule text.
 // REQ-39: Lessons (schema with Class occurrence, query, create, read, patch) plus GET /__lessons. One form-logged row
 // cccc…0002 (Ryan, Sam, 21 days ago, empty ref). The seeded paid lesson cccc…0001 stays outside it and is never served to a query.
+// REQ-42: a Students query whose filter includes Stage Paused is Iris's family directory: it gets FAMILIES (Parent Email
+// and Parent Name, with Haider and Ada as siblings sharing one address). POST /__students/fail toggles a 500 on it.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -38,6 +40,25 @@ const STUDENTS = [
   student("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "Kim Kuby-Student"),
   student("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0003", "Nobody Booked"),
 ];
+
+// REQ-42: the family directory. Synthetic parents; Sam's address is stored mixed-case to prove matching lower-cases it.
+const family = (id, name, stage, email, parent) => ({
+  id,
+  properties: {
+    "Student Name": { title: [{ plain_text: name }] },
+    Stage: { select: { name: stage } },
+    "Parent Email": { email },
+    "Parent Name": { rich_text: parent ? [{ plain_text: parent }] : [] },
+    "Parent Phone": { phone_number: "555-0199" },
+  },
+});
+const FAMILIES = [
+  family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", "Sam Student", "Active", "Sam.Parent@example.com", "Pat Student"),
+  family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "Kim Kuby-Student", "Active", null, null),
+  family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004", "Haider Afzal", "Active", "afzal.family@example.com", "Afzal Parent"),
+  family("dddddddd-dddd-4ddd-8ddd-dddddddd0001", "Ada Afzal", "Paused", "afzal.family@example.com", "Afzal Parent"),
+];
+let familiesFail = false;
 
 // Weekly Schedule text per student, empty to start (so a first booking can adopt the student).
 const schedule = new Map(STUDENTS.map((s) => [s.id, ""]));
@@ -354,6 +375,7 @@ http.createServer(async (req, res) => {
     RYAN_PAGE.properties.Status = { select: { name: now } };
     return res.end(JSON.stringify({ status: now }));
   }
+  if (req.method === "POST" && req.url === "/__students/fail") { familiesFail = !familiesFail; return res.end(JSON.stringify({ familiesFail })); }
   if (req.method === "POST" && req.url === "/__schedule/commit-then-fail") { commitThenFail = true; return res.end(JSON.stringify({ commitThenFail })); }
   if (req.method === "GET" && req.url === "/__schedule/writes") return res.end(JSON.stringify(Object.fromEntries(scheduleWrites)));
   await bufferBody(req);
@@ -397,11 +419,17 @@ http.createServer(async (req, res) => {
     res.end(JSON.stringify({ properties: {
       "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" },
       "Hourly Rate (CAD)": { id: "hr" }, "Lesson Cadence": { id: "lc" }, "Billing Family": { id: "bf" }, "Parent Phone": { id: "pp" }, Notes: { id: "nts" },
+      "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" },
     } }));
     return;
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`)) {
-    const wantsScheduled = JSON.stringify((await readBody(req)).filter ?? {}).includes('{"property":"Weekly Schedule","rich_text":{"is_not_empty":true}}');
+    const filter = JSON.stringify((await readBody(req)).filter ?? {});
+    if (filter.includes('"equals":"Paused"')) {
+      if (familiesFail) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })); }
+      return res.end(JSON.stringify({ results: FAMILIES, has_more: false, next_cursor: null }));
+    }
+    const wantsScheduled = filter.includes('{"property":"Weekly Schedule","rich_text":{"is_not_empty":true}}');
     const results = wantsScheduled ? STUDENTS.filter((s) => schedule.get(s.id)) : STUDENTS;
     res.end(JSON.stringify({ results, has_more: false, next_cursor: null }));
     return;

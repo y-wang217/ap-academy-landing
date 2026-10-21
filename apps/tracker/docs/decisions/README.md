@@ -61,4 +61,7 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0054](0054-notion-export-outbox.md) | Notion exports go through an outbox in Postgres | accepted |
 | [0055](0055-people-sync.md) | Staff and student names come from a local copy synced from Notion | accepted |
 | [0056](0056-lesson-link-and-outcomes.md) | Log this class writes the class reference into Lessons, the owner reconciles form-logged rows, and outcomes live in the tracker | accepted |
+| [0057](0057-iris-tracker-module.md) | Iris is a tracker module with its own `iris` schema | accepted |
+| [0058](0058-iris-message-retention.md) | Iris stores parent mail for 90 days, with no audit copy | accepted |
+| [0059](0059-iris-gmail-read-only.md) | Gmail through a service account, read-only, with no SDK | accepted |
 | [0060](0060-structured-billing-input.md) | The monthly billing input is a versioned owner-only export with derived charge states, checked against the text-based count | accepted |

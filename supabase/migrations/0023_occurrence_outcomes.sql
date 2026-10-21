@@ -5,7 +5,7 @@
 -- made final for past occurrences. No payout, rate, credit or invoice data.
 -- A correction is an owner delete; write_audit keeps the old row.
 -- An occurrence with an outcome is frozen: no cancel, move or series change
--- that would make its ref point somewhere else (tracker ADR 0054).
+-- that would make its ref point somewhere else (tracker ADR 0056).
 -- Tested by supabase/tests/occurrence_outcomes.sql.
 
 create table tracker.occurrence_outcomes (

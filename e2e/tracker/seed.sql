@@ -18,3 +18,6 @@ insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_st
 insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values
   ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0002', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002', 'SCH4U', 'weekly',
    current_date + 7 + ((8 - extract(isodow from current_date)::int) % 7), '14:00', 60, '00000000-0000-0000-0000-00000000aaaa');
+
+-- REQ-42: Iris settings for the seed org. The migration's backfill ran before this org existed. Iris starts paused.
+insert into iris.settings (org_id) values ('10000000-0000-0000-0000-00000000aaaa');

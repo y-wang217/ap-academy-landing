@@ -119,7 +119,7 @@ describe("ADR 0004 readers and writers", () => {
 
   it("lists the required readers and writers", () => {
     for (const p of REQUIRED_PATHS) expect(state(p), p).toMatch(/exists/);
-    expect(state("apps/tracker/lib/notion/parents.ts")).toMatch(/planned/);
+    expect(state("apps/tracker/lib/notion/parents.ts")).toMatch(/exists/);
     const outside = rows.filter((r) => r[3].includes("outside repo")).map(path).join(" ");
     expect(outside).toMatch(/monthly-admin/);
     expect(outside).toMatch(/onboarding/);

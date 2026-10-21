@@ -45,10 +45,10 @@ describe("people reads are local (REQ-38)", () => {
     expect(read("lib/notion/cached.ts")).toContain("getBillingReader");
   });
 
-  it("the service client still has exactly one importer", () => {
+  it("the service client has exactly two importers: the daily task and the Iris run (REQ-42 AC24)", () => {
     const all = files(APP).filter((p) => !p.includes("node_modules") && !p.includes(".next"));
     const importers = all.filter((p) => readFileSync(p, "utf8").includes("@ap-academy/db/service")).map((p) => relative(APP, p).replace(/\\/g, "/"));
-    expect(importers).toEqual(["app/api/scheduler/daily-task/run/route.ts"]);
+    expect(importers).toEqual(["app/api/iris/run/route.ts", "app/api/scheduler/daily-task/run/route.ts"]);
   });
 
   it("every AC12 page renders PeopleFreshness", () => {

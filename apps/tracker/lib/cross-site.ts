@@ -1,5 +1,8 @@
-/** Pure decision for the scheduler API origin check (tracker ADR 0042). Imports nothing from Next, React or Supabase. */
+/** Pure decision for the scheduler and Iris API origin check (tracker ADR 0042). Imports nothing from Next, React or Supabase. */
 export const UNSAFE_METHODS = ["POST", "PATCH", "PUT", "DELETE"] as const;
+
+/** The API prefixes whose writes the proxy origin-checks before the session is read (ADR 0042, REQ-42). */
+export const ORIGIN_CHECKED_PREFIXES = ["/api/scheduler/", "/api/iris/"] as const;
 
 /** The site host plus its `www.`-less form: the same list `next.config.ts` gives `allowedOrigins`. */
 export function allowedSiteHosts(siteUrl: string): string[] {

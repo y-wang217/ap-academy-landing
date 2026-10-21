@@ -1,6 +1,6 @@
 # ADR 0004: Notion edits people, Supabase holds synced operational copies, the app reads local
 
-- **Status:** Accepted
+- **Status:** Accepted, amended in part by ADR 0005
 - **Date:** 2026-10-16
 - **Decided by:** Charlie
 - **Implemented by:** REQ-38 (Feedback 9)
@@ -91,7 +91,8 @@ copied. Weekly Schedule text stays a live read for import
 | `apps/tracker/app/students/[studentId]/page.tsx` | reader | student Notion link | exists |
 | `apps/tracker/app/actions/teacher.ts` | writer of `students.notion_student_id`, owner only (tracker ADR 0048) | Notion page id | exists |
 | `supabase/seed/scheduler-staff-link.sql` | writer of `staff_links` | Notion staff id, sign-in email | exists |
-| `apps/tracker/lib/notion/parents.ts` | reader, live and uncached (Iris) | parent name, parent email | planned |
+| `apps/tracker/lib/notion/parents.ts` | reader, live and uncached (Iris) | parent name, parent email | exists |
+| `apps/tracker/app/api/iris/run/route.ts` | reader (Iris run, through `parents.ts`), matching stores Notion page ids only | parent email, for matching in memory | exists |
 | monthly-admin skill | edits and reads Notion people pages | students, parents, billing | outside repo |
 | onboarding skill | creates and edits Notion people pages | students, parents | outside repo |
 
