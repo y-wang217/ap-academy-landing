@@ -9,7 +9,7 @@ export function schemaKeys(schema: z.ZodType, prefix = ""): string[] {
   if (def.type === "object" && def.shape) {
     return Object.entries(def.shape).flatMap(([k, v]) => [`${prefix}${k}`, ...schemaKeys(v, `${prefix}${k}.`)]);
   }
-  if (def.type === "array" && def.element) return schemaKeys(def.element, prefix.replace(/\.$/, "[].")) ;
+  if (def.type === "array" && def.element) return schemaKeys(def.element, prefix.replace(/\.$/, "[]."));
   if ((def.type === "nullable" || def.type === "optional") && def.innerType) return schemaKeys(def.innerType, prefix);
   return [];
 }

@@ -61,3 +61,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0054](0054-notion-export-outbox.md) | Notion exports go through an outbox in Postgres | accepted |
 | [0055](0055-people-sync.md) | Staff and student names come from a local copy synced from Notion | accepted |
 | [0056](0056-lesson-link-and-outcomes.md) | Log this class writes the class reference into Lessons, the owner reconciles form-logged rows, and outcomes live in the tracker | accepted |
+| [0060](0060-structured-billing-input.md) | The monthly billing input is a versioned owner-only export with derived charge states, checked against the text-based count | accepted |

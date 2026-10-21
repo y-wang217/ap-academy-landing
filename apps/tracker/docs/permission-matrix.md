@@ -511,7 +511,7 @@ below still apply on top. The other three reads are still live Notion reads.
 
 | role | access |
 |---|---|
-| owner | read, write (every adopted student). Import preview and run, summary sync, monthly review, scope admin |
+| owner | read, write (every adopted student). Import preview and run, summary sync, monthly review, scope admin. The billing check (`/scheduler/billing`) and its export (`/api/scheduler/monthly-billing-input`) read the last written text from `schedule_summaries` only, scope admin; everyone else gets 403 from the API and 404 from the page (REQ-40) |
 | grade teacher | none. Scope none, 403 |
 | scheduling-only teacher | none. Admin-only routes, 403 |
 | student | none. Scope none, 403 |

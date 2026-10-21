@@ -19,7 +19,7 @@ const sha = (s: string) => createHash("sha256").update(s).digest("hex");
  * version, then add a row with the new hashes (docs/billing-input.md).
  */
 const PINS: Record<string, { fixture: string; keys: string }> = {
-  "1:1": { fixture: "PENDING", keys: "PENDING" },
+  "1:1": { fixture: "9f7d38428c7b01a9a627013e9deda7334844b505924e039cf46ee97af3c1a631", keys: "e8fe4897efbf1d1651f99435037f32a03c8bac2a17b4871c3ea6092b7e78230f" },
 };
 
 describe("the billing input fixture month", () => {
