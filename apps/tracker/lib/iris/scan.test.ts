@@ -52,3 +52,29 @@ describe("Iris source scan", () => {
     expect(readFileSync(PARENTS, "utf8")).not.toMatch(/"PATCH"|"DELETE"|"PUT"/);
   });
 });
+
+// REQ-43 AC10, AC12: no prompt or answer text anywhere in Postgres, and the classify files obey the scans above.
+describe("Iris stores no model text", () => {
+  const MIGRATION = readFileSync(join(ROOT, "..", "..", "supabase", "migrations", "0024_iris_core.sql"), "utf8");
+
+  it("no iris table has a column named like prompt, answer, summary, completion or response", () => {
+    const tables = [...MIGRATION.matchAll(/create table (iris\.\w+) \(([\s\S]*?)\n\);/g)];
+    expect(tables.map((t) => t[1])).toEqual(expect.arrayContaining(["iris.messages", "iris.ai_calls", "iris.events", "iris.runs"]));
+    for (const [, table, body] of tables) {
+      const columns = body.split("\n").map((l) => l.trim()).filter((l) => /^[a-z_]+ /.test(l) && !/^(check|unique|primary|foreign|constraint)\b/.test(l)).map((l) => l.split(" ")[0]);
+      for (const c of columns) expect(c, `${table}.${c}`).not.toMatch(/prompt|answer|summary|completion|response/);
+    }
+  });
+
+  it("the store and the classify step never write a summary or the prompt", () => {
+    for (const f of [join(ROOT, "lib", "data", "iris.ts"), join(ROOT, "lib", "iris", "store.ts"), join(ROOT, "lib", "iris", "store.fake.ts"), join(ROOT, "lib", "iris", "classify-step.ts")]) {
+      const src = readFileSync(f, "utf8");
+      expect(src, rel(f)).not.toMatch(/\bsummary\b/);
+      expect(src, rel(f)).not.toMatch(/\b(system|user)\s*:/);
+    }
+  });
+
+  it("covers the classify files", () => {
+    expect(IRIS.map(rel)).toEqual(expect.arrayContaining(["lib/iris/classify.ts", "lib/iris/classify-prompt.ts", "lib/iris/classify-step.ts", "lib/iris/route.ts", "lib/iris/quote.ts"]));
+  });
+});
