@@ -548,3 +548,21 @@ below still apply on top. The other three reads are still live Notion reads.
 | grade teacher + staff link | none. Neither role reads it |
 | staff link + parent link | read: the union of the `scheduling-only teacher` and `parent` rows |
 | grade teacher + parent link | read: the union of the `grade teacher` and `parent` rows |
+
+## Founder Console
+
+`/tracker/console` and `/tracker/api/console/*` (REQ-53, tracker ADR 0062, workspace ADR 0006). Owner only, decided by `getViewer()` before any read; the health route then confirms with `tracker.is_org_owner` on the owner's own client. No new table or function, so `supabase/tests/permission_matrix.sql` is unchanged.
+
+| viewer | page | API |
+|---|---|---|
+| signed out | 307 to `/login?next=/tracker/console` (proxy) | 307 to `/login` (proxy); 401 `unauthenticated` if the proxy is skipped |
+| owner | 200, the console | 200 |
+| grade teacher | 404 | 403 `forbidden` |
+| scheduling-only teacher (staff link, no membership) | 404 | 403 `forbidden` |
+| student | 404 | 403 `forbidden` |
+| parent | 404 | 403 `forbidden` |
+| signed in, no role | 404 | 403 `forbidden` |
+| revoked staff link, deleted membership | 404 | 403 `forbidden` |
+| owner + staff link | 200, as owner | 200 |
+| grade teacher + staff link, staff link + parent link, grade teacher + parent link | 404 | 403 `forbidden` |
+| any viewer, cross-site write | n/a | 403 `forbidden` from the proxy, before the session is read |

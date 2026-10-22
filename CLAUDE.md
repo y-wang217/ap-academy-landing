@@ -8,6 +8,8 @@ which supersedes parts of 0001. The done state they describe:
 [`docs/spec/single-domain-done-state.md`](docs/spec/single-domain-done-state.md).
 Who edits people data and what the apps may copy:
 [`docs/adr/0004-notion-edits-people-supabase-reads-local.md`](docs/adr/0004-notion-edits-people-supabase-reads-local.md).
+Where the Founder Console lives and how it is gated:
+[`docs/adr/0006-founder-console-placement.md`](docs/adr/0006-founder-console-placement.md).
 Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 
 ## Layout

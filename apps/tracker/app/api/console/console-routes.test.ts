@@ -11,7 +11,7 @@ const base = { userId: "u1", email: "x@example.com" };
 const NOW = new Date("2026-10-22T12:00:00.000Z");
 
 function fakeDb(result: { data: unknown; error: unknown }) {
-  const rpc = vi.fn(async (_fn: string, _args: unknown) => result);
+  const rpc = vi.fn<(fn: string, args: unknown) => Promise<typeof result>>(async () => result);
   return { db: { tracker: { rpc } } as unknown as Db, rpc };
 }
 
