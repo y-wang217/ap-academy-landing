@@ -109,10 +109,10 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
       const hasDraft = new Set([...drafts.values()].map((d) => d.messageId));
       return [...messages.values()]
         .filter((m) => m.direction === "inbound" && m.retryCount < maxRetries && !hasDraft.has(m.id))
-        .filter((m) => m.state === "classified" || (m.state === "escalated" && m.escalationReason === "escalate_only" && m.intent === "no_show" && !m.handledAt))
+        .filter((m) => m.state === "classified" || (m.state === "escalated" && (m.escalationReason === "escalate_only" || m.escalationReason === "schedule_no_show") && m.intent === "no_show" && !m.handledAt))
         .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
         .slice(0, limit)
-        .map((m) => ({ id: m.id, threadId: m.threadId, receivedAt: m.receivedAt, bodyText: m.bodyText, retryCount: m.retryCount, state: m.state as "classified" | "escalated", intent: m.intent ?? null, notionStudentId: m.notionStudentId ?? null }));
+        .map((m) => ({ id: m.id, threadId: m.threadId, receivedAt: m.receivedAt, bodyText: m.bodyText, retryCount: m.retryCount, state: m.state as "classified" | "escalated", intent: m.intent ?? null, notionStudentId: m.notionStudentId ?? null, escalationReason: m.escalationReason ?? null, flags: m.flags ?? [] }));
     },
     async insertDraft(d) {
       check("insertDraft");

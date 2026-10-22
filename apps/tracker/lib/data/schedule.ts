@@ -29,7 +29,7 @@ const AvailabilityExceptionRow = z.object({
 }).transform((r): AvailabilityExceptionRecord => ({
   id: r.id, staffId: r.notion_staff_id, onDate: r.on_date, kind: r.kind, startTime: r.start_time, endTime: r.end_time, updatedAt: r.updated_at,
 }));
-const SeriesRow = z.object({
+export const SeriesRow = z.object({
   id: uuid, notion_staff_id: uuid, notion_student_id: uuid, subject: z.string(), kind: z.enum(["one_off", "weekly"]),
   start_date: z.string(), start_time: hhmm, duration_minutes: z.number(), effective_until: z.string().nullable(),
   split_from: uuid.nullable(), updated_at: ts,
@@ -40,7 +40,7 @@ const SeriesRow = z.object({
   startTime: r.start_time, durationMinutes: r.duration_minutes, effectiveUntil: r.effective_until, splitFrom: r.split_from, updatedAt: r.updated_at,
   purpose: r.purpose ?? null, makeupFor: r.makeup_for ?? null,
 }));
-const ExceptionRow = z.object({
+export const ExceptionRow = z.object({
   id: uuid, series_id: uuid, original_date: z.string(), kind: z.enum(["cancelled", "moved"]),
   new_date: z.string().nullable(), new_start_time: hhmm.nullable(),
 }).transform((r): ClassException => ({

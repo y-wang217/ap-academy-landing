@@ -194,10 +194,10 @@ export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
     async listDraftable(maxRetries, limit) {
       const { data, error } = await iris
         .from("messages")
-        .select("id, thread_id, received_at, body_text, retry_count, state, intent, notion_student_id")
+        .select("id, thread_id, received_at, body_text, retry_count, state, intent, notion_student_id, escalation_reason, flags")
         .eq("org_id", orgId)
         .eq("direction", "inbound")
-        .or("state.eq.classified,and(state.eq.escalated,escalation_reason.eq.escalate_only,intent.eq.no_show,handled_at.is.null)")
+        .or("state.eq.classified,and(state.eq.escalated,escalation_reason.in.(escalate_only,schedule_no_show),intent.eq.no_show,handled_at.is.null)")
         .lt("retry_count", maxRetries)
         .order("received_at", { ascending: true })
         .limit(limit * 4);

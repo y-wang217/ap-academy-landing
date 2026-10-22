@@ -7,7 +7,7 @@ import type { SchedulerIdentity } from "../scheduler/identity";
 import type { ClassifyPort } from "./classify";
 import { runClassify } from "./classify-step";
 import type { DraftPort } from "./draft";
-import { runDraft } from "./draft-step";
+import { runDraft, type StudentSchedule } from "./draft-step";
 import { runIntake, type GmailPort } from "./intake";
 import type { PushOutcome } from "./notion-push";
 import { POLICY_VERSION } from "./policy";
@@ -34,6 +34,8 @@ export type IrisRunDeps = {
   classify: ClassifyPort | null;
   /** Null when AI is not set up: classified messages wait for a draft (REQ-44). */
   draft: DraftPort | null;
+  /** One student's classes from the scheduler, for schedule-aware cancellations (REQ-46). Null: cancellations draft as before. */
+  schedule: ((studentId: string) => Promise<StudentSchedule>) | null;
   /** The Notion phone backup, or null when Notion Work is not set up (REQ-44). */
   push: ((d: { store: IrisStore; directory: () => Promise<FamilyEntry[]>; now: () => Date }) => Promise<PushOutcome>) | null;
 };
@@ -98,7 +100,7 @@ export async function handleIrisRun(input: {
     ? await runClassify({ store, classify: deps.classify, directory, settings: claimed, now, startedAtMs: startedMs })
     : { result: "ok" as const, classified: 0, escalated: 0, failed: 0, error: null };
   const drafted = ok && classified.result === "ok"
-    ? await runDraft({ store, draft: deps.draft, directory, now, startedAtMs: startedMs })
+    ? await runDraft({ store, draft: deps.draft, directory, schedule: deps.schedule, now, startedAtMs: startedMs })
     : { result: "ok" as const, drafted: 0, escalated: 0, failed: 0, error: null };
   const failedStep = classified.result === "failed" || drafted.result === "failed";
   const pushed = ok && !failedStep && deps.push && now().getTime() - startedMs < TUNING.irisPushBudgetMs

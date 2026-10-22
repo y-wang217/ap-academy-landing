@@ -30,7 +30,7 @@ function world(opts: { paused?: boolean; listFails?: boolean; classify?: Classif
     get: async (_t, id) => (gmailCalls.push(`get:${id}`), message(id, "who@z.com")),
   };
   const directoryCalls: number[] = [];
-  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null };
+  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, schedule: null };
   const build = vi.fn((org: string) => (org ? deps : null));
   const run = (authorization: string | null = AUTH, env = { secret: SECRET as string | undefined, orgId: ORG as string | undefined }) =>
     handleIrisRun({ authorization, env, build, now: () => new Date(T0) });

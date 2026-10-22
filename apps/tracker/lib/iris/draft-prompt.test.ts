@@ -46,3 +46,32 @@ describe("buildDraftPrompt", () => {
     expect(p.user.match(/<\/message>/g)).toHaveLength(1);
   });
 });
+
+// REQ-46 AC7: the schedule-aware reply types carry their own text and two date lines, never a time.
+describe("buildDraftPrompt: schedule facts", () => {
+  const plain = { ...base, history: [], body: "Please cancel this week." };
+  it("a late cancellation holds exactly its own policy text and the two dates", () => {
+    const p = buildDraftPrompt({ ...plain, replyType: "late_cancel", schedule: { missedDate: "2026-10-20", nextDate: "2026-10-27" } });
+    expect(p.system).toContain(POLICY.late_cancel.text);
+    for (const other of ["cancel_with_notice", "cancellation", "no_show"] as const) expect(both(p)).not.toContain(POLICY[other].text);
+    expect(p.user).toContain("Missed class: Tuesday 20 October");
+    expect(p.user).toContain("Next scheduled class: Tuesday 27 October");
+    expect(both(p)).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(p.user).not.toContain("2026");
+  });
+
+  it("says none on the schedule when there is no next class", () => {
+    const p = buildDraftPrompt({ ...plain, replyType: "cancel_with_notice", schedule: { missedDate: "2026-11-01", nextDate: null } });
+    expect(p.system).toContain(POLICY.cancel_with_notice.text);
+    expect(p.user).toContain("Missed class: Sunday 1 November");
+    expect(p.user).toContain("Next scheduled class: none on the schedule");
+  });
+
+  it("no_show and cancellation get no schedule lines", () => {
+    for (const replyType of ["no_show", "cancellation"] as const) {
+      const p = buildDraftPrompt({ ...plain, replyType, schedule: { missedDate: "2026-10-20", nextDate: "2026-10-27" } });
+      expect(p.user, replyType).not.toContain("Missed class:");
+      expect(p.user, replyType).not.toContain("Next scheduled class:");
+    }
+  });
+});
