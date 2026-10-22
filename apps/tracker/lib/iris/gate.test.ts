@@ -14,7 +14,7 @@ const passingRun = (over: Partial<GateRun> = {}): GateRun => ({
   ...over,
 });
 const streak = (n = 20, version: number | null = POLICY) => ({ uneditedStreak: n, streakPolicyVersion: version });
-const gate = (run: GateRun | null, rt = streak(), type = "cancellation") => evaluateGate({ type, run, replyType: rt, policyVersion: POLICY, model: MODEL });
+const gate = (run: GateRun | null, rt: ReturnType<typeof streak> | null = streak(), type = "cancellation") => evaluateGate({ type, run, replyType: rt, policyVersion: POLICY, model: MODEL });
 
 describe("evaluateGate", () => {
   it("passes at exactly 20 labelled, 0.95, 1.0, 4 and a streak of 20", () => {

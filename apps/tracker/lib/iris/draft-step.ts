@@ -1,11 +1,11 @@
 import { TUNING } from "../domain/tuning";
 import type { FamilyEntry } from "../notion/parents";
-import type { DraftPort } from "./draft";
+import type { DraftPort, DraftPrompt } from "./draft";
 import { buildDraftPrompt } from "./draft-prompt";
 import { checkDraft } from "./draft-rules";
 import { shortError } from "./intake";
 import { DRAFTABLE_ESCALATIONS, DRAFTABLE_INTENTS, POLICY_VERSION, type DraftableType } from "./policy";
-import type { DraftableMessage, IrisStore } from "./store";
+import type { DraftableMessage, IrisStore, ThreadHistoryRow } from "./store";
 
 /**
  * Rung 2 (REQ-44, tracker ADR 0063): each classified message, and each
@@ -34,6 +34,29 @@ const firstWord = (s: string) => s.trim().split(/\s+/)[0] ?? "";
 const lastWords = (s: string) => s.trim().split(/\s+/).slice(1);
 const DRAFTABLE: readonly string[] = [...DRAFTABLE_INTENTS, ...DRAFTABLE_ESCALATIONS];
 
+/**
+ * The draft prompt for one message. Pure. The live step and the eval step
+ * (REQ-45) both call it, so their prompts cannot drift.
+ */
+export function prepareDraftPrompt(
+  m: { bodyText: string | null; notionStudentId: string | null },
+  replyType: DraftableType,
+  ctx: { studentIds: string[]; history: ThreadHistoryRow[] },
+  byStudent: Map<string, FamilyEntry>,
+): DraftPrompt {
+  const family = ctx.studentIds.map((id) => byStudent.get(id)).filter((e): e is FamilyEntry => e !== undefined);
+  const child = (m.notionStudentId ? byStudent.get(m.notionStudentId) : undefined) ?? (family.length === 1 ? family[0] : undefined);
+  const parent = family[0]?.parentName ?? "";
+  return buildDraftPrompt({
+    replyType,
+    parentFirstName: firstWord(parent) || null,
+    childFirstName: child ? firstWord(child.studentName) || null : null,
+    surnames: [...lastWords(parent), ...family.flatMap((e) => lastWords(e.studentName))],
+    history: ctx.history,
+    body: m.bodyText ?? "",
+  });
+}
+
 export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
   const out: DraftOutcome = { result: "ok", drafted: 0, escalated: 0, failed: 0, error: null };
   const { store, draft } = deps;
@@ -60,17 +83,7 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
   const one = async (m: DraftableMessage) => {
     const replyType = m.intent as DraftableType;
     const ctx = await store.threadContext(m.threadId, m.receivedAt, HISTORY_LINES);
-    const family = ctx.studentIds.map((id) => byStudent.get(id)).filter((e): e is FamilyEntry => e !== undefined);
-    const child = (m.notionStudentId ? byStudent.get(m.notionStudentId) : undefined) ?? (family.length === 1 ? family[0] : undefined);
-    const parent = family[0]?.parentName ?? "";
-    const prompt = buildDraftPrompt({
-      replyType,
-      parentFirstName: firstWord(parent) || null,
-      childFirstName: child ? firstWord(child.studentName) || null : null,
-      surnames: [...lastWords(parent), ...family.flatMap((e) => lastWords(e.studentName))],
-      history: ctx.history,
-      body: m.bodyText ?? "",
-    });
+    const prompt = prepareDraftPrompt(m, replyType, ctx, byStudent);
 
     const answer = await draft(prompt, deps.signal);
     await store.insertAiCall({
