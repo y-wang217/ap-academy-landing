@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // REQ-55 AC10: without CONSOLE_PREVIEW=1 the preview page is a 404 at request time too.
 const { NOT_FOUND, notFound } = vi.hoisted(() => {
-  const NOT_FOUND = new Error("NEXT_NOT_FOUND sentinel");
+  const NOT_FOUND = new Error("not found sentinel");
   return {
     NOT_FOUND,
     notFound: vi.fn(() => {
@@ -18,7 +18,9 @@ const ORIGINAL = process.env.CONSOLE_PREVIEW;
 const params = { searchParams: Promise.resolve({ mode: "sales" }) };
 const load = async () => (await import("./page.preview")).default;
 
-beforeEach(() => notFound.mockClear());
+beforeEach(() => {
+  notFound.mockClear();
+});
 afterEach(() => {
   if (ORIGINAL === undefined) delete process.env.CONSOLE_PREVIEW;
   else process.env.CONSOLE_PREVIEW = ORIGINAL;

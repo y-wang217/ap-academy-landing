@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { securityHeaders } from "@ap-academy/db/headers";
+import { pageExtensionsFor } from "./lib/console/preview-flag";
 
 // The public site the tracker is served under (through landing's rewrite).
 const SITE_HOST = new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.apacademy.ca").host;
@@ -9,6 +10,9 @@ const nextConfig: NextConfig = {
   // (ADR 0002). Every route and asset lives under this prefix.
   basePath: "/tracker",
   transpilePackages: ["@ap-academy/db"],
+  // The console kit preview (app/console/preview/page.preview.tsx) is a route
+  // only when CONSOLE_PREVIEW=1, never in a deploy (REQ-55, ADR 0066).
+  pageExtensions: pageExtensionsFor(process.env),
   async headers() {
     return [{ source: "/:path*", headers: [...securityHeaders] }];
   },
