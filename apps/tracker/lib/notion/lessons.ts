@@ -1,7 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { lessonHours, LessonLinkError, type LessonLinkPort, type LessonRow, type NewLesson } from "../domain/schedule/lesson-link";
+import type { ReadResult, TrialLessonSource } from "../console/contracts";
 import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig } from "./config";
+import { pagedQuery, parseRows, prop, propertyFilter, type ReaderOptions, val } from "./paged";
 import { NotionError } from "./staff";
 
 /**
@@ -10,6 +12,7 @@ import { NotionError } from "./staff";
  * (Date, Teacher, the student relation, Class occurrence) and drops the rest
  * at the parse step. It has exactly two write shapes: a create with six fixed
  * keys, and a patch of `Class occurrence` alone. It never archives a page.
+ * fetchTrialLessons (REQ-54) is a separate read of TRIAL_PROPS for the console, never a payout field.
  */
 // The e2e stack points this at a local mock; production leaves the override unset.
 const BASE = `${notionApiBaseOverride() ?? "https://api.notion.com"}/v1`;
@@ -182,4 +185,50 @@ export function createLessonsPort(config: NotionConfig, fetcher: typeof fetch = 
       throw new NotionError("Too many Notion pages");
     },
   };
+}
+
+/** The Founder Console's trial evidence read (REQ-54, ADR 0065). Topic and diagnosis come back as presence only. */
+export const TRIAL_PROPS = [
+  "Type", DATE, TEACHER, STUDENT, DURATION, "Topic Covered", "Trial: Diagnosis", "Trial: Preferred Lesson Day",
+] as const;
+
+const TrialPage = z.object({
+  id: z.guid(),
+  properties: z.object({
+    [DATE]: prop.date,
+    [TEACHER]: prop.relation,
+    [STUDENT]: prop.relation,
+    [DURATION]: prop.number,
+    "Topic Covered": prop.text,
+    "Trial: Diagnosis": prop.text,
+    "Trial: Preferred Lesson Day": prop.multi,
+  }),
+});
+
+const toTrial = (page: z.output<typeof TrialPage>): TrialLessonSource => {
+  const p = page.properties;
+  return {
+    id: page.id,
+    date: val.date(p[DATE]),
+    teacherId: val.firstId(p[TEACHER]),
+    studentId: val.firstId(p[STUDENT]),
+    durationHours: val.number(p[DURATION]),
+    hasTopic: val.present(p["Topic Covered"]),
+    hasDiagnosis: val.present(p["Trial: Diagnosis"]),
+    preferredDays: val.multi(p["Trial: Preferred Lesson Day"]),
+  };
+};
+
+/**
+ * Every Lessons row with Type = Trial, Date descending. Read-only, and apart
+ * from createLessonsPort, so a missing `Class occurrence` does not fail it.
+ */
+export async function fetchTrialLessons(config: NotionConfig, opts: ReaderOptions): Promise<ReadResult<TrialLessonSource>> {
+  const fetcher = opts.fetcher ?? fetch;
+  const filterQuery = await propertyFilter(config.token, fetcher, config.dataSourceId, TRIAL_PROPS, "Lessons");
+  const read = await pagedQuery({
+    token: config.token, fetcher, dataSourceId: config.dataSourceId, filterQuery, maxPages: opts.maxPages,
+    body: { filter: { property: "Type", select: { equals: "Trial" } }, sorts: [{ property: DATE, direction: "descending" }] },
+  });
+  return { ...parseRows(read.rows, TrialPage, toTrial), complete: read.complete, pages: read.pages };
 }

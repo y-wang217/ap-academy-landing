@@ -105,7 +105,7 @@ describe("fetchLeads", () => {
 
   it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
     for (const [pages, maxPages, complete] of [[[[page(S1, "A")]], 10, true], [[[page(S1, "A")], [page(S2, "B")]], 10, true], [[[page(S1, "A")], [page(S2, "B")]], 1, false]] as const) {
-      const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages: pages as unknown[][] });
+      const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages });
       const r = await fetchLeads(cfg, { fetcher: f.fetcher, maxPages });
       expect(r.complete).toBe(complete);
       expect(onlyReads(f.calls, DS)).toBe(true);
@@ -113,7 +113,7 @@ describe("fetchLeads", () => {
   });
 
   it("a missing property fails the read, naming it", async () => {
-    const { Stage: _s, ...rest } = SCHEMA;
+    const rest = Object.fromEntries(Object.entries(SCHEMA).filter(([k]) => k !== "Stage"));
     const f = notionFake({ dataSourceId: DS, schema: rest, pages: [] });
     await expect(fetchLeads(cfg, { fetcher: f.fetcher, maxPages: 10 })).rejects.toThrow("Leads is missing Stage");
   });

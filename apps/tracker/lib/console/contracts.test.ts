@@ -35,7 +35,7 @@ describe("contract helpers", () => {
   });
 
   it("a Notion page url drops the dashes", () => {
-    expect(notionPageUrl("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001")).toBe("https://www.notion.so/aaaaaaaaaaaa4aaa8aaaaaaaaaaaa0001");
+    expect(notionPageUrl("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001")).toBe("https://www.notion.so/aaaaaaaaaaaa4aaa8aaaaaaaaaaa0001");
   });
 
   it("healthOf keeps exactly status, times and reasons", () => {

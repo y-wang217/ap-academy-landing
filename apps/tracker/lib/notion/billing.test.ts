@@ -243,7 +243,7 @@ describe("fetchOrgInvoices (REQ-54 AC1, AC6, AC7)", () => {
 
   it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
     for (const [pages, maxPages, complete] of [[[[inv(ids(1), "Sent")]], 10, true], [[[inv(ids(1), "Sent")], [inv(ids(2), "Paid")]], 10, true], [[[inv(ids(1), "Sent")], [inv(ids(2), "Paid")]], 1, false]] as const) {
-      const f = notionFake({ dataSourceId: INVOICES, schema: SCHEMAS[INVOICES], pages: pages as unknown[][] });
+      const f = notionFake({ dataSourceId: INVOICES, schema: SCHEMAS[INVOICES], pages });
       const r = await fetchOrgInvoices({ token: "t", dataSourceId: INVOICES }, { fetcher: f.fetcher, maxPages });
       expect(r.complete).toBe(complete);
       expect(onlyReads(f.calls, INVOICES)).toBe(true);

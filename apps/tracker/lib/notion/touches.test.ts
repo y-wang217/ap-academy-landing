@@ -51,7 +51,7 @@ describe("fetchRecentTouches", () => {
 
   it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
     for (const [pages, maxPages, complete] of [[[[touch(1, S1, "2026-10-20T10:00:00Z")]], 10, true], [[[touch(1, S1, "2026-10-20T10:00:00Z")], [touch(2, S1, "2026-10-19T10:00:00Z")]], 10, true], [[[touch(1, S1, "2026-10-20T10:00:00Z")], [touch(2, S1, "2026-10-19T10:00:00Z")]], 1, false]] as const) {
-      const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages: pages as unknown[][] });
+      const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages });
       const r = await fetchRecentTouches(cfg, { since: "2026-07-24", fetcher: f.fetcher, maxPages });
       expect(r.complete).toBe(complete);
       expect(onlyReads(f.calls, DS)).toBe(true);

@@ -67,3 +67,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0060](0060-structured-billing-input.md) | The monthly billing input is a versioned owner-only export with derived charge states, checked against the text-based count | accepted |
 | [0061](0061-iris-escalation-rules.md) | Iris classifies once and escalates first | accepted |
 | [0062](0062-founder-console-owner-gate.md) | The founder console is gated by `getViewer()` in its layout and page, and `/api/console/` writes are origin-checked | accepted |
+| [0065](0065-console-read-facade.md) | The Founder Console reads Notion through one facade that returns a status for every panel | accepted |

@@ -13,7 +13,7 @@ export function notionFake(opts: {
   /** Property name to ID. */
   schema: Record<string, string>;
   /** Query results, one array per Notion page of results. The last has has_more false unless `hasMoreAtEnd`. */
-  pages: unknown[][];
+  pages: ReadonlyArray<ReadonlyArray<unknown>>;
   hasMoreAtEnd?: boolean;
   queryStatus?: number;
 }) {

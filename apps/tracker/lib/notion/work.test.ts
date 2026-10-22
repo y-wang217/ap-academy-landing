@@ -153,7 +153,7 @@ describe("fetchWorkItems (REQ-54 AC1, AC6, AC7)", () => {
 
   it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
     for (const [pages, maxPages, complete] of [[[[item(PAGE)]], 10, true], [[[item(PAGE)], [item(BLOCK)]], 10, true], [[[item(PAGE)], [item(BLOCK)]], 1, false]] as const) {
-      const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages: pages as unknown[][] });
+      const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages });
       const r = await fetchWorkItems({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages });
       expect(r.complete).toBe(complete);
       expect(onlyReads(f.calls, DS)).toBe(true);

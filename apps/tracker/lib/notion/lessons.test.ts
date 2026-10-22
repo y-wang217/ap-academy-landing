@@ -193,7 +193,7 @@ describe("fetchTrialLessons (REQ-54 AC1, AC6, AC7)", () => {
 
   it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
     for (const [pages, maxPages, complete] of [[[[trial(L1)]], 10, true], [[[trial(L1)], [trial(L2)]], 10, true], [[[trial(L1)], [trial(L2)]], 1, false]] as const) {
-      const f = notionFake({ dataSourceId: DS, schema: TRIAL_SCHEMA, pages: pages as unknown[][] });
+      const f = notionFake({ dataSourceId: DS, schema: TRIAL_SCHEMA, pages });
       const r = await fetchTrialLessons({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages });
       expect(r.complete).toBe(complete);
       expect(onlyReads(f.calls, DS)).toBe(true);

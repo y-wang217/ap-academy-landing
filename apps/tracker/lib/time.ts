@@ -13,3 +13,15 @@ export function localHhmm(now: Date = new Date()): string {
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
   return `${get("hour")}:${get("minute")}`;
 }
+
+/**
+ * The local calendar date (YYYY-MM-DD) of a Notion date value (REQ-54). A
+ * date-only value is already local and is returned as is; a datetime is an
+ * instant, read in the students' time zone. Null for null or an unreadable value.
+ */
+export function localDateOf(iso: string | null): string | null {
+  if (iso === null) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? null : todayIso(at);
+}
