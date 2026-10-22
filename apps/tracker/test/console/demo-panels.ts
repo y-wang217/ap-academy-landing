@@ -2,8 +2,13 @@ import type { GaugeData } from "../../components/console/kit/gauge";
 import type { MetricData } from "../../components/console/kit/metric";
 import type { QueueItem } from "../../components/console/kit/queue-row";
 import type { RadarStage } from "../../components/console/kit/radar";
+import type { PanelResult } from "../../lib/console/contracts";
+import { buildNorthStar } from "../../lib/console/north-star";
 import type { ConsolePanels } from "../../lib/console/panel-slots";
 import type { ConsolePanels as ConsolePanelResults } from "../../lib/console/contracts";
+import { todayIso } from "../../lib/time";
+import { addDays } from "../../lib/domain/schedule/wallclock";
+import { weekOf } from "../../lib/domain/schedule/week";
 import { notConnected, type PanelStatus, type PanelView } from "../../lib/console/panel-view";
 import { buildSalesView, type SalesView } from "../../lib/console/sales-view";
 import { fixtureLeads, TRIAL_F } from "./sales-fixtures";
@@ -43,11 +48,37 @@ const stages: RadarStage[] = [
   { key: "enrolled", label: "Enrolled", count: 1 },
 ];
 
+const DEMO_STUDENT = "d0000000-0000-4000-8000-000000000001";
+const DEMO_STAFF = "d0000000-0000-4000-8000-0000000000aa";
+
+/** A verified north star over test rows: one addition this week, one the week before. */
+function demoNorthStar(now: Date) {
+  const week = weekOf(todayIso(now));
+  const facade = <T,>(panel: PanelResult<T>["panel"], data: T): PanelResult<T> => ({
+    panel, status: "ready", data, count: null, lastCheckedAt: now.toISOString(), lastSuccessfulFetchAt: now.toISOString(), staleReason: null, errorMessage: null, sourceEvidence: [],
+  });
+  const series = (n: number, startDate: string, durationMinutes: number) => ({
+    id: `d0000000-0000-4000-8000-${String(n).padStart(12, "0")}`, studentId: DEMO_STUDENT, staffId: DEMO_STAFF, kind: "weekly" as const, purpose: null,
+    startDate, effectiveUntil: null, durationMinutes, splitFrom: null, createdAt: `${startDate}T15:00:00Z`,
+  });
+  return buildNorthStar({
+    week,
+    now,
+    panels: {
+      leads: facade("leads", []), touches: facade("touches", []), trialLessons: facade("trialLessons", []), work: facade("work", []),
+      invoices: facade("invoices", [{ id: "demo-invoice", pageUrl: "#", status: "Paid", paidOn: week.from, amount: null, creditApplied: null, issued: null, due: null, month: null, studentIds: [DEMO_STUDENT], studentName: null }]),
+      people: facade("people", { syncedAt: now.toISOString(), students: 1, staff: 1 }),
+    },
+    people: { ok: true, value: { students: [{ id: DEMO_STUDENT, name: "Student A", stage: "Active", active: true }], staff: [], syncedAt: now.toISOString() } },
+    series: { ok: true, value: { series: [series(1, addDays(week.from, -6), 60), series(2, week.from, 90)], adoptions: [{ studentId: DEMO_STUDENT, adoptedAt: "2026-01-05T10:00:00Z" }] } },
+  });
+}
+
 export function demoPanels(now: Date): ConsolePanels {
   return {
     sales: {
       next: result("next", now, "ready", leads),
-      northStar: result<MetricData>("northStar", now, "ready", { value: 6, unit: "h", delta: 2 }),
+      northStar: demoNorthStar(now),
       signals: result<QueueItem[]>("signals", now, "stale", [{ id: "sig-1", title: "Trial with no follow-up", reason: "Lead A, two days" }], { staleReason: "Source slow to answer" }),
       followUps: notConnected("followUps", now),
       radar: result("radar", now, "ready", stages),

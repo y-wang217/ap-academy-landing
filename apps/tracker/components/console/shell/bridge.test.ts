@@ -143,3 +143,20 @@ function salesPanels(): ConsolePanelResults {
     work: r("work", "empty", []), invoices: r("invoices", "empty", []), people: r("people", "ready", { syncedAt: at, students: 0, staff: 0 }),
   } as ConsolePanelResults;
 }
+
+// REQ-56 AC5: the northStar slot renders the north-star instrument; the other slots are unchanged.
+describe("the north-star slot", () => {
+  const view = {
+    panel: "northStar", status: "error" as const, data: null, count: null, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: null,
+    staleReason: null, errorMessage: "Cannot verify weekly hours", sourceEvidence: [],
+  };
+  it("renders NorthStar for northStar and leaves the rest Not connected yet", () => {
+    const panels = placeholderPanels(NOW);
+    panels.sales.northStar = view;
+    const out = renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels, now: NOW }));
+    const north = out.slice(out.indexOf('data-panel="northStar"'), out.indexOf('data-panel="signals"'));
+    expect(north).toContain("data-north-star");
+    expect(north).toContain("Cannot verify weekly hours");
+    expect(count(tabpanel(out, "sales"), "Not connected yet")).toBe(8);
+  });
+});

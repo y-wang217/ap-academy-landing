@@ -57,6 +57,18 @@ const MESSAGE_CHARS = 300;
 const NOT_CONFIGURED = "Notion is not configured";
 const PEOPLE_STALE = "people_sync_stale";
 const NAMES_UNAVAILABLE = "names_unavailable";
+/** The stale reasons that come from joining names, not from the source read itself. */
+export const NAME_JOIN_REASONS: readonly string[] = [PEOPLE_STALE, NAMES_UNAVAILABLE];
+
+/**
+ * True when a panel holds every row its source has (REQ-56): ready, empty, or stale only because
+ * names could not be joined. A page-cap stop or any other reason is not complete.
+ */
+export function readComplete(r: Pick<PanelResult<unknown>, "status" | "staleReason">): boolean {
+  if (r.status === "ready" || r.status === "empty") return true;
+  if (r.status !== "stale" || !r.staleReason) return false;
+  return r.staleReason.split("; ").every((reason) => NAME_JOIN_REASONS.includes(reason));
+}
 
 function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const controller = new AbortController();

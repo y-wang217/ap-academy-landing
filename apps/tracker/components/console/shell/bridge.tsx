@@ -9,6 +9,8 @@ import type { SalesView } from "../../../lib/console/sales-view";
 import { NextLead } from "../sales/next-lead";
 import { SalesProvider } from "../sales/sales-provider";
 import { SalesRadar } from "../sales/sales-radar";
+import { NorthStar } from "../north-star";
+import type { NorthStarData } from "../../../lib/console/north-star";
 import { HeaderRail } from "./header-rail";
 import { Horizon } from "./horizon";
 import { ModePanel } from "./mode-tabs";
@@ -28,6 +30,7 @@ function Instrument({ slot, result, live }: { slot: PanelSlot; result: PanelView
   // REQ-57: with a sales view, the Sales queue and radar are live from the SalesProvider.
   if (live && slot.mode === "sales" && slot.id === "next") return <NextLead {...frame} />;
   if (live && slot.mode === "sales" && slot.id === "radar") return <SalesRadar {...frame} />;
+  if (slot.id === "northStar") return <NorthStar {...frame} result={result as PanelView<NorthStarData>} />;
   switch (slot.kind) {
     case "metric":
       return <Metric {...frame} result={result as PanelView<MetricData>} />;
