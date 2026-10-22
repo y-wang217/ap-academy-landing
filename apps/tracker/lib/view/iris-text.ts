@@ -1,4 +1,7 @@
-/** Every line of Iris copy (REQ-42). Plain, short, no em dashes. */
+import { POLICY } from "../iris/policy";
+import type { MessageState } from "../iris/store";
+
+/** Every line of Iris copy (REQ-42, REQ-43). Plain, short, no em dashes. */
 export const IRIS_TEXT = {
   title: "Iris inbox",
   settingsTitle: "Iris settings",
@@ -21,18 +24,76 @@ export const IRIS_TEXT = {
   never: "Never",
   saveFailed: "Could not save. Try again.",
   runFailed: "The run failed. See the last error.",
+  aiNotSetUp: "AI is not set up",
+  aiNotSetUpDetail: "Matched mail waits at Family found until ANTHROPIC_API_KEY is set.",
+  confidenceThreshold: "Escalate under",
+  markHandled: "Mark handled",
+  handled: "Handled",
+  saving: "Saving...",
+  messageLoadError: "Could not load this message.",
+  messageNotFound: "This message is not here. It may have been deleted.",
+  bodyNotStored: "Body not stored",
+  whatIrisRead: "What Iris read",
+  intent: "Intent",
+  confidence: "Confidence",
+  flags: "Flags",
+  reason: "Reason",
+  policyVersion: "Policy version",
+  from: "From",
+  received: "Received",
+  state: "State",
+  inbox: "Inbox",
 } as const;
 
-export function stateLabel(state: "received" | "matched" | "escalated" | "failed", reason: string | null): string {
+const FLAG_LABELS: Record<string, string> = {
+  money_dispute: "money dispute",
+  legal_threat: "legal threat",
+  crisis: "crisis",
+  hardship: "hardship",
+  refund: "refund",
+};
+export const flagLabel = (f: string) => FLAG_LABELS[f] ?? f;
+
+/** An intent by its policy title: "Cancellation". */
+export function intentLabel(intent: string | null): string {
+  if (!intent) return "Not classified";
+  return (POLICY as Record<string, { title: string } | undefined>)[intent]?.title ?? intent;
+}
+
+/** 0.92 as "92%". */
+export const confidenceText = (c: number | null) => (c === null ? "-" : `${Math.round(c * 100)}%`);
+
+export function stateLabel(state: MessageState, reason: string | null, extra: { flags?: string[]; intent?: string | null } = {}): string {
   switch (state) {
     case "matched":
       return "Family found";
     case "received":
       return "Waiting for Notion";
+    case "classified":
+      return "Ready for a draft";
     case "failed":
       return "Failed";
     case "escalated":
-      return reason === "automated" ? "Automated, handled" : reason === "unknown_sender" ? "Unknown sender" : "Needs you";
+      switch (reason) {
+        case "automated":
+          return "Automated, handled";
+        case "unknown_sender":
+          return "Unknown sender";
+        case "flagged":
+          return extra.flags && extra.flags.length > 0 ? `Sensitive: ${extra.flags.map(flagLabel).join(", ")}` : "Sensitive";
+        case "multi_intent":
+          return "Two requests";
+        case "low_confidence":
+          return "Unsure";
+        case "escalate_only":
+          return `${intentLabel(extra.intent ?? null)}, for you`;
+        case "ambiguous_student":
+          return "Which child?";
+        case "no_reply_needed":
+          return "No reply needed, handled";
+        default:
+          return "Needs you";
+      }
   }
 }
 

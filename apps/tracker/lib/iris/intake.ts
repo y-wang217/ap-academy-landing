@@ -10,7 +10,7 @@ import { mergeThread, type IrisSettings, type IrisStore, type MessageInsert, typ
 /**
  * One Iris poll (REQ-42): list new inbox mail, store each message once, match
  * the sender to a family, and retry messages that waited on Notion. Nothing
- * is classified, drafted or sent. Every port is injected, and the function
+ * is classified here (classify-step.ts does that next), drafted or sent. Every port is injected, and the function
  * never throws: an escaping error becomes `result: "failed"`.
  */
 export const POLL_QUERY = `in:inbox category:primary newer_than:${TUNING.irisPollWindowDays}d`;
@@ -239,7 +239,8 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
         purgeAt: new Date(receivedMs + retention).toISOString(),
       });
       if (match.state === "matched") {
-        await store.updateMessage(w.id, { state: "matched", bodyText: body.text, bodyTruncated: body.truncated, stateChangedAt: at(), lastError: null });
+        // The Notion tries are spent: classification gets its own (REQ-43 AC8).
+        await store.updateMessage(w.id, { state: "matched", bodyText: body.text, bodyTruncated: body.truncated, stateChangedAt: at(), retryCount: 0, lastError: null });
         counts.matched += 1;
       } else {
         await store.updateMessage(w.id, { state: "escalated", escalationReason: "unknown_sender", stateChangedAt: at(), lastError: null });

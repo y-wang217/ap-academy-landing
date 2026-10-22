@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(__dirname, "..", "..", "..");
 const DECISIONS = join(ROOT, "apps/tracker/docs/decisions");
 const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
-const ADRS = ["0057-iris-tracker-module.md", "0058-iris-message-retention.md", "0059-iris-gmail-read-only.md"];
+const ADRS = ["0057-iris-tracker-module.md", "0058-iris-message-retention.md", "0059-iris-gmail-read-only.md", "0061-iris-escalation-rules.md"];
 
 describe("Iris ADRs", () => {
   for (const file of ADRS) {
@@ -32,5 +32,21 @@ describe("Iris ADRs", () => {
   it("the operator guide names the scope, the secret, the exposed schema and delete_thread", () => {
     const src = read(join(ROOT, "apps/tracker/docs/iris-operations.md"));
     for (const s of ["gmail.readonly", "IRIS_CRON_SECRET", "Exposed schemas", "iris.delete_thread"]) expect(src, s).toContain(s);
+  });
+});
+
+// REQ-43 AC16: the escalation rules ADR.
+describe("ADR 0061", () => {
+  it("states the routing order, the reason codes, the keyword backstop and the holding-line promise", () => {
+    const src = read(join(DECISIONS, "0061-iris-escalation-rules.md"));
+    for (const code of ["flagged", "multi_intent", "low_confidence", "escalate_only", "no_reply_needed", "ambiguous_student"]) expect(src, code).toContain(`\`${code}\``);
+    expect(src).toMatch(/keyword backstop/i);
+    expect(src).toMatch(/no time promise/i);
+    const order = ["flagged", "multi_intent", "low_confidence", "escalate_only", "no_reply_needed", "ambiguous_student"].map((c) => src.indexOf(`\`${c}\``));
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("the operator guide has a Classification section", () => {
+    expect(read(join(ROOT, "apps/tracker/docs/iris-operations.md"))).toMatch(/^## Classification/m);
   });
 });

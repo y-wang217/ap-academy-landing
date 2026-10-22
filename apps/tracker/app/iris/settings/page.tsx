@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { IrisSettingsActions } from "@/components/iris/settings-actions";
 import { TopBar } from "@/components/top-bar";
 import { Card, Notice, Page, secondaryButtonClass } from "@/components/ui";
+import { aiConfigured } from "@/lib/ai/config";
 import { getViewer } from "@/lib/data/queries";
 import { missingIrisEnv } from "@/lib/iris/config";
 import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { loadIrisSettings } from "@/lib/iris/handlers";
-import { IRIS_TEXT, notSetUpText, runSummaryText } from "@/lib/view/iris-text";
+import { IRIS_TEXT, confidenceText, notSetUpText, runSummaryText } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ const when = (iso: string) =>
 
 /** Iris settings (REQ-42 AC27): Paused or Running, the last run, its error, and which env vars are missing. Owner only. */
 export default async function IrisSettingsPage() {
-  const s = await loadIrisSettings(realIrisAdminDeps(), missingIrisEnv());
+  const s = await loadIrisSettings(realIrisAdminDeps(), missingIrisEnv(), aiConfigured());
   if (s.kind === "denied") redirect("/");
   const viewer = await getViewer();
   const email = viewer.kind === "signed_out" || viewer.kind === "not_configured" ? undefined : viewer.email;
@@ -34,6 +35,16 @@ export default async function IrisSettingsPage() {
                 Status: <strong>{s.paused ? IRIS_TEXT.statusPaused : IRIS_TEXT.statusRunning}</strong>
               </p>
               <IrisSettingsActions paused={s.paused} />
+            </Card>
+            <Card>
+              {!s.aiConfigured && (
+                <Notice tone="warn">
+                  <span data-ai-not-set-up>{IRIS_TEXT.aiNotSetUp}</span>. {IRIS_TEXT.aiNotSetUpDetail}
+                </Notice>
+              )}
+              <p className="text-sm" data-confidence-threshold>
+                {IRIS_TEXT.confidenceThreshold}: {confidenceText(s.confidenceThreshold)}
+              </p>
             </Card>
             <Card title={IRIS_TEXT.lastRun}>
               <p className="text-sm" data-last-run>

@@ -1,0 +1,20 @@
+{
+  "_comment": "Synthetic sensitive-trigger fixtures for REQ-43 (Iris Policy Rules R-3). No real parent words. Each must escalate with its flag.",
+  "fixtures": [
+    { "flag": "money_dispute", "text": "Hi Charlie, I think I was charged twice for October. Can you check?" },
+    { "flag": "money_dispute", "text": "We did not authorize this payment on the card." },
+    { "flag": "money_dispute", "text": "The invoice shows the wrong amount. We were overcharged this month." },
+    { "flag": "legal_threat", "text": "If this is not fixed I will file a chargeback with my bank." },
+    { "flag": "legal_threat", "text": "I have spoken to a lawyer about the missed classes." },
+    { "flag": "legal_threat", "text": "I will leave a bad review and contact the Better Business Bureau." },
+    { "flag": "crisis", "text": "Things are hard at home and I worry she might hurt herself." },
+    { "flag": "crisis", "text": "There was a family emergency last night and the police were called." },
+    { "flag": "crisis", "text": "He told the school counsellor about abuse, so we need to stop for now." },
+    { "flag": "hardship", "text": "His grandmother passed away, so he will miss this week." },
+    { "flag": "hardship", "text": "My husband lost his job and we can’t afford classes right now." },
+    { "flag": "hardship", "text": "She is in the hospital after surgery and will be away." },
+    { "flag": "refund", "text": "Can we get a refund for the classes we did not use?" },
+    { "flag": "refund", "text": "I would like my money back for September." },
+    { "flag": "refund", "text": "Please reimburse the two sessions that were cancelled." }
+  ]
+}

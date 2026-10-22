@@ -65,3 +65,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0058](0058-iris-message-retention.md) | Iris stores parent mail for 90 days, with no audit copy | accepted |
 | [0059](0059-iris-gmail-read-only.md) | Gmail through a service account, read-only, with no SDK | accepted |
 | [0060](0060-structured-billing-input.md) | The monthly billing input is a versioned owner-only export with derived charge states, checked against the text-based count | accepted |
+| [0061](0061-iris-escalation-rules.md) | Iris classifies once and escalates first | accepted |

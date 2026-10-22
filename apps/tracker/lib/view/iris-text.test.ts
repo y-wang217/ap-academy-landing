@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IRIS_TEXT, ageText, gmailThreadUrl, notSetUpText, runSummaryText, stateLabel } from "./iris-text";
+import { IRIS_TEXT, ageText, confidenceText, gmailThreadUrl, intentLabel, notSetUpText, runSummaryText, stateLabel } from "./iris-text";
 
 // REQ-42 AC26, AC27: the Iris page copy.
 describe("iris-text", () => {
@@ -42,5 +42,39 @@ describe("iris-text", () => {
   it("summarises a run and links a Gmail thread", () => {
     expect(runSummaryText({ result: "ok", stored: 3, matched: 2, escalated: 1 })).toBe("ok · 3 new, 2 matched, 1 escalated");
     expect(gmailThreadUrl("charlie@apacademy.ca", "18f2a")).toBe("https://mail.google.com/mail/?authuser=charlie%40apacademy.ca#all/18f2a");
+  });
+});
+
+// REQ-43 AC14: every new state and reason has a label.
+describe("iris-text: classification labels", () => {
+  it("labels classified and every escalation reason", () => {
+    expect(stateLabel("classified", null)).toBe("Ready for a draft");
+    expect(stateLabel("escalated", "flagged", { flags: ["money_dispute"] })).toBe("Sensitive: money dispute");
+    expect(stateLabel("escalated", "flagged", { flags: ["legal_threat", "refund"] })).toBe("Sensitive: legal threat, refund");
+    expect(stateLabel("escalated", "multi_intent")).toBe("Two requests");
+    expect(stateLabel("escalated", "low_confidence")).toBe("Unsure");
+    expect(stateLabel("escalated", "escalate_only", { intent: "billing_question" })).toBe("Billing question, for you");
+    expect(stateLabel("escalated", "ambiguous_student")).toBe("Which child?");
+    expect(stateLabel("escalated", "no_reply_needed")).toBe("No reply needed, handled");
+    expect(stateLabel("escalated", null)).toBe("Needs you");
+  });
+
+  it("names intents by their policy title and formats confidence as a percent", () => {
+    expect(intentLabel("cancellation")).toBe("Cancellation");
+    expect(intentLabel("not_a_real_intent")).toBe("not_a_real_intent");
+    expect(intentLabel(null)).toBe("Not classified");
+    expect(confidenceText(0.92)).toBe("92%");
+    expect(confidenceText(0.855)).toBe("86%");
+    expect(confidenceText(null)).toBe("-");
+  });
+
+  it("has the AI and Mark handled copy, with no em or en dashes", () => {
+    expect(IRIS_TEXT).toMatchObject({ aiNotSetUp: "AI is not set up", markHandled: "Mark handled", handled: "Handled", saving: "Saving...", messageLoadError: "Could not load this message.", bodyNotStored: "Body not stored" });
+    const all = [
+      ...Object.values(IRIS_TEXT),
+      ...["flagged", "multi_intent", "low_confidence", "escalate_only", "ambiguous_student", "no_reply_needed"].map((r) => stateLabel("escalated", r, { flags: ["crisis"], intent: "other" })),
+      stateLabel("classified", null),
+    ].join("\n");
+    expect(all).not.toMatch(/[–—]/);
   });
 });

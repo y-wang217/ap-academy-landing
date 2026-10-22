@@ -15,7 +15,8 @@ export function realIrisAdminDeps(): IrisAdminDeps {
     const get = () =>
       (inner ??= getDb().then((db) => {
         if (!db) throw new Error("iris unavailable");
-        return createIrisReader(irisSchema(db.supabase), orgId);
+        const uid = async () => (await db.supabase.auth.getUser()).data.user?.id ?? null;
+        return createIrisReader(irisSchema(db.supabase), orgId, uid);
       }));
     return {
       getSettings: async () => (await get()).getSettings(),
@@ -23,6 +24,8 @@ export function realIrisAdminDeps(): IrisAdminDeps {
       listNeedsYou: async (limit) => (await get()).listNeedsYou(limit),
       listRecent: async (limit) => (await get()).listRecent(limit),
       updatePaused: async (paused) => (await get()).updatePaused(paused),
+      getMessage: async (id) => (await get()).getMessage(id),
+      markHandled: async (id) => (await get()).markHandled(id),
     };
   };
   return { identity, reader };

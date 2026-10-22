@@ -56,4 +56,8 @@ export const TUNING = {
   irisMaxRetries: 3,
   /** The poll lease: a crashed run frees it after this long. */
   irisPollLeaseSeconds: 300,
+  /** Messages Iris classifies in one run, oldest first (REQ-43). */
+  irisMaxClassifyPerRun: 10,
+  /** No new classify call starts this long after the run started, so the run ends inside its 60 s. */
+  irisClassifyBudgetMs: 35_000,
 } as const;

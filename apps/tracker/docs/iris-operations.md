@@ -1,7 +1,7 @@
-# Iris operations (Iris 2/9)
+# Iris operations (Iris 2/9 and 3/9)
 
 How to set up, run, pause and clean up Iris's read-only inbox (REQ-42,
-tracker ADRs 0057 to 0059, workspace ADR 0005). Iris starts paused and sends
+classification REQ-43, tracker ADRs 0057 to 0059 and 0061, workspace ADR 0005). Iris starts paused and sends
 nothing in this slice.
 
 ## One-time setup (Charlie, after migration 0024 is applied)
@@ -42,6 +42,33 @@ matches each sender to a family in Students & Parents, and purges expired
 rows. Mail Gmail files under Updates or Promotions is not read. A Notion
 outage leaves new mail at "Waiting for Notion" with no body; the next run
 that reads Notion finishes it, and after three failed runs it shows "Failed".
+
+## Classification
+
+With `ANTHROPIC_API_KEY` set in the tracker's Vercel env (REQ-43, tracker
+ADR 0061), each run then classifies up to 10 matched messages with Claude,
+oldest first. Without the key, `/tracker/iris/settings` says "AI is not set
+up" and matched mail waits at "Family found".
+
+- **What goes to Anthropic.** The policy intents, flags and hard rules, the
+  parent's and children's first names, the message without its quoted
+  history, and up to 5 short lines of the same thread. Email addresses and
+  the family's surnames are scrubbed. Nothing from the response is stored
+  except intent, confidence, flags and the reason; `iris.ai_calls` keeps
+  tokens and the outcome only.
+- **Reason codes,** in the order they are checked: `flagged` (shown as
+  "Sensitive: ..."), `multi_intent` ("Two requests"), `low_confidence`
+  ("Unsure", under the threshold shown on the settings page),
+  `escalate_only` (billing, refund, no-show, other: "..., for you"),
+  `no_reply_needed` (handled at once, never in Needs you) and
+  `ambiguous_student` ("Which child?"). Everything else shows "Ready for a
+  draft" and waits for Iris 4/9.
+- **Mark handled.** Open a message from the inbox and press Mark handled
+  once you have dealt with it in Gmail. It leaves Needs you; the record
+  keeps who and when.
+- **Failures.** A refusal, a busy API or an outage leaves the message at
+  "Family found" with a short error; after three failed runs it shows
+  "Failed".
 
 ## Pause
 

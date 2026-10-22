@@ -1,15 +1,15 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ESCALATE_ONLY, HARD_RULES, NEVER_AUTO_SEND, NOTICE_HOURS, POLICY, POLICY_VERSION, REPLY_TYPES } from "./policy";
+import { CHILD_SCOPED, CLASSIFIER_INTENTS, ESCALATE_ONLY, FLAG_HINTS, FLAGS, HARD_RULES, INTENT_HINTS, NEVER_AUTO_SEND, NOTICE_HOURS, POLICY, POLICY_VERSION, REPLY_TYPES, SENSITIVE_TRIGGERS } from "./policy";
 
 // REQ-42 AC7: the versioned policy file, with the founder values of Oct 16, 2026.
 const ROOT = join(__dirname, "..", "..");
 const SOURCE = readFileSync(join(__dirname, "policy.ts"), "utf8");
 
 describe("policy.ts", () => {
-  it("is version 1 with a 12-hour notice window", () => {
-    expect(POLICY_VERSION).toBe(1);
+  it("is version 2 (REQ-43) with a 12-hour notice window", () => {
+    expect(POLICY_VERSION).toBe(2);
     expect(NOTICE_HOURS).toBe(12);
   });
 
@@ -55,10 +55,30 @@ describe("policy.ts", () => {
       if (f === "node_modules" || f === ".next") return [];
       return statSync(p).isDirectory() ? files(p) : /\.tsx?$/.test(p) && !/\.test\.tsx?$/.test(p) ? [p] : [];
     });
-    const texts = [...Object.values(POLICY).map((s) => s.text), ...HARD_RULES];
+    const texts = [...Object.values(POLICY).map((s) => s.text), ...HARD_RULES, ...Object.values(INTENT_HINTS), ...Object.values(FLAG_HINTS)];
     for (const f of files(ROOT).filter((f) => !f.endsWith(join("lib", "iris", "policy.ts")))) {
       const src = readFileSync(f, "utf8");
       for (const t of texts) expect(src.includes(t), `${f} carries "${t.slice(0, 40)}"`).toBe(false);
+    }
+  });
+
+  // REQ-43: what the classifier may answer.
+  it("lists the 9 classifier intents, each a policy section with a hint", () => {
+    expect([...CLASSIFIER_INTENTS]).toEqual(["cancellation", "reschedule_request", "pause_or_stop", "general_question", "no_reply_needed", "billing_question", "refund_request", "no_show", "other"]);
+    for (const i of CLASSIFIER_INTENTS) {
+      expect(POLICY[i], i).toBeDefined();
+      expect(INTENT_HINTS[i], i).not.toBe("");
+    }
+    for (const never of ["cancel_with_notice", "late_cancel", "reschedule_offer"]) expect(CLASSIFIER_INTENTS as readonly string[]).not.toContain(never);
+    expect([...CHILD_SCOPED]).toEqual(["cancellation", "reschedule_request"]);
+  });
+
+  it("has the five flags, each with a hint and lower-case trigger phrases", () => {
+    expect([...FLAGS]).toEqual(["money_dispute", "legal_threat", "crisis", "hardship", "refund"]);
+    for (const f of FLAGS) {
+      expect(FLAG_HINTS[f], f).not.toBe("");
+      expect(SENSITIVE_TRIGGERS[f].length, f).toBeGreaterThanOrEqual(3);
+      for (const t of SENSITIVE_TRIGGERS[f]) expect(t, f).toBe(t.toLowerCase().trim());
     }
   });
 });
