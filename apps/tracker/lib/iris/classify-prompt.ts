@@ -48,7 +48,8 @@ const SYSTEM = [
 const EMAIL = /[^\s<>()[\]]+@[^\s<>()[\]]+/g;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function scrubber(surnames: string[], keep: string[]): (s: string) => string {
+/** Replaces addresses with [email] and the family's surnames with [name], keeping the first names given. Shared with draft-prompt.ts. */
+export function scrubber(surnames: string[], keep: string[]): (s: string) => string {
   const kept = new Set(keep.map((k) => k.toLowerCase()));
   const names = [...new Set(surnames.map((s) => s.trim()).filter((s) => s.length > 1 && !kept.has(s.toLowerCase())))];
   const re = names.length > 0 ? new RegExp(`(?<!\\p{L})(?:${names.map(escapeRe).join("|")})(?!\\p{L})`, "giu") : null;
@@ -58,14 +59,23 @@ function scrubber(surnames: string[], keep: string[]): (s: string) => string {
   };
 }
 
-export function buildClassifyPrompt(input: ClassifyInput): { system: string; user: string } {
-  const scrub = scrubber(input.surnames, [input.parentFirstName ?? "", ...input.childFirstNames]);
-  const history = input.history.slice(-HISTORY_LINES).map((h) => {
+/** The last 5 earlier messages as one code-built line each. Shared with draft-prompt.ts. */
+export function historyLines(history: HistoryLine[], scrub: (s: string) => string): string[] {
+  return history.slice(-HISTORY_LINES).map((h) => {
     const who = h.direction === "inbound" ? "parent" : "Charlie";
     const snippet = scrub((h.snippet ?? "").replace(/\s+/g, " ").trim().slice(0, SNIPPET_CHARS));
     return `- ${h.receivedAt.slice(0, 10)}, ${who}, ${h.intent ?? "-"}, ${snippet}`;
   });
-  const body = scrub(stripQuoted(input.body)).replace(/<\/?message>/gi, (tag) => tag.replace("<", "< "));
+}
+
+/** The quote-stripped, scrubbed body, with any message tag inside it defused. */
+export const messageBlock = (body: string, scrub: (s: string) => string) =>
+  scrub(stripQuoted(body)).replace(/<\/?message>/gi, (tag) => tag.replace("<", "< "));
+
+export function buildClassifyPrompt(input: ClassifyInput): { system: string; user: string } {
+  const scrub = scrubber(input.surnames, [input.parentFirstName ?? "", ...input.childFirstNames]);
+  const history = historyLines(input.history, scrub);
+  const body = messageBlock(input.body, scrub);
   const user = [
     `Parent first name: ${input.parentFirstName ? scrub(input.parentFirstName) : "unknown"}`,
     `Children: ${input.childFirstNames.length > 0 ? input.childFirstNames.map(scrub).join(", ") : "none known"}`,

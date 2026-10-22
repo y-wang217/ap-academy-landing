@@ -54,6 +54,36 @@ function readMessage(msg: GmailMessage) {
 }
 const UNREADABLE = "Could not read the message";
 
+/**
+ * Charlie's own reply in a known thread, as an outbound charlie_manual record.
+ * Shared with supersede.ts. Throws on a message it cannot read.
+ */
+export function charlieManualRow(msg: GmailMessage, threadId: string, retentionMs: number): MessageInsert {
+  const { headers, from, body, snippet } = readMessage(msg);
+  const receivedMs = Number(msg.internalDate);
+  return {
+    threadId,
+    gmailMessageId: msg.id,
+    rfcMessageId: headers["Message-ID"] ?? null,
+    direction: "outbound",
+    source: "charlie_manual",
+    fromEmail: from.email,
+    fromName: from.name?.slice(0, 200) ?? null,
+    receivedAt: new Date(receivedMs).toISOString(),
+    bodyText: body.text,
+    bodyTruncated: body.truncated,
+    snippet,
+    state: null,
+    stateChangedAt: null,
+    escalationReason: null,
+    policyVersion: null,
+    handledAt: null,
+    retryCount: 0,
+    lastError: null,
+    purgeAt: new Date(receivedMs + retentionMs).toISOString(),
+  };
+}
+
 async function pool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -150,8 +180,7 @@ export async function runIntake(deps: IntakeDeps): Promise<RunOutcome> {
           counts.skipped += 1;
           continue;
         }
-        const row: MessageInsert = { ...base, threadId: thread.id, direction: "outbound", source: "charlie_manual", bodyText: body.text, bodyTruncated: body.truncated, state: null, stateChangedAt: null, policyVersion: null };
-        if ((await store.insertMessage(row)).inserted) {
+        if ((await store.insertMessage(charlieManualRow(msg, thread.id, retention))).inserted) {
           counts.stored += 1;
           await store.setLastOutbound(thread.id, receivedAt);
         }

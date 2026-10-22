@@ -26,6 +26,13 @@ export function realIrisAdminDeps(): IrisAdminDeps {
       updatePaused: async (paused) => (await get()).updatePaused(paused),
       getMessage: async (id) => (await get()).getMessage(id),
       markHandled: async (id) => (await get()).markHandled(id),
+      listDraftsWaiting: async (limit) => (await get()).listDraftsWaiting(limit),
+      listSentToday: async (since, limit) => (await get()).listSentToday(since, limit),
+      listFailed: async (limit) => (await get()).listFailed(limit),
+      getThreadView: async (id) => (await get()).getThreadView(id),
+      approveDraft: async (id, version) => (await get()).approveDraft(id, version),
+      saveDraftEdit: async (id, version, body) => (await get()).saveDraftEdit(id, version, body),
+      rejectDraft: async (id, reason) => (await get()).rejectDraft(id, reason),
     };
   };
   return { identity, reader };

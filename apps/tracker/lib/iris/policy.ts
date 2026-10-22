@@ -3,8 +3,9 @@
 // Founder values of Oct 16, 2026. Changing any text means bumping
 // POLICY_VERSION, which every stored message records. Version 2 (REQ-43)
 // adds the classifier intents, the flags and the sensitive-trigger phrases.
+// Version 3 (REQ-44) adds the voice rules, the signature and what gets a draft.
 
-export const POLICY_VERSION = 2;
+export const POLICY_VERSION = 3;
 
 /** A cancellation with at least this many hours of notice is "with notice". */
 export const NOTICE_HOURS = 12;
@@ -103,6 +104,30 @@ export const HARD_RULES: readonly string[] = [
 ];
 
 export const HOLDING_LINE = "Charlie will follow up with you personally.";
+
+/**
+ * How every draft reads (REQ-44, spec 4.4). The model writes the body only.
+ * Worded apart from HARD_RULES, which belong to the classifier prompt.
+ */
+export const VOICE_RULES: readonly string[] = [
+  "Write plainly and briefly, in the first person, as Charlie.",
+  "Do not sign the email: the signature is added for you.",
+  "Do not say or suggest that an AI, an assistant or an automated system wrote it.",
+  "Do not mention any dollar amount or price.",
+  "Do not name a specific make-up or class time unless one is supplied below.",
+  "Do not confirm that a missed class is forfeited.",
+  "Do not promise money back.",
+  `If you are unsure, use this line and set needs_charlie: "${HOLDING_LINE}"`,
+];
+
+/** Appended by code to every reply, once (spec decision 13). */
+export const SIGNATURE = "Charlie\nAP Academy";
+
+/** Classified intents that get a draft (spec 4.4). */
+export const DRAFTABLE_INTENTS = ["cancellation", "reschedule_request", "pause_or_stop", "general_question"] as const;
+/** Escalate-only intents that still get a draft for Charlie to edit. */
+export const DRAFTABLE_ESCALATIONS = ["no_show"] as const;
+export type DraftableType = (typeof DRAFTABLE_INTENTS)[number] | (typeof DRAFTABLE_ESCALATIONS)[number];
 
 /**
  * What the classifier may answer (REQ-43). cancel_with_notice, late_cancel

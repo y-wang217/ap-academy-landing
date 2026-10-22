@@ -18,7 +18,7 @@ export type IrisSettings = {
   lastError: string | null;
 };
 
-export type MessageState = "received" | "matched" | "classified" | "escalated" | "failed";
+export type MessageState = "received" | "matched" | "classified" | "escalated" | "drafted" | "approved" | "sent" | "failed";
 
 export type StoredThread = {
   id: string;
@@ -77,6 +77,8 @@ export type MessagePatch = Partial<
     intent: string | null;
     confidence: number | null;
     flags: string[];
+    /** The chosen child, a Notion Students & Parents page id (REQ-44). */
+    notionStudentId: string | null;
   }
 >;
 
@@ -91,7 +93,7 @@ export type ThreadHistoryRow = { receivedAt: string; direction: "inbound" | "out
 /** One iris.ai_calls row: tokens and outcome, never prompt or answer text. */
 export type AiCallRecord = {
   messageId: string | null;
-  purpose: "classify";
+  purpose: "classify" | "draft";
   model: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -111,12 +113,60 @@ export type RunRecord = {
   stored: number;
   matched: number;
   classified: number;
+  drafted: number;
   escalated: number;
   skipped: number;
   failed: number;
   purged: number;
   error: string | null;
 };
+
+/** A message waiting for a draft (REQ-44): classified, or an unhandled no-show escalation, with no draft yet. */
+export type DraftableMessage = {
+  id: string;
+  threadId: string;
+  receivedAt: string;
+  bodyText: string | null;
+  retryCount: number;
+  state: "classified" | "escalated";
+  intent: string | null;
+  notionStudentId: string | null;
+};
+
+/** Version 1 of an Iris draft: proposed, created_by iris, edited false. The body has no signature. */
+export type DraftInsert = { messageId: string; replyType: string; bodyText: string; policyVersion: number };
+
+/** One row of iris.pushes (REQ-44): ids and codes only. */
+export type PushRecord = {
+  id: string | null;
+  messageId: string;
+  draftId: string | null;
+  day: string;
+  notionBlockId: string | null;
+  commentDone: boolean;
+  state: "pending" | "pushed" | "failed";
+  attempts: number;
+  lastError: string | null;
+  purgeAt: string;
+};
+
+/** What the phone backup needs about one message. No body: the parent's text never goes to Notion. */
+export type PushCandidate = {
+  messageId: string;
+  gmailThreadId: string;
+  receivedAt: string;
+  state: MessageState;
+  escalationReason: string | null;
+  intent: string | null;
+  notionStudentIds: string[];
+  notionStudentId: string | null;
+  purgeAt: string;
+  /** The latest proposed or approved draft, if any. */
+  draft: { id: string; bodyText: string } | null;
+  push: PushRecord | null;
+};
+
+export type PushDay = { day: string; workPageId: string | null; logEntryId: string | null };
 
 export interface IrisStore {
   getSettings(): Promise<IrisSettings | null>;
@@ -139,9 +189,30 @@ export interface IrisStore {
   /** The thread's student ids, and up to `limit` of its messages received before `before`, oldest first. */
   threadContext(threadId: string, before: string, limit: number): Promise<{ studentIds: string[]; history: ThreadHistoryRow[] }>;
   insertAiCall(c: AiCallRecord): Promise<void>;
+  /** Messages waiting for a draft with retry_count below the cap, oldest first (REQ-44). */
+  listDraftable(maxRetries: number, limit: number): Promise<DraftableMessage[]>;
+  insertDraft(d: DraftInsert): Promise<string>;
+  /**
+   * Charlie answered in Gmail at `sentAt`: every inbound message of the thread
+   * received before it and still drafted, or escalated and unhandled, gets
+   * reason answered_by_charlie and handled_at; their proposed drafts become
+   * superseded; one superseded event each. Returns the message ids.
+   */
+  supersedeThread(threadId: string, sentAt: string): Promise<string[]>;
+  /** Drafted, or escalated and unhandled (not automated), with no push or a failed one under the cap, oldest first. */
+  listPushable(maxAttempts: number, limit: number): Promise<PushCandidate[]>;
+  /** Inserts or updates the push row for its message; returns the row id. */
+  savePush(p: PushRecord): Promise<string>;
+  getPushDay(day: string): Promise<PushDay | null>;
+  savePushDay(d: PushDay): Promise<void>;
+  /** Push rows whose message is gone or purges before `cutoff`, with their Notion block if any. */
+  listExpiringPushes(cutoff: string): Promise<{ id: string; notionBlockId: string | null }[]>;
+  deletePush(id: string): Promise<void>;
+  /** For the day's Work Log line. */
+  pushDayCounts(day: string): Promise<{ drafts: number; escalations: number; failed: number }>;
   updateMessage(id: string, patch: MessagePatch): Promise<void>;
   /** detail holds ids, states and reason codes only. */
-  insertEvent(e: { kind: string; messageId: string | null; detail: EventDetail }): Promise<void>;
+  insertEvent(e: { kind: string; messageId: string | null; draftId?: string | null; detail: EventDetail }): Promise<void>;
   insertRun(r: RunRecord): Promise<string>;
   /** iris.purge_expired: the number of rows deleted. */
   purge(): Promise<number>;

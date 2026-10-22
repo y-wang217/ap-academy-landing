@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IrisReader } from "../iris/handlers";
-import { ClassifiableRow, HistoryRow, InboxMessageRow, InboxThreadRow, MessageDetailRow, OwnerSettingsRow, PurgeCounts, RetryRow, RunRow, SettingsRow, ThreadRow, type InboxMessage } from "../iris/schemas";
+import { ClassifiableRow, DraftRow, DraftableRow, HistoryRow, InboxMessageRow, InboxThreadRow, MessageDetailRow, OwnerSettingsRow, PurgeCounts, PushRow, PushCandidateRow, PushDayRow, ReviewResult, RetryRow, RunRow, SettingsRow, ThreadMessageRow, ThreadRow, type InboxMessage } from "../iris/schemas";
 import type { IrisStore, MessageInsert, MessagePatch, ThreadPatch } from "../iris/store";
 import type { Db } from "./client";
 
@@ -56,6 +56,7 @@ function patchColumns(p: MessagePatch): Record<string, unknown> {
   if (p.flags !== undefined) out.flags = p.flags;
   if (p.policyVersion !== undefined) out.policy_version = p.policyVersion;
   if (p.handledAt !== undefined) out.handled_at = p.handledAt;
+  if (p.notionStudentId !== undefined) out.notion_student_id = p.notionStudentId;
   if (p.retryCount !== undefined) out.retry_count = p.retryCount;
   if (p.lastError !== undefined) out.last_error = p.lastError === null ? null : p.lastError.slice(0, 300);
   return out;
@@ -71,6 +72,8 @@ function threadColumns(p: ThreadPatch): Record<string, unknown> {
 }
 
 const THREAD_SELECT = "id, gmail_thread_id, first_received_at, last_inbound_at, purge_at";
+const PUSH_SELECT = "id, message_id, draft_id, day, notion_block_id, comment_done, state, attempts, last_error, purge_at";
+const DRAFT_SELECT = "id, version, reply_type, body_text, policy_version, state, created_by, edited, approved_at, rejected_reason, created_at";
 
 export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
   return {
@@ -185,15 +188,143 @@ export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
       if (error) fail();
     },
     async insertEvent(e) {
-      const { error } = await iris.from("events").insert({ org_id: orgId, kind: e.kind, message_id: e.messageId, actor: "iris", detail: e.detail });
+      const { error } = await iris.from("events").insert({ org_id: orgId, kind: e.kind, message_id: e.messageId, draft_id: e.draftId ?? null, actor: "iris", detail: e.detail });
       if (error) fail();
+    },
+    async listDraftable(maxRetries, limit) {
+      const { data, error } = await iris
+        .from("messages")
+        .select("id, thread_id, received_at, body_text, retry_count, state, intent, notion_student_id")
+        .eq("org_id", orgId)
+        .eq("direction", "inbound")
+        .or("state.eq.classified,and(state.eq.escalated,escalation_reason.eq.escalate_only,intent.eq.no_show,handled_at.is.null)")
+        .lt("retry_count", maxRetries)
+        .order("received_at", { ascending: true })
+        .limit(limit * 4);
+      if (error) fail();
+      const rows = z.array(DraftableRow).parse(data ?? []);
+      if (rows.length === 0) return [];
+      // A no-show stays escalated after its draft, so "no draft yet" is checked here.
+      const d = await iris.from("drafts").select("message_id").eq("org_id", orgId).in("message_id", rows.map((r) => r.id));
+      if (d.error) fail();
+      const drafted = new Set(z.array(z.object({ message_id: z.guid() })).parse(d.data ?? []).map((r) => r.message_id));
+      return rows.filter((r) => !drafted.has(r.id)).slice(0, limit);
+    },
+    async insertDraft(d) {
+      const { data, error } = await iris
+        .from("drafts")
+        .insert({ org_id: orgId, message_id: d.messageId, version: 1, reply_type: d.replyType, body_text: d.bodyText, policy_version: d.policyVersion, state: "proposed", created_by: "iris", edited: false })
+        .select("id")
+        .single();
+      if (error) fail();
+      return z.object({ id: z.guid() }).parse(data).id;
+    },
+    async supersedeThread(threadId, sentAt) {
+      const { data, error } = await iris
+        .from("messages")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("thread_id", threadId)
+        .eq("direction", "inbound")
+        .lt("received_at", sentAt)
+        .or("state.eq.drafted,and(state.eq.escalated,handled_at.is.null)");
+      if (error) fail();
+      const ids = z.array(z.object({ id: z.guid() })).parse(data ?? []).map((r) => r.id);
+      if (ids.length === 0) return [];
+      const m = await iris
+        .from("messages")
+        .update({ state: "escalated", escalation_reason: "answered_by_charlie", handled_at: sentAt, state_changed_at: new Date().toISOString() })
+        .eq("org_id", orgId)
+        .in("id", ids);
+      if (m.error) fail();
+      const d = await iris.from("drafts").update({ state: "superseded" }).eq("org_id", orgId).in("message_id", ids).eq("state", "proposed");
+      if (d.error) fail();
+      const ev = await iris.from("events").insert(ids.map((id) => ({ org_id: orgId, kind: "superseded", message_id: id, actor: "iris", detail: { state: "escalated", reason: "answered_by_charlie" } })));
+      if (ev.error) fail();
+      return ids;
+    },
+    async listPushable(maxAttempts, limit) {
+      const { data, error } = await iris
+        .from("messages")
+        .select("id, thread_id, received_at, state, escalation_reason, intent, notion_student_id, purge_at")
+        .eq("org_id", orgId)
+        .eq("direction", "inbound")
+        .or("state.eq.drafted,and(state.eq.escalated,handled_at.is.null,escalation_reason.neq.automated)")
+        .order("received_at", { ascending: true })
+        .limit(200);
+      if (error) fail();
+      const rows = z.array(PushCandidateRow).parse(data ?? []);
+      if (rows.length === 0) return [];
+      const ids = rows.map((r) => r.id);
+      const [p, d, t] = await Promise.all([
+        iris.from("pushes").select(PUSH_SELECT).eq("org_id", orgId).in("message_id", ids),
+        iris.from("drafts").select("id, message_id, version, body_text").eq("org_id", orgId).in("message_id", ids).in("state", ["proposed", "approved"]),
+        iris.from("threads").select("id, gmail_thread_id, subject, notion_student_ids").in("id", [...new Set(rows.map((r) => r.thread_id))]),
+      ]);
+      if (p.error || d.error || t.error) fail();
+      const pushes = new Map(z.array(PushRow).parse(p.data ?? []).map((r) => [r.messageId, r]));
+      const drafts = new Map<string, { id: string; bodyText: string; version: number }>();
+      for (const r of z.array(z.object({ id: z.guid(), message_id: z.guid(), version: z.number().int(), body_text: z.string() })).parse(d.data ?? [])) {
+        if ((drafts.get(r.message_id)?.version ?? 0) < r.version) drafts.set(r.message_id, { id: r.id, bodyText: r.body_text, version: r.version });
+      }
+      const threads = new Map(z.array(InboxThreadRow).parse(t.data ?? []).map((r) => [r.id, r]));
+      return rows
+        .filter((r) => {
+          const push = pushes.get(r.id);
+          return !push || (push.state !== "pushed" && push.attempts < maxAttempts);
+        })
+        .slice(0, limit)
+        .map((r) => {
+          const draft = drafts.get(r.id);
+          return {
+            messageId: r.id, gmailThreadId: threads.get(r.thread_id)?.gmail_thread_id ?? "", receivedAt: r.received_at, state: r.state, escalationReason: r.escalation_reason,
+            intent: r.intent, notionStudentIds: threads.get(r.thread_id)?.notion_student_ids ?? [], notionStudentId: r.notion_student_id, purgeAt: r.purge_at,
+            draft: draft ? { id: draft.id, bodyText: draft.bodyText } : null, push: pushes.get(r.id) ?? null,
+          };
+        });
+    },
+    async savePush(row) {
+      const { data, error } = await iris
+        .from("pushes")
+        .upsert({
+          org_id: orgId, message_id: row.messageId, draft_id: row.draftId, day: row.day, notion_block_id: row.notionBlockId, comment_done: row.commentDone,
+          state: row.state, attempts: row.attempts, last_error: row.lastError?.slice(0, 300) ?? null, purge_at: row.purgeAt,
+        }, { onConflict: "message_id" })
+        .select("id")
+        .single();
+      if (error) fail();
+      return z.object({ id: z.guid() }).parse(data).id;
+    },
+    async getPushDay(day) {
+      const { data, error } = await iris.from("push_days").select("day, work_page_id, log_entry_id").eq("org_id", orgId).eq("day", day).maybeSingle();
+      if (error) fail();
+      return data ? PushDayRow.parse(data) : null;
+    },
+    async savePushDay(d) {
+      const { error } = await iris.from("push_days").upsert({ org_id: orgId, day: d.day, work_page_id: d.workPageId, log_entry_id: d.logEntryId }, { onConflict: "org_id,day" });
+      if (error) fail();
+    },
+    async listExpiringPushes(cutoff) {
+      const { data, error } = await iris.from("pushes").select("id, notion_block_id").eq("org_id", orgId).or(`message_id.is.null,purge_at.lt."${cutoff}"`);
+      if (error) fail();
+      return z.array(z.object({ id: z.guid(), notion_block_id: z.string().nullable() })).parse(data ?? []).map((r) => ({ id: r.id, notionBlockId: r.notion_block_id }));
+    },
+    async deletePush(id) {
+      const { error } = await iris.from("pushes").delete().eq("org_id", orgId).eq("id", id);
+      if (error) fail();
+    },
+    async pushDayCounts(day) {
+      const { data, error } = await iris.from("pushes").select("draft_id, state").eq("org_id", orgId).eq("day", day);
+      if (error) fail();
+      const rows = z.array(z.object({ draft_id: z.guid().nullable(), state: z.string() })).parse(data ?? []);
+      return { drafts: rows.filter((r) => r.draft_id).length, escalations: rows.filter((r) => !r.draft_id).length, failed: rows.filter((r) => r.state === "failed").length };
     },
     async insertRun(r) {
       const { data, error } = await iris
         .from("runs")
         .insert({
           org_id: orgId, started_at: r.startedAt, finished_at: r.finishedAt, result: r.result,
-          seen: r.seen, stored: r.stored, matched: r.matched, classified: r.classified, escalated: r.escalated, skipped: r.skipped, failed: r.failed, purged: r.purged,
+          seen: r.seen, stored: r.stored, matched: r.matched, classified: r.classified, drafted: r.drafted, escalated: r.escalated, skipped: r.skipped, failed: r.failed, purged: r.purged,
           error: r.error?.slice(0, 300) ?? null,
         })
         .select("id")
@@ -214,30 +345,45 @@ export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
  * client. `uid` is the signed-in owner's auth id, read from the same session.
  */
 export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Promise<string | null> = async () => null): IrisReader {
-  const inbox = async (limit: number, needsYou: boolean): Promise<InboxMessage[]> => {
+  type Section = "needs_you" | "recent" | "drafts" | "sent_today" | "failed";
+  const inbox = async (limit: number, section: Section, since?: string): Promise<InboxMessage[]> => {
     let q = iris
       .from("messages")
-      .select("id, thread_id, from_email, snippet, received_at, state, escalation_reason, intent, flags")
+      .select("id, thread_id, from_email, snippet, received_at, state, escalation_reason, intent, confidence, flags, notion_student_id")
       .eq("org_id", orgId)
       .eq("direction", "inbound");
-    if (needsYou) q = q.eq("state", "escalated").is("handled_at", null);
+    if (section === "needs_you") q = q.eq("state", "escalated").is("handled_at", null);
+    if (section === "drafts") q = q.eq("state", "drafted");
+    if (section === "sent_today") q = q.in("state", ["approved", "sent"]).gte("state_changed_at", since ?? new Date().toISOString());
+    if (section === "failed") q = q.eq("state", "failed");
     const { data, error } = await q.order("received_at", { ascending: false }).limit(limit);
     if (error) fail();
     const rows = z.array(InboxMessageRow).parse(data ?? []);
     const threadIds = [...new Set(rows.map((r) => r.thread_id))];
     const threads = new Map<string, z.infer<typeof InboxThreadRow>>();
+    const failedPush = new Set<string>();
     if (threadIds.length > 0) {
-      const t = await iris.from("threads").select("id, gmail_thread_id, subject, notion_student_ids").in("id", threadIds);
-      if (t.error) fail();
+      const [t, p] = await Promise.all([
+        iris.from("threads").select("id, gmail_thread_id, subject, notion_student_ids").in("id", threadIds),
+        iris.from("pushes").select("message_id").eq("org_id", orgId).eq("state", "failed").in("message_id", rows.map((r) => r.id)),
+      ]);
+      if (t.error || p.error) fail();
       for (const row of z.array(InboxThreadRow).parse(t.data ?? [])) threads.set(row.id, row);
+      for (const row of z.array(z.object({ message_id: z.guid() })).parse(p.data ?? [])) failedPush.add(row.message_id);
     }
     return rows.map((r) => {
       const t = threads.get(r.thread_id);
       return {
         id: r.id, gmailThreadId: t?.gmail_thread_id ?? "", fromEmail: r.from_email, subject: t?.subject ?? null, snippet: r.snippet,
-        receivedAt: r.received_at, state: r.state, escalationReason: r.escalation_reason, intent: r.intent, flags: r.flags, notionStudentIds: t?.notion_student_ids ?? [],
+        receivedAt: r.received_at, state: r.state, escalationReason: r.escalation_reason, intent: r.intent, confidence: r.confidence, flags: r.flags,
+        notionStudentIds: t?.notion_student_ids ?? [], notionStudentId: r.notion_student_id, pushFailed: failedPush.has(r.id),
       };
     });
+  };
+  const review = async (fn: string, args: Record<string, unknown>) => {
+    const { data, error } = await iris.rpc(fn, args);
+    if (error) fail();
+    return ReviewResult.parse(data);
   };
   return {
     async getSettings() {
@@ -256,8 +402,39 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
       if (error) fail();
       return data ? RunRow.parse(data) : null;
     },
-    listNeedsYou: (limit) => inbox(limit, true),
-    listRecent: (limit) => inbox(limit, false),
+    listNeedsYou: (limit) => inbox(limit, "needs_you"),
+    listRecent: (limit) => inbox(limit, "recent"),
+    listDraftsWaiting: (limit) => inbox(limit, "drafts"),
+    listSentToday: (since, limit) => inbox(limit, "sent_today", since),
+    listFailed: (limit) => inbox(limit, "failed"),
+    async getThreadView(id) {
+      const m = await iris.from("messages").select("thread_id, received_at").eq("org_id", orgId).eq("id", id).maybeSingle();
+      if (m.error) fail();
+      if (!m.data) return null;
+      const msg = z.object({ thread_id: z.guid(), received_at: z.string() }).parse(m.data);
+      const [t, d] = await Promise.all([
+        iris
+          .from("messages")
+          .select("id, received_at, direction, source, body_text, snippet")
+          .eq("org_id", orgId)
+          .eq("thread_id", msg.thread_id)
+          .neq("id", id)
+          .order("received_at", { ascending: true })
+          .limit(50),
+        iris.from("drafts").select(DRAFT_SELECT).eq("org_id", orgId).eq("message_id", id).order("version", { ascending: false }),
+      ]);
+      if (t.error || d.error) fail();
+      return { thread: z.array(ThreadMessageRow).parse(t.data ?? []), drafts: z.array(DraftRow).parse(d.data ?? []) };
+    },
+    async approveDraft(id, version) {
+      return (await review("approve_draft", { p_draft: id, p_version: version })).result;
+    },
+    async saveDraftEdit(id, version, body) {
+      return review("save_draft_edit", { p_draft: id, p_version: version, p_body: body });
+    },
+    async rejectDraft(id, reason) {
+      return (await review("reject_draft", { p_draft: id, p_reason: reason })).result;
+    },
     async updatePaused(paused) {
       const { data, error } = await iris.from("settings").update({ paused }).eq("org_id", orgId).select("id");
       if (error) fail();

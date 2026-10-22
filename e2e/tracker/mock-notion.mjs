@@ -3,6 +3,7 @@
 // Two active teachers and three students. REQ-7: one student page can be read and its Weekly Schedule
 // written (the scheduler adopts a student and regenerates that one property). REQ-8 adds in-memory Work and
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
+// REQ-44: POST /v1/comments (Iris mention comments), kept in /__work as `comments`.
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
 // REQ-38 adds the Staff schema (the people sync asks for property IDs), a Stage on every student, and
@@ -101,6 +102,7 @@ const blockJson = (b) => ({
   [b.type]: { ...b.content, children: undefined, ...(b.type === "to_do" ? { checked: !!b.content.checked } : {}) },
 });
 const childrenOf = (parent) => [...blocks.values()].filter((b) => b.parent === parent);
+const comments = []; // REQ-44: { pageId, rich_text }
 const dump = () => ({
   pages: [...workPages.values()].map((p) => ({
     id: p.id, ds: p.ds, props: p.props,
@@ -109,6 +111,7 @@ const dump = () => ({
       children: childrenOf(b.id).map((c) => textOf(c.content.rich_text)),
     })),
   })),
+  comments,
 });
 // The body is buffered once, up front, so the journal and the handlers can both read it.
 const readBody = async (req) => (req.rawBody ? JSON.parse(req.rawBody) : {});
@@ -315,6 +318,11 @@ async function workApi(req, res) {
     const name = new URL(url, "http://x").searchParams.get("name") ?? "";
     for (const b of blocks.values()) if (b.type === "to_do" && textOf(b.content.rich_text).includes(name)) { b.content.checked = !b.content.checked; b.edited = stamp(); }
     return res.end("{}"), true;
+  }
+  if (req.method === "POST" && url === "/v1/comments") {
+    const body = await readBody(req);
+    comments.push({ pageId: body.parent?.page_id, rich_text: body.rich_text });
+    return res.end(JSON.stringify({ id: randomUUID() })), true;
   }
   if (req.method === "POST" && url === "/v1/pages") {
     const body = await readBody(req);

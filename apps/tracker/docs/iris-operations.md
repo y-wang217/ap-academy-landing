@@ -62,13 +62,67 @@ up" and matched mail waits at "Family found".
   `escalate_only` (billing, refund, no-show, other: "..., for you"),
   `no_reply_needed` (handled at once, never in Needs you) and
   `ambiguous_student` ("Which child?"). Everything else shows "Ready for a
-  draft" and waits for Iris 4/9.
+  draft" and is drafted next (see Drafting).
 - **Mark handled.** Open a message from the inbox and press Mark handled
   once you have dealt with it in Gmail. It leaves Needs you; the record
   keeps who and when.
 - **Failures.** A refusal, a busy API or an outage leaves the message at
   "Family found" with a short error; after three failed runs it shows
   "Failed".
+
+## Drafting
+
+With `ANTHROPIC_API_KEY` set (REQ-44, tracker ADR 0063), each run then
+drafts a reply for up to 6 classified messages, and for each unhandled
+no-show, from that reply type's policy text in `lib/iris/policy.ts` (policy
+version 3). Nothing is sent.
+
+- **Held back.** A draft that names a dollar amount, a clock time, says
+  "forfeit" or says it is an AI, an assistant, automated or Iris is not kept:
+  the message shows "Draft held back" in Needs you.
+- **Iris wants you to check.** When the model is unsure it keeps the draft
+  and puts the message in Needs you.
+- **Failures.** Three failed draft calls set "Failed"; a no-show stays in
+  Needs you.
+
+## Review
+
+`/tracker/iris` has four sections: Needs you, Drafts waiting, Sent today
+(approved or sent since midnight Toronto time) and Failed, then Recent.
+Open a message to see the thread, what Iris read, the policy used and the
+draft, with the signature shown below it.
+
+- **Approve** marks the draft approved and shows Copy. Paste it into Gmail
+  and send it yourself (Iris sends nothing until Iris 8/9).
+- **Save edit** stores your text as the next version; approve it after.
+- **Reject** needs a reason and puts the message back in Needs you.
+- **Streaks.** Each unedited approval counts toward the reply type's streak;
+  an edit or a reject resets it. At 20 in a row a type becomes eligible for
+  auto-send (no switch until Iris 9/9). The counts are in
+  `iris.reply_types`.
+- **Replying from Gmail.** If you answer a parent in Gmail yourself, the next
+  run sees your sent reply (`in:sent`, SENT label only) and the draft is
+  replaced: the message leaves the queue as "You replied in Gmail".
+
+## Phone backup
+
+With Notion set up (REQ-44, tracker ADR 0064), each run adds one to-do per
+new draft or escalation to that day's Work page, "Iris replies" plus the
+date, with a copy-ready code block when a draft exists, and one Work Log
+entry per day with the counts.
+
+- **Phone alerts.** Set `NOTION_CHARLIE_USER_ID` in the tracker's Vercel
+  project to Charlie's Notion user id (`charlie_user_id` in
+  `.claude/notion-ids.json`). Each new to-do then gets one page comment that
+  mentions him, which Notion pushes to his phone. Unset, the settings page
+  says "Phone alerts are off".
+- **What is in Notion.** First names, the intent, the reason, links, a ref
+  and Iris's reply. Never the parent's message or any address.
+- **Do not tick or edit** the to-dos to approve: approve in the tracker.
+- **Retention.** A to-do is deleted from Notion before its message's purge
+  date, or after `iris.delete_thread`.
+- **Failures.** A Notion outage marks the copy failed and retries next run,
+  5 times; after that the row shows "Phone copy failed".
 
 ## Pause
 

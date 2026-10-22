@@ -4,7 +4,8 @@ import { NOTION_VERSION, notionApiBaseOverride, type WorkConfig } from "./config
 import { NotionError, notionHttpError } from "./staff";
 
 /**
- * Notion writes for the daily teacher-texts task (REQ-8, tracker ADR 0039):
+ * Notion writes for the daily teacher-texts task (REQ-8, tracker ADR 0039)
+ * and the Iris phone backup (REQ-44, ADR 0064):
  * one page in Work, one entry in Work Log, and blocks inside that page. Plain
  * fetch, like students.ts. Errors carry a status and never a response body,
  * because bodies can echo student names. No function here ever sends a
@@ -171,4 +172,58 @@ export async function createLogEntry(config: WorkConfig, input: LogInput, fetche
 
 export async function updateLogDecisions(config: WorkConfig, logId: string, decisions: string, fetcher: typeof fetch = fetch): Promise<void> {
   await call(config, fetcher, `/pages/${logId}`, "PATCH", { properties: { Decisions: { rich_text: text(decisions) } } });
+}
+
+/**
+ * A generic to-do for the Iris phone backup (REQ-44, tracker ADR 0064): text,
+ * bullets, link lines and an optional code block to copy. Created unchecked;
+ * nothing ever edits it afterwards.
+ */
+export type ToDoRender = { text: string; bullets: string[]; links: { label: string; url: string }[]; code?: string };
+
+export async function appendToDo(config: WorkConfig, pageId: string, t: ToDoRender, fetcher: typeof fetch = fetch): Promise<string> {
+  const kids = [
+    ...t.bullets.map((b) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: text(b) } })),
+    ...t.links.map((l) => ({ object: "block", type: "paragraph", paragraph: { rich_text: text(l.label, l.url) } })),
+    ...(t.code ? [{ object: "block", type: "code", code: { rich_text: text(t.code), language: "plain text" } }] : []),
+  ];
+  const body = await call(config, fetcher, `/blocks/${pageId}/children`, "PATCH", {
+    children: [{ object: "block", type: "to_do", to_do: { rich_text: text(t.text), checked: false, children: kids } }],
+  });
+  const p = Appended.safeParse(body);
+  const block = p.success ? p.data.results[p.data.results.length - 1] : undefined;
+  if (!block) throw new NotionError("Unexpected Notion response");
+  return block.id;
+}
+
+const ToDoTexts = z.object({ results: z.array(z.object({ id: z.string(), type: z.string().optional(), to_do: z.object({ rich_text: z.array(z.object({ plain_text: z.string().optional(), text: z.object({ content: z.string() }).optional() })) }).optional() })) });
+
+/** The page's top-level to-dos with their text, for adopting one after a lost write. */
+export async function listToDoTexts(config: WorkConfig, pageId: string, fetcher: typeof fetch = fetch): Promise<{ id: string; text: string }[]> {
+  const out: { id: string; text: string }[] = [];
+  let cursor: string | undefined;
+  for (let guard = 0; guard < 20; guard++) {
+    const body = await call(config, fetcher, `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${encodeURIComponent(cursor)}` : ""}`, "GET");
+    const p = ToDoTexts.safeParse(body);
+    const more = Children.safeParse(body);
+    if (!p.success || !more.success) throw new NotionError("Unexpected Notion response");
+    for (const b of p.data.results) {
+      if (b.type === "to_do") out.push({ id: b.id, text: (b.to_do?.rich_text ?? []).map((r) => r.plain_text ?? r.text?.content ?? "").join("") });
+    }
+    if (!more.data.has_more || !more.data.next_cursor) return out;
+    cursor = more.data.next_cursor;
+  }
+  throw new NotionError("Too many Notion blocks");
+}
+
+/** One page comment that mentions a user, so Notion notifies their phone (the shape scripts/design-approver.mjs uses). */
+export async function createComment(config: WorkConfig, pageId: string, c: { mentionUserId: string; text: string }, fetcher: typeof fetch = fetch): Promise<void> {
+  await call(config, fetcher, "/comments", "POST", {
+    parent: { page_id: pageId },
+    rich_text: [{ type: "mention", mention: { type: "user", user: { object: "user", id: c.mentionUserId } } }, { type: "text", text: { content: ` ${c.text}`.slice(0, MAX_TEXT) } }],
+  });
+}
+
+export async function deleteBlock(config: WorkConfig, blockId: string, fetcher: typeof fetch = fetch): Promise<void> {
+  await call(config, fetcher, `/blocks/${blockId}`, "DELETE");
 }

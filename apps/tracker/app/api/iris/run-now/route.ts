@@ -3,7 +3,7 @@ import { handleRunNow } from "@/lib/iris/handlers";
 import { realScheduleDeps } from "@/lib/scheduler/deps";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 80;
+export const maxDuration = 140;
 
 /** One Iris run now, for the owner. Calls the bearer run route server-side (REQ-42, Decision 6). */
 export async function POST() {

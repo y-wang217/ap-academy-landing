@@ -5,7 +5,7 @@ import { TopBar } from "@/components/top-bar";
 import { Card, Notice, Page, secondaryButtonClass } from "@/components/ui";
 import { aiConfigured } from "@/lib/ai/config";
 import { getViewer } from "@/lib/data/queries";
-import { missingIrisEnv } from "@/lib/iris/config";
+import { missingIrisEnv, readCharlieUserId } from "@/lib/iris/config";
 import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { loadIrisSettings } from "@/lib/iris/handlers";
 import { IRIS_TEXT, confidenceText, notSetUpText, runSummaryText } from "@/lib/view/iris-text";
@@ -15,9 +15,9 @@ export const dynamic = "force-dynamic";
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-CA", { timeZone: "America/Toronto", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 
-/** Iris settings (REQ-42 AC27): Paused or Running, the last run, its error, and which env vars are missing. Owner only. */
+/** Iris settings (REQ-42 AC27, REQ-44 AC18): Paused or Running, the last run, its error, which env vars are missing, and whether phone alerts are off. Owner only. */
 export default async function IrisSettingsPage() {
-  const s = await loadIrisSettings(realIrisAdminDeps(), missingIrisEnv(), aiConfigured());
+  const s = await loadIrisSettings(realIrisAdminDeps(), missingIrisEnv(), aiConfigured(), readCharlieUserId() === null);
   if (s.kind === "denied") redirect("/");
   const viewer = await getViewer();
   const email = viewer.kind === "signed_out" || viewer.kind === "not_configured" ? undefined : viewer.email;
@@ -42,6 +42,7 @@ export default async function IrisSettingsPage() {
                   <span data-ai-not-set-up>{IRIS_TEXT.aiNotSetUp}</span>. {IRIS_TEXT.aiNotSetUpDetail}
                 </Notice>
               )}
+              {s.phoneAlertsOff && <Notice tone="warn"><span data-phone-alerts-off>{IRIS_TEXT.phoneAlertsOff}</span></Notice>}
               <p className="text-sm" data-confidence-threshold>
                 {IRIS_TEXT.confidenceThreshold}: {confidenceText(s.confidenceThreshold)}
               </p>
