@@ -72,10 +72,11 @@ grant execute on all functions in schema ic to public;
 
 -- Shape (AC1) ------------------------------------------------------------------
 do $$ begin
-  if (select array_agg(c.relname::text order by c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  -- Later migrations add tables (0025 drafts); these six are this file's.
+  if not (select array_agg(c.relname::text order by c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'iris' and c.relkind = 'r')
-     <> array['ai_calls', 'events', 'messages', 'runs', 'settings', 'threads'] then
-    raise exception 'iris should have exactly the six tables';
+     @> array['ai_calls', 'events', 'messages', 'runs', 'settings', 'threads'] then
+    raise exception 'iris should have the six core tables';
   end if;
   if exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'iris' and c.relkind = 'r' and not c.relrowsecurity) then
@@ -329,9 +330,13 @@ begin
   perform ic.expect_error($q$truncate iris.events$q$, '42501');
   perform ic.expect_error($q$truncate iris.ai_calls$q$, '42501');
 
-  -- Setting message_id (or draft_id) to null passes.
+  -- Setting message_id (or draft_id) to null passes. draft_id references
+  -- iris.drafts since 0025, so the event points at a real draft.
+  insert into iris.drafts (id, org_id, message_id, version, reply_type, body_text, policy_version, state, created_by) values
+    ('34000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', '31000000-0000-0000-0000-000000000004',
+     1, 'cancellation', 'Thanks', 3, 'proposed', 'iris');
   insert into iris.events (org_id, kind, message_id, draft_id, actor) values
-    ('10000000-0000-0000-0000-000000000002', 'drafted', '31000000-0000-0000-0000-000000000004', gen_random_uuid(), 'iris');
+    ('10000000-0000-0000-0000-000000000002', 'drafted', '31000000-0000-0000-0000-000000000004', '34000000-0000-0000-0000-000000000001', 'iris');
   n := ic.touched($q$update iris.events set message_id = null where message_id = '31000000-0000-0000-0000-000000000004'$q$);
   if n <> 1 then raise exception 'setting events.message_id to null should pass'; end if;
   n := ic.touched($q$update iris.events set draft_id = null where draft_id is not null$q$);
