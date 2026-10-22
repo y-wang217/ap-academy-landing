@@ -1,3 +1,5 @@
+import type { SendRunStore } from "./send";
+
 /**
  * The Iris storage port (REQ-42). lib/data/iris.ts implements it over the
  * service client for the bearer-protected run; store.fake.ts implements it in
@@ -55,7 +57,7 @@ export type MessageInsert = {
   gmailMessageId: string;
   rfcMessageId: string | null;
   direction: "inbound" | "outbound";
-  source: "external" | "charlie_manual";
+  source: "external" | "charlie_manual" | "iris";
   fromEmail: string;
   fromName: string | null;
   receivedAt: string;
@@ -114,6 +116,8 @@ export type RunRecord = {
   matched: number;
   classified: number;
   drafted: number;
+  /** Replies sent by the run's send step (REQ-48). */
+  sent: number;
   escalated: number;
   skipped: number;
   failed: number;
@@ -168,7 +172,8 @@ export type PushCandidate = {
 
 export type PushDay = { day: string; workPageId: string | null; logEntryId: string | null };
 
-export interface IrisStore {
+/** The run's store. The send rows (REQ-48) come from SendRunStore. */
+export interface IrisStore extends SendRunStore {
   getSettings(): Promise<IrisSettings | null>;
   /** iris.claim_poll: the row to the first caller, null while another run holds the lease. */
   claimPoll(leaseSeconds: number): Promise<IrisSettings | null>;

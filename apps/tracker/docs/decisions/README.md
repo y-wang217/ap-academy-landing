@@ -73,3 +73,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0066](0066-console-shell-and-instrument-kit.md) | The console shell renders a `PanelView` kit, keeps the mode in the URL and builds its preview only with a flag | accepted |
 | [0067](0067-schedule-source-and-drift-notice.md) | Schedule Source says the Weekly Schedule is generated, and the owner sees replaced Notion edits | accepted |
 | [0068](0068-north-star-net-new-hours.md) | North star: verified net-new weekly teaching hours from adopted series and Paid invoices | accepted |
+| [0069](0069-iris-send-at-most-once.md) | Iris sends an approved reply at most once: one send row per draft, verify before every retry, two one-scope tokens | accepted |
