@@ -11,7 +11,7 @@ const DESIGN_KEYS: [string, z.ZodObject, string[]][] = [
   ["TouchRow", TouchRow, ["id", "pageUrl", "when", "whenDate", "type", "outcome", "studentId", "staffId", "staffName", "note"]],
   ["TouchGroup", TouchGroup, ["studentId", "studentName", "touches"]],
   ["TrialLessonRow", TrialLessonRow, ["id", "pageUrl", "date", "studentId", "studentName", "teacherId", "teacherName", "durationHours", "hasTopic", "hasDiagnosis", "preferredDays"]],
-  ["WorkRow", WorkRow, ["id", "pageUrl", "name", "area", "state", "type", "dueReview", "dueReviewDate", "owner", "taskTypeIds"]],
+  ["WorkRow", WorkRow, ["id", "pageUrl", "name", "area", "state", "type", "dueReview", "dueReviewDate", "owner", "taskTypes", "parentProjectIds", "expectedResult"]],
   ["InvoiceRow", InvoiceRow, ["id", "pageUrl", "status", "paidOn", "amount", "creditApplied", "issued", "due", "month", "studentIds", "studentName"]],
 ];
 
@@ -23,9 +23,15 @@ describe("row schemas", () => {
   });
 
   it("a row with extra keys is kept and leaves without them", () => {
-    const work = { id: "a", pageUrl: "https://www.notion.so/a", name: "N", area: null, state: "Next", type: null, dueReview: null, dueReviewDate: null, owner: null, taskTypeIds: [] };
+    const work = { id: "a", pageUrl: "https://www.notion.so/a", name: "N", area: null, state: "Next", type: null, dueReview: null, dueReviewDate: null, owner: null, taskTypes: [{ id: "t", name: null }], parentProjectIds: [], expectedResult: null };
     const parsed = WorkRow.parse({ ...work, parentPhone: "555-0100", leadId: "L-1", notes: "private" });
     expect(parsed).toEqual(work);
+  });
+
+  it("REQ-60: a WorkRow's Expected result is at most 500 characters", () => {
+    const work = { id: "a", pageUrl: "u", name: "N", area: null, state: null, type: null, dueReview: null, dueReviewDate: null, owner: null, taskTypes: [], parentProjectIds: [] };
+    expect(WorkRow.safeParse({ ...work, expectedResult: "x".repeat(500) }).success).toBe(true);
+    expect(WorkRow.safeParse({ ...work, expectedResult: "x".repeat(501) }).success).toBe(false);
   });
 });
 

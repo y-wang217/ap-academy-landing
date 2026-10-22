@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendTeacher, appendToDo, createComment, createLogEntry, createTaskPage, deleteBlock, fetchWorkItems, findTaskByTitle, listChildren, listToDoTexts, updateIntro, updateLogDecisions, updateTeacher, WORK_PROPS, type TeacherRender,
+  appendTeacher, appendToDo, createComment, createLogEntry, createTaskPage, deleteBlock, fetchTaskTypeNames, fetchWorkItems, findTaskByTitle, listChildren, listToDoTexts, updateIntro, updateLogDecisions, updateTeacher, WORK_PROPS, type TeacherRender,
 } from "./work";
 import { filterIds, notionFake, onlyReads, v } from "./console-reader.fake";
 import { NotionError } from "./staff";
@@ -175,24 +175,42 @@ describe("Iris phone backup writes", () => {
   });
 });
 
-describe("fetchWorkItems (REQ-54 AC1, AC6, AC7)", () => {
+describe("fetchWorkItems (REQ-54 AC1, AC6, AC7; REQ-60 AC8, AC9)", () => {
   const DS = CONFIG.workId;
-  const SCHEMA = { Name: "title", Area: "ar", State: "sa", Type: "ty", "Due / Review": "du", Owner: "ow", "Task Type": "tt", Alignment: "al", "Expected result": "er", "Build hours": "bh" };
-  const item = (id: string) => ({
+  const SCHEMA = {
+    Name: "title", Area: "ar", State: "sa", Type: "ty", "Due / Review": "du", Owner: "ow", "Task Type": "tt", "Parent Project": "pp", "Expected result": "er",
+    Alignment: "al", "Build hours": "bh",
+  };
+  const item = (id: string, expected = "One reviewed video") => ({
     object: "page", id, properties: {
       Name: v.title("Write SAT post"), Area: v.select("Marketing"), State: v.select("Next"), Type: v.select("Task"),
-      "Due / Review": v.date("2026-10-24"), Owner: v.text("Charlie"), "Task Type": v.rel(BLOCK), "Expected result": v.text("secret plan"),
+      "Due / Review": v.date("2026-10-24"), Owner: v.text("Charlie"), "Task Type": v.rel(BLOCK), "Parent Project": v.rel(PAGE), "Expected result": v.text(expected),
+      Alignment: v.select("secret plan"), "Build hours": v.num(42),
     },
   });
 
-  it("WORK_PROPS is the design list; State not Done, Due / Review ascending, listed ids only", async () => {
-    expect([...WORK_PROPS]).toEqual(["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type"]);
+  it("WORK_PROPS is the design list; State not Done and Area Marketing, Due / Review ascending, listed ids only", async () => {
+    expect([...WORK_PROPS]).toEqual(["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type", "Parent Project", "Expected result"]);
     const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages: [[item(PAGE)]] });
     const r = await fetchWorkItems({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 10 });
-    expect(filterIds(f.calls[1])).toEqual(["title", "ar", "sa", "ty", "du", "ow", "tt"]);
-    expect(f.calls[1].body).toEqual({ page_size: 100, filter: { property: "State", select: { does_not_equal: "Done" } }, sorts: [{ property: "Due / Review", direction: "ascending" }] });
-    expect(r.rows).toEqual([{ id: PAGE, name: "Write SAT post", area: "Marketing", state: "Next", type: "Task", dueReview: "2026-10-24", owner: "Charlie", taskTypeIds: [BLOCK] }]);
+    expect(filterIds(f.calls[1])).toEqual(["title", "ar", "sa", "ty", "du", "ow", "tt", "pp", "er"]);
+    expect(f.calls[1].body).toEqual({
+      page_size: 100,
+      filter: { and: [{ property: "State", select: { does_not_equal: "Done" } }, { property: "Area", select: { equals: "Marketing" } }] },
+      sorts: [{ property: "Due / Review", direction: "ascending" }],
+    });
+    expect(r.rows).toEqual([{
+      id: PAGE, name: "Write SAT post", area: "Marketing", state: "Next", type: "Task", dueReview: "2026-10-24", owner: "Charlie",
+      taskTypes: [{ id: BLOCK, name: null }], parentProjectIds: [PAGE], expectedResult: "One reviewed video",
+    }]);
     expect(JSON.stringify(r)).not.toContain("secret plan");
+    expect(JSON.stringify(r)).not.toContain("42");
+  });
+
+  it("cuts Expected result to 500 characters", async () => {
+    const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages: [[item(PAGE, "x".repeat(900))]] });
+    const r = await fetchWorkItems({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 10 });
+    expect(r.rows[0].expectedResult).toHaveLength(500);
   });
 
   it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
@@ -202,5 +220,26 @@ describe("fetchWorkItems (REQ-54 AC1, AC6, AC7)", () => {
       expect(r.complete).toBe(complete);
       expect(onlyReads(f.calls, DS)).toBe(true);
     }
+  });
+});
+
+describe("fetchTaskTypeNames (REQ-60 AC8, AC9)", () => {
+  const DS = "80e411f2-eb5b-4055-b560-55061669d9f7";
+  const type = (id: string, name: string) => ({ object: "page", id, properties: { "Task type": v.title(name) } });
+
+  it("reads each Task Type's title by normalised page id, one page, read-only", async () => {
+    const f = notionFake({ dataSourceId: DS, schema: { "Task type": "title", Notes: "nn" }, pages: [[type(BLOCK, "Script"), type(PAGE, "Edit")]] });
+    const names = await fetchTaskTypeNames({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 1 });
+    expect(names.get(BLOCK.replaceAll("-", ""))).toBe("Script");
+    expect(names.get(PAGE.replaceAll("-", ""))).toBe("Edit");
+    expect(filterIds(f.calls[1])).toEqual(["title"]);
+    expect(f.calls[1].body).toEqual({ page_size: 100 });
+    expect(onlyReads(f.calls, DS)).toBe(true);
+    expect(f.calls).toHaveLength(2);
+  });
+
+  it("a 500 throws a NotionError", async () => {
+    const f = notionFake({ dataSourceId: DS, schema: { "Task type": "title" }, pages: [[]], queryStatus: 500 });
+    await expect(fetchTaskTypeNames({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 1 })).rejects.toBeInstanceOf(NotionError);
   });
 });

@@ -20,7 +20,7 @@ const touch = (n: number, studentId: string): TouchSource => ({
   id: `dddddddd-dddd-4ddd-8ddd-${String(n).padStart(12, "0")}`, when: `2026-10-${String(10 + n).padStart(2, "0")}T12:00:00Z`, type: "Call", outcome: "No answer", studentId, staffId: STAFF, note: "n",
 });
 const trial: TrialLessonSource = { id: W1, date: "2026-10-18", studentId: S1, teacherId: STAFF, durationHours: 1, hasTopic: true, hasDiagnosis: false, preferredDays: [] };
-const work: WorkSource = { id: W1, name: "Post", area: "Marketing", state: "Next", type: "Task", dueReview: "2026-10-24", owner: "Charlie", taskTypeIds: [] };
+const work: WorkSource = { id: W1, name: "Post", area: "Marketing", state: "Next", type: "Task", dueReview: "2026-10-24", owner: "Charlie", taskTypes: [{ id: "t1", name: "Script" }], parentProjectIds: [], expectedResult: "One video" };
 const invoice: InvoiceSource = { id: W1, status: "Sent", paidOn: null, amount: 240, creditApplied: null, issued: "2026-10-01", due: "2026-10-15", month: "2026-10", studentIds: [S2.toUpperCase(), S1] };
 const done = <T,>(rows: T[], extra: Partial<ReadResult<T>> = {}): ReadResult<T> => ({ rows, complete: true, skipped: 0, pages: 1, ...extra });
 
@@ -80,6 +80,11 @@ describe("loadConsolePanels", () => {
     const p = await loadConsolePanels(deps({ notion: ports({ work: async () => done([work, { ...work, id: W1.toUpperCase() }]) }) }));
     expect(p.work.count).toBe(1);
     expect(p.work.data).toHaveLength(1);
+  });
+
+  it("REQ-60: a work row carries its Task Types, parent projects and Expected result", async () => {
+    const p = await loadConsolePanels(deps());
+    expect(p.work.data?.[0]).toMatchObject({ taskTypes: [{ id: "t1", name: "Script" }], parentProjectIds: [], expectedResult: "One video", dueReviewDate: "2026-10-24" });
   });
 
   it("one throws, one 500s, one hangs: the others stay ready, the failed ones are errors with no data", async () => {

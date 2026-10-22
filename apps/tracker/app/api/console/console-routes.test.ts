@@ -28,7 +28,7 @@ function fakePorts(over: Partial<NotionPorts> = {}): NotionPorts {
     leads: async () => ok([{ id: S1, createdAt: null, name: SENTINEL, stage: "New", ownerStaffId: null, nextAction: null, nextActionDue: null, attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: null, trialAttendedAt: null, closedAt: null, trialTime: null, trialTeacherId: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: "Parent Sentinel" }]),
     touches: async () => ok([]),
     trialLessons: async () => ok([]),
-    work: async () => ok([{ id: S1, name: "Work Sentinel", area: null, state: "Next", type: null, dueReview: null, owner: null, taskTypeIds: [] }]),
+    work: async () => ok([{ id: S1, name: "Work Sentinel", area: null, state: "Next", type: null, dueReview: null, owner: null, taskTypes: [], parentProjectIds: [], expectedResult: null }]),
     invoices: async () => ok([]),
     ...over,
   };
