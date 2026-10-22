@@ -1,4 +1,4 @@
--- REQ-45: Iris evaluation results (0028). Run by run-rls.sh on a fresh copy of
+-- REQ-45: Iris evaluation results (0027). Run by run-rls.sh on a fresh copy of
 -- the migrated database. Privilege-sensitive steps switch role because the
 -- runner connects as a superuser. Each check raises on failure.
 
