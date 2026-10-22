@@ -187,6 +187,8 @@ const LESSON = {
 const LESSONS_SCHEMA = { properties: {
   Lesson: { id: "title" }, Date: { id: "ldt" }, Teacher: { id: "lte" }, "Related to Students & Parents (Lessons 1)": { id: "lst" },
   "Duration (hrs)": { id: "ldu" }, "Paid to Teacher": { id: "lpd" }, "Pay Period": { id: "lpp" }, Type: { id: "lty" }, "Class occurrence": { id: "lco" },
+  // REQ-59: the console's trial-evidence reader (TRIAL_PROPS).
+  "Topic Covered": { id: "ltc" }, "Trial: Diagnosis": { id: "ltd" }, "Trial: Preferred Lesson Day": { id: "ltp" },
 } };
 const lessons = new Map(); // id -> { id, props }
 const lessonDay = (offset) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + offset * 86400000));
@@ -199,6 +201,31 @@ lessons.set("cccccccc-cccc-4ccc-8ccc-cccccccc0002", { id: "cccccccc-cccc-4ccc-8c
   "Paid to Teacher": { checkbox: false },
   "Class occurrence": { rich_text: [] },
 } });
+// REQ-59: console fixtures, dated from today in Toronto so the funnel counts hold on any run day.
+// L1 booked day -5, attended day -3 (and a trial lesson that day); L2 booked day -4, Trial Time day -2, nothing
+// else (outcome unknown); L3 is Ada (Paid invoice AP-E2E-0003), booked -20, attended -18, closed -10.
+const CONSOLE_L1 = "99999999-9999-4999-8999-999999990001";
+const CONSOLE_L2 = "99999999-9999-4999-8999-999999990002";
+const CONSOLE_L3 = "dddddddd-dddd-4ddd-8ddd-dddddddd0001";
+const consoleDate = (offset) => ({ date: { start: lessonDay(offset) } });
+const consoleLead = (id, name, props) => ({
+  id, created_time: "2026-01-05T10:00:00.000Z",
+  properties: { "Student Name": { title: [{ plain_text: name }] }, Stage: { select: { name: "Trial" } }, ...props },
+});
+const CONSOLE_LEADS = () => [
+  consoleLead(CONSOLE_L1, "Console Lead One", { "Trial Booked At": consoleDate(-5), "Trial Time": { date: { start: `${lessonDay(-3)}T15:00:00.000Z` } }, "Trial Attended At": consoleDate(-3) }),
+  consoleLead(CONSOLE_L2, "Console Lead Two", { "Trial Booked At": consoleDate(-4), "Trial Time": { date: { start: `${lessonDay(-2)}T15:00:00.000Z` } } }),
+  consoleLead(CONSOLE_L3, "Ada Afzal", {
+    "Trial Booked At": consoleDate(-20), "Trial Time": { date: { start: `${lessonDay(-18)}T15:00:00.000Z` } }, "Trial Attended At": consoleDate(-18), "Closed At": consoleDate(-10),
+  }),
+];
+const CONSOLE_TRIAL_LESSONS = () => [{
+  id: "cccccccc-cccc-4ccc-8ccc-cccccccc0101",
+  properties: {
+    Date: consoleDate(-3), Teacher: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] },
+    "Related to Students & Parents (Lessons 1)": { relation: [{ id: CONSOLE_L1 }] }, "Duration (hrs)": { number: 1 }, Type: { select: { name: "Trial" } },
+  },
+}];
 const refOf = (l) => (l.props["Class occurrence"]?.rich_text ?? []).map((r) => r.plain_text ?? r.text?.content ?? "").join("");
 const lessonJson = (l) => ({ id: l.id, properties: l.props });
 function lessonMatches(l, f) {
@@ -216,6 +243,10 @@ async function lessonsApi(req, res) {
   if (req.method === "GET" && path === `/v1/data_sources/${LESSONS_DS}`) return res.end(JSON.stringify(LESSONS_SCHEMA)), true;
   if (req.method === "POST" && path === `/v1/data_sources/${LESSONS_DS}/query`) {
     const body = await readBody(req);
+    // REQ-59: the console's Type = Trial read gets the one trial lesson, kept out of the lesson-link rows above.
+    if (body.filter?.property === "Type" && body.filter?.select?.equals === "Trial") {
+      return res.end(JSON.stringify({ results: CONSOLE_TRIAL_LESSONS(), has_more: false, next_cursor: null })), true;
+    }
     const hits = [...lessons.values()].filter((l) => lessonMatches(l, body.filter ?? {}));
     return res.end(JSON.stringify({ results: hits.slice(0, body.page_size ?? 100).map(lessonJson), has_more: false, next_cursor: null })), true;
   }
@@ -499,10 +530,19 @@ http.createServer(async (req, res) => {
       "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" }, "Schedule Source": { id: "src" },
       "Hourly Rate (CAD)": { id: "hr" }, "Lesson Cadence": { id: "lc" }, "Billing Family": { id: "bf" }, "Parent Phone": { id: "pp" }, Notes: { id: "nts" },
       "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" },
+      // REQ-59: the console's leads reader (LEAD_PROPS). "tba" gates its query below.
+      Owner: { id: "own" }, "Next Action": { id: "na" }, "Next Action Due": { id: "nad" }, Attempts: { id: "att" }, "Last Contact": { id: "lc2" },
+      Source: { id: "so" }, "Lost Reason": { id: "lr" }, "Contacted At": { id: "ca" }, "Trial Booked At": { id: "tba" }, "Trial Attended At": { id: "taa" },
+      "Closed At": { id: "cla" }, "Trial Time": { id: "tt" }, "Trial Teacher": { id: "ttc" }, Level: { id: "lvl" }, "Major Gaps": { id: "mg" },
+      "Recommended Plan": { id: "rp" }, "Trial Summary": { id: "ts" },
     } }));
     return;
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`)) {
+    if ((req.url ?? "").includes("filter_properties[]=tba")) {
+      await readBody(req);
+      return res.end(JSON.stringify({ results: CONSOLE_LEADS(), has_more: false, next_cursor: null }));
+    }
     const filter = JSON.stringify((await readBody(req)).filter ?? {});
     if (filter.includes('"equals":"Paused"')) {
       if (familiesFail) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })); }

@@ -74,3 +74,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0067](0067-schedule-source-and-drift-notice.md) | Schedule Source says the Weekly Schedule is generated, and the owner sees replaced Notion edits | accepted |
 | [0068](0068-north-star-net-new-hours.md) | North star: verified net-new weekly teaching hours from adopted series and Paid invoices | accepted |
 | [0070](0070-creation-mode-work-queue.md) | Creation mode reads open Marketing Work rows, pins the weekly review by page id and writes nothing | accepted |
+| [0073](0073-trial-funnel-and-cash-pulse.md) | Trial funnel and cash pulse: separate evidence counts, Paid-only collected, honest failure states | accepted |
