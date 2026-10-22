@@ -45,3 +45,16 @@ export function parseGapDays(value: unknown): number {
   const n = Number(first);
   return n >= 1 && n <= 31 ? n : 14;
 }
+
+/** The trial and cash window ?window= picks (REQ-59 AC6): 7, 30 or 90 days, else 30. */
+export function parseWindow(value: unknown): 7 | 30 | 90 {
+  const first = Array.isArray(value) ? value[0] : value;
+  return first === "7" ? 7 : first === "90" ? 90 : 30;
+}
+
+/** A "?..." href with one parameter set and every other one kept. */
+export function withParam(search: URLSearchParams, key: string, value: string): string {
+  const next = new URLSearchParams(search);
+  next.set(key, value);
+  return `?${next}`;
+}

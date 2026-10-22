@@ -16,3 +16,8 @@ export function formatReadout(value: number, { unit, currency }: { unit?: string
   const n = new Intl.NumberFormat("en-CA", { maximumFractionDigits: 1 }).format(value);
   return unit ? `${n} ${unit}` : n;
 }
+
+/** Integer cents as CAD with two decimals, en-CA: "$1,234.50" (REQ-59). */
+export function formatCents(cents: number): string {
+  return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", currencyDisplay: "narrowSymbol", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
+}

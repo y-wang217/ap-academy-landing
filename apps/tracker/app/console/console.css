@@ -570,6 +570,30 @@
   }
 }
 
+/* REQ-59: the trial funnel and cash pulse. */
+.console-funnel-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.console-funnel-count summary,
+.console-cash-line summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+.console-funnel-count ul,
+.console-cash-line ul {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.console-funnel-window {
+  margin-left: 8px;
+}
+.console-cash-line {
+  font-size: 13px;
+}
+
 /* REQ-58: the canonical header link and the Operations instruments. */
 .console-canonical {
   margin-left: auto;
@@ -623,6 +647,7 @@
   font-size: 13px;
   font-weight: 600;
 }
+
 /* Grid areas per mode at each range (design, Layout). Area names are slot ids. */
 @media (min-width: 1440px) {
   .console-grid-sales {
