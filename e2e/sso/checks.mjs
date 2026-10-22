@@ -1,5 +1,5 @@
 // Acceptance checks 1 to 6 of docs/spec/single-domain-done-state.md, plus 7
-// (the tracker proxy skips prefetches) and 8 (security headers), in a real browser, against both apps
+// (the tracker proxy skips prefetches), 8 (security headers) and 9 (the founder console gate, REQ-53), in a real browser, against both apps
 // running behind landing's rewrite. The session the auth callback would set is
 // injected as a cookie: the magic-link email itself is not tested here. Run
 // through ./run.sh.
@@ -145,6 +145,21 @@ await consolePage.goto(BASE + "/info");
 check("8g no header-related console errors on / and /info", consoleProblems.length === 0, consoleProblems.join(" | "));
 check("8h / keeps its outbound Calendly link and /enroll its Stripe links",
   calendlyLinks.some((h) => h.startsWith("https://calendly.com/")) && stripeLinks.some((h) => h.startsWith("https://buy.stripe.com/")));
+
+// 9. REQ-53: the founder console through landing. Signed out goes to /login;
+// the mock user's teacher membership is not the owner, so the page is a 404.
+r = await fetch(BASE + "/tracker/console", { redirect: "manual" });
+check("9a signed-out /tracker/console -> /login?next=/tracker/console",
+  r.status === 307 && r.headers.get("location") === "/login?next=/tracker/console", `${r.status} ${r.headers.get("location")}`);
+const consoleBrowser = await browser.newPage();
+await consoleBrowser.goto(BASE + "/tracker/console");
+check("9b signed out in a browser lands on /login with next", new URL(consoleBrowser.url()).pathname === "/login" &&
+  new URL(consoleBrowser.url()).searchParams.get("next") === "/tracker/console", consoleBrowser.url());
+await fetch("http://127.0.0.1:54321/__reset");
+r = await fetch(BASE + "/tracker/console", { headers: { cookie: `sb-127-auth-token=${cookieValue}` }, redirect: "manual" });
+const consoleBody = await r.text();
+check("9c a teacher membership gets 404 from /tracker/console with no console markup",
+  r.status === 404 && !consoleBody.includes("data-console"), String(r.status));
 
 await browser.close();
 const failed = results.filter((x) => !x.ok).length;

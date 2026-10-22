@@ -56,7 +56,7 @@ describe("allowedSiteHosts", () => {
 });
 
 describe("ORIGIN_CHECKED_PREFIXES (REQ-42 AC22)", () => {
-  it("is exactly the scheduler and Iris API prefixes", () => {
-    expect([...ORIGIN_CHECKED_PREFIXES]).toEqual(["/api/scheduler/", "/api/iris/"]);
+  it("is exactly the scheduler, Iris and console API prefixes (REQ-53 AC6)", () => {
+    expect([...ORIGIN_CHECKED_PREFIXES]).toEqual(["/api/scheduler/", "/api/iris/", "/api/console/"]);
   });
 });
