@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleIrisSettings, handleMarkHandled, handleRunNow, loadInbox, loadIrisSettings, loadMessage, type IrisAdminDeps, type IrisReader } from "../../../lib/iris/handlers";
-import type { MessageDetail } from "../../../lib/iris/schemas";
+import {
+  handleApproveDraft, handleEditDraft, handleIrisSettings, handleMarkHandled, handleRejectDraft, handleRunNow, loadInbox, loadIrisSettings, loadMessage, torontoMidnight,
+  type IrisAdminDeps, type IrisReader,
+} from "../../../lib/iris/handlers";
+import { POLICY_VERSION } from "../../../lib/iris/policy";
+import type { MessageDetail, ThreadView } from "../../../lib/iris/schemas";
 import type { SchedulerIdentity } from "../../../lib/scheduler/identity";
 
 // REQ-42 AC23, AC27: the owner-only Iris routes and page loaders.
@@ -22,6 +26,13 @@ const DETAIL: MessageDetail = {
   policyVersion: 2, handledAt: null, notionStudentIds: [S1],
 };
 
+const D1 = "44444444-4444-4444-8444-444444444444";
+const D2 = "55555555-5555-4555-8555-555555555555";
+const VIEW: ThreadView = {
+  thread: [],
+  drafts: [{ id: D1, version: 1, replyType: "cancellation", bodyText: "Hi", policyVersion: POLICY_VERSION, state: "proposed", createdBy: "iris", edited: false, approvedAt: null, rejectedReason: null, createdAt: "2026-10-20T10:01:00Z" }],
+};
+
 function fakeReader(over: Partial<IrisReader> = {}) {
   const calls: string[] = [];
   const spy = <T,>(name: string, v: T) => async () => (calls.push(name), v);
@@ -29,11 +40,20 @@ function fakeReader(over: Partial<IrisReader> = {}) {
     getSettings: spy("getSettings", { paused: true, mailbox: null, lastPollAt: null, lastPollResult: null, lastError: null, confidenceThreshold: 0.85 }),
     lastRun: spy("lastRun", null),
     listNeedsYou: spy("listNeedsYou", [
-      { id: "m1", gmailThreadId: "g1", fromEmail: "ann@example.com", subject: "Question", snippet: "Hi", receivedAt: "2026-10-20T10:00:00Z", state: "escalated" as const, escalationReason: "unknown_sender", intent: null, flags: [], notionStudentIds: [] },
+      { id: "m1", gmailThreadId: "g1", fromEmail: "ann@example.com", subject: "Question", snippet: "Hi", receivedAt: "2026-10-20T10:00:00Z", state: "escalated" as const, escalationReason: "unknown_sender", intent: null, confidence: null, flags: [], notionStudentIds: [], notionStudentId: null, pushFailed: false },
     ]),
     listRecent: spy("listRecent", [
-      { id: "m2", gmailThreadId: "g2", fromEmail: "pat@example.com", subject: "Re: Tuesday", snippet: "ok", receivedAt: "2026-10-20T11:00:00Z", state: "matched" as const, escalationReason: null, intent: null, flags: [], notionStudentIds: [S1] },
+      { id: "m2", gmailThreadId: "g2", fromEmail: "pat@example.com", subject: "Re: Tuesday", snippet: "ok", receivedAt: "2026-10-20T11:00:00Z", state: "matched" as const, escalationReason: null, intent: null, confidence: null, flags: [], notionStudentIds: [S1], notionStudentId: null, pushFailed: false },
     ]),
+    listDraftsWaiting: spy("listDraftsWaiting", [
+      { id: "m3", gmailThreadId: "g3", fromEmail: "pat@example.com", subject: "Sick", snippet: "s", receivedAt: "2026-10-20T12:00:00Z", state: "drafted" as const, escalationReason: null, intent: "cancellation", confidence: 0.95, flags: [], notionStudentIds: [S1], notionStudentId: S1, pushFailed: true },
+    ]),
+    listSentToday: spy("listSentToday", []),
+    listFailed: spy("listFailed", []),
+    getThreadView: spy("getThreadView", VIEW as ThreadView | null),
+    approveDraft: spy("approveDraft", "ok" as const),
+    saveDraftEdit: spy("saveDraftEdit", { result: "ok" as const, draftId: D2 }),
+    rejectDraft: spy("rejectDraft", "ok" as const),
     updatePaused: spy("updatePaused", 1),
     getMessage: spy("getMessage", DETAIL as MessageDetail | null),
     markHandled: spy("markHandled", "ok" as const),
@@ -193,7 +213,7 @@ describe("page loaders", () => {
   it("settings carry the state, the last run and the missing env names", async () => {
     const w = deps(ADMIN);
     const s = await loadIrisSettings(w.d, ["IRIS_GMAIL_PRIVATE_KEY"]);
-    expect(s).toEqual({ kind: "ok", paused: true, lastRun: null, lastError: null, missing: ["IRIS_GMAIL_PRIVATE_KEY"], aiConfigured: true, confidenceThreshold: 0.85 });
+    expect(s).toEqual({ kind: "ok", paused: true, lastRun: null, lastError: null, missing: ["IRIS_GMAIL_PRIVATE_KEY"], aiConfigured: true, confidenceThreshold: 0.85, phoneAlertsOff: false });
   });
 });
 
@@ -209,7 +229,7 @@ describe("loadMessage (AC14)", () => {
   it("the owner gets the message with its family label", async () => {
     const w = deps(ADMIN);
     const r = await loadMessage({ ...w.d, studentNames: async () => new Map([[S1, "Sam Lee"]]) }, M1);
-    expect(r).toEqual({ kind: "ok", message: { ...DETAIL, family: "Sam Lee" } });
+    expect(r).toEqual({ kind: "ok", message: { ...DETAIL, family: "Sam Lee" }, view: VIEW, currentPolicyVersion: POLICY_VERSION });
   });
 
   it("a bad id or a missing message is not found; a failed read is an error", async () => {
@@ -259,5 +279,90 @@ describe("POST /api/iris/messages/[id]/handled (AC15)", () => {
     const res = await handleMarkHandled(deps(ADMIN, { markHandled: async () => { throw new Error("x"); } }).d, M1);
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "save_failed" });
+  });
+});
+
+// REQ-44 AC8 to AC10, AC13, AC15, AC18: the draft reviews, the four queue sections and phone alerts.
+const REVIEWS: [string, (d: IrisAdminDeps, id: string, body: unknown) => Promise<Response>, unknown, keyof IrisReader][] = [
+  ["approve", handleApproveDraft, { version: 1 }, "approveDraft"],
+  ["edit", handleEditDraft, { version: 1, body: "Hi Pat, see you Tuesday." }, "saveDraftEdit"],
+  ["reject", handleRejectDraft, { reason: "Too formal" }, "rejectDraft"],
+];
+for (const [name, handle, body, method] of REVIEWS) {
+  describe(`POST /api/iris/drafts/[id]/${name}`, () => {
+    for (const [who, identity] of NOT_OWNERS) {
+      it(`a ${who} gets 403 before any Iris read`, async () => {
+        const w = deps(identity);
+        expect((await handle(w.d, D1, body)).status).toBe(403);
+        expect(w.readerFor).not.toHaveBeenCalled();
+      });
+    }
+
+    it("the owner gets 200", async () => {
+      const w = deps(ADMIN);
+      const res = await handle(w.d, D1, body);
+      expect(res.status).toBe(200);
+      expect(w.calls).toEqual([method]);
+      if (name === "edit") expect(await res.json()).toEqual({ ok: true, draftId: D2 });
+    });
+
+    it("a conflict is 409, an unknown or other-org draft 404, a failed save 500", async () => {
+      const result = (r: "conflict" | "not_found") => (name === "edit" ? async () => ({ result: r, draftId: null }) : async () => r);
+      expect((await handle(deps(ADMIN, { [method]: result("conflict") }).d, D1, body)).status).toBe(409);
+      expect((await handle(deps(ADMIN, { [method]: result("not_found") }).d, D1, body)).status).toBe(404);
+      const failed = await handle(deps(ADMIN, { [method]: async () => { throw new Error("x"); } }).d, D1, body);
+      expect(failed.status).toBe(500);
+      expect(await failed.json()).toEqual({ error: "save_failed" });
+    });
+
+    it("a bad id is 404 and a bad body 400, with no call", async () => {
+      const w = deps(ADMIN);
+      expect((await handle(w.d, "nope", body)).status).toBe(404);
+      for (const bad of [null, {}, { ...(body as object), extra: 1 }]) expect((await handle(w.d, D1, bad)).status).toBe(400);
+      expect(w.calls).toEqual([]);
+    });
+  });
+}
+
+describe("review bodies", () => {
+  it("edit takes 1 to 5,000 characters; reject 1 to 300; version is a positive integer", async () => {
+    const w = deps(ADMIN);
+    expect((await handleEditDraft(w.d, D1, { version: 1, body: " " })).status).toBe(400);
+    expect((await handleEditDraft(w.d, D1, { version: 1, body: "a".repeat(5001) })).status).toBe(400);
+    expect((await handleRejectDraft(w.d, D1, { reason: "a".repeat(301) })).status).toBe(400);
+    expect((await handleApproveDraft(w.d, D1, { version: 0 })).status).toBe(400);
+    expect((await handleApproveDraft(w.d, D1, { version: "1" })).status).toBe(400);
+    expect(w.calls).toEqual([]);
+  });
+});
+
+describe("loadInbox sections (AC13)", () => {
+  it("the owner gets Needs you, Drafts waiting, Sent today, Failed and Recent, with child labels and the push mark", async () => {
+    const w = deps(ADMIN);
+    const inbox = await loadInbox({ ...w.d, studentNames: async () => new Map([[S1, "Sam Lee"]]) });
+    if (inbox.kind !== "ok") throw new Error("expected ok");
+    expect(inbox.drafts).toEqual([expect.objectContaining({ id: "m3", family: "Sam Lee", child: "Sam Lee", pushFailed: true, confidence: 0.95 })]);
+    expect(inbox.sentToday).toEqual([]);
+    expect(inbox.failed).toEqual([]);
+    expect(w.calls).toEqual(expect.arrayContaining(["listNeedsYou", "listDraftsWaiting", "listSentToday", "listFailed", "listRecent"]));
+  });
+
+  it("Sent today starts at Toronto midnight", () => {
+    expect(torontoMidnight(new Date("2026-10-21T16:00:00Z"))).toBe("2026-10-21T04:00:00.000Z");
+    expect(torontoMidnight(new Date("2026-10-22T02:00:00Z"))).toBe("2026-10-21T04:00:00.000Z");
+    expect(torontoMidnight(new Date("2026-12-01T12:00:00Z"))).toBe("2026-12-01T05:00:00.000Z");
+  });
+});
+
+describe("loadMessage drafts (AC14)", () => {
+  it("a message outside the org reads no thread", async () => {
+    const r = await loadMessage({ ...deps(ADMIN, { getThreadView: async () => null }).d, studentNames: async () => new Map() }, M1);
+    expect(r).toEqual({ kind: "not_found" });
+  });
+});
+
+describe("phone alerts (AC18)", () => {
+  it("settings say phone alerts are off when NOTION_CHARLIE_USER_ID is unset", async () => {
+    expect(await loadIrisSettings(deps(ADMIN).d, [], true, true)).toMatchObject({ kind: "ok", phoneAlertsOff: true });
   });
 });

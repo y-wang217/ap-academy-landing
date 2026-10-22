@@ -1549,16 +1549,17 @@ try {
     // 6. A run stores the inbox.
     const first = await irisRun();
     check("REQ-42: the first run answers 200 ok", first.status === 200 && first.body?.result === "ok", JSON.stringify(first));
-    // REQ-43: with the mock Anthropic key set, the same run classifies matched mail (general_question at 0.95).
-    check("REQ-42: m1 is matched with its body, then classified", msg("m1", "state || '|' || body_text") === "classified|Hi Charlie, Sam is sick today and will miss class.", msg("m1", "state"));
+    // REQ-43: with the mock Anthropic key set, the same run classifies matched mail (general_question at 0.95),
+    // and REQ-44 drafts each classified message.
+    check("REQ-42: m1 is matched with its body, then classified and drafted", msg("m1", "state || '|' || body_text") === "drafted|Hi Charlie, Sam is sick today and will miss class.", msg("m1", "state"));
     const m2Thread = psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm2'");
-    check("REQ-42: m2 (HTML) is matched with both siblings on its thread", msg("m2", "state") === "classified" && m2Thread.includes(HAIDER_ID) && m2Thread.includes(ADA_ID), m2Thread);
+    check("REQ-42: m2 (HTML) is matched with both siblings on its thread", msg("m2", "state") === "drafted" && m2Thread.includes(HAIDER_ID) && m2Thread.includes(ADA_ID), m2Thread);
     check("REQ-42: m3 (unknown) has no body and is escalated unknown_sender", msg("m3", "coalesce(body_text, 'NULL') || '|' || state || '|' || escalation_reason") === "NULL|escalated|unknown_sender");
     check("REQ-42: m4 (newsletter) has no body and is handled", msg("m4", "coalesce(body_text, 'NULL') || '|' || (handled_at is not null)::text") === "NULL|true");
     check("REQ-42: m5 is cut to 20,000 characters", msg("m5", "length(body_text) || '|' || body_truncated::text") === "20000|true");
     check("REQ-42: m6 is stored outbound in Sam's thread", msg("m6", "direction || '|' || source") === "outbound|charlie_manual");
     check("REQ-42: m7 (the mailbox in a new thread) is not stored", msg("m7", "count(*)") === "0");
-    check("REQ-42: every inbound row has policy version 2 (REQ-43)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 2") === "0");
+    check("REQ-42: every inbound row has policy version 3 (REQ-44)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 3") === "0");
     check("REQ-42: Sam's thread carries his Notion page id", psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm1'") === SAM_ID);
 
     // 7. The owner's inbox: m3 needs him, m4 does not.
@@ -1591,7 +1592,7 @@ try {
     check("REQ-42: m8 waits at received with no body and a short error", /^received\|NULL\|([1-9]\d?|[12]\d\d|300)$/.test(m8), m8);
     await fetch(`${MOCK_NOTION}/__students/fail`, { method: "POST" });
     await irisRun();
-    check("REQ-42: once Notion is back, m8 is matched with its body, then classified", msg("m8", "state || '|' || body_text || '|' || retry_count") === "classified|Running late today.|0");
+    check("REQ-42: once Notion is back, m8 is matched with its body, then drafted", msg("m8", "state || '|' || body_text || '|' || retry_count") === "drafted|Running late today.|0");
 
     // 11. Only the four properties were asked for, and Notion was never written.
     const journal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(notionStart);
@@ -1600,7 +1601,14 @@ try {
     check("REQ-42: every family query asks for exactly Student Name, Stage, Parent Email and Parent Name",
       familyQueries.length >= 3 && familyQueries.every((j) => props(j.path) === "filter_properties[]=pe&filter_properties[]=pn&filter_properties[]=stage&filter_properties[]=title"),
       familyQueries.map((j) => j.path).join(" "));
-    check("REQ-42: no Notion write during the Iris section", !journal.some((j) => j.method === "PATCH" || j.method === "DELETE" || (j.method === "POST" && j.path === "/v1/pages") || j.path.includes("/comments")));
+    // REQ-44: the only Notion writes are the phone backup's Work page, Work Log entry, to-dos and comments,
+    // and none carries a parent's message or address.
+    const writes = journal.filter((j) => j.method !== "GET" && !(j.method === "POST" && /\/query(\?|$)/.test(j.path)));
+    check("REQ-44: Notion writes in the Iris section are Work, Work Log, blocks and comments only",
+      writes.every((j) => (j.method === "POST" && ["/v1/pages", "/v1/comments"].includes(j.path)) || (j.method === "PATCH" && /^\/v1\/(blocks\/[0-9a-f-]{36}\/children|pages\/[0-9a-f-]{36})$/.test(j.path))),
+      writes.map((j) => `${j.method} ${j.path}`).join(" "));
+    check("REQ-44: no Notion request carries a parent's message or address",
+      !writes.some((j) => /Sam is sick today|Running late today|sam\.parent@example\.com|lead@example\.org|afzal\.family/i.test(JSON.stringify(j.body ?? {}))));
 
     // REQ-43: Iris 3/9. A cancellation and a "charged twice" message from Sam's parent, classified through the
     // mock Anthropic (54332); then the message page, Mark handled, and who may use them.
@@ -1612,7 +1620,7 @@ try {
     await add("m10", "October invoice", "We were charged twice this month. Please check.");
     const run43 = await irisRun();
     check("REQ-43: the run answers ok and counts classified", run43.status === 200 && run43.body?.result === "ok" && run43.body?.classified >= 1, JSON.stringify(run43.body));
-    check("REQ-43: the cancellation is classified at 0.95", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "classified|cancellation|0.95|2", msg("m9", "state"));
+    check("REQ-43: the cancellation is classified at 0.95, then drafted", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "drafted|cancellation|0.95|3", msg("m9", "state"));
     check("REQ-43: charged twice is escalated flagged with money_dispute", msg("m10", "state || '|' || escalation_reason || '|' || array_to_string(flags, ',')") === "escalated|flagged|money_dispute", msg("m10", "state || '|' || coalesce(escalation_reason, '')"));
     check("REQ-43: one ok classify ai_calls row each",
       psql("select count(*) from iris.ai_calls a join iris.messages m on m.id = a.message_id where m.gmail_message_id in ('m9', 'm10') and a.purpose = 'classify' and a.outcome = 'ok' and a.input_tokens = 300") === "2");
@@ -1648,6 +1656,98 @@ try {
     check("REQ-43: a cross-site Mark handled is 403", evilHandled.status() === 403, String(evilHandled.status()));
     const signedOutPage = await fetch(`${BASE}/iris/messages/${m9}`, { redirect: "manual" });
     check("REQ-43: signed out, the message page redirects to /login", signedOutPage.status >= 300 && signedOutPage.status < 400 && (signedOutPage.headers.get("location") ?? "").includes("/login"), String(signedOutPage.status));
+
+    // REQ-44: Iris 4/9. Drafts, the owner's review on the message page, the streak, a reply from Gmail
+    // superseding a draft, and the Notion phone backup (mock Notion on 54333).
+    {
+      const draftOf = (gid, cols) => psql(`select ${cols} from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = '${gid}' order by d.version desc limit 1`);
+      const idOf = (gid) => msg(gid, "id");
+      const draftCount = (gid) => psql(`select count(*) from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = '${gid}'`);
+      const streak = (type) => psql(`select unedited_streak || '|' || edited_total || '|' || rejected_total from iris.reply_types where type = '${type}'`);
+      check("REQ-44: the cancellation has version 1, proposed, by iris, unedited, without a signature",
+        draftOf("m9", "d.version || '|' || d.state || '|' || d.created_by || '|' || d.edited || '|' || d.policy_version || '|' || (d.body_text like '%AP Academy%')") === "1|proposed|iris|false|3|false",
+        draftOf("m9", "d.state"));
+      check("REQ-44: one draft ai_calls row for it", psql(`select count(*) from iris.ai_calls where purpose = 'draft' and outcome = 'ok' and message_id = '${idOf("m9")}'`) === "1");
+      check("REQ-44: the flagged billing message gets no draft", draftCount("m10") === "0");
+
+      // A body that breaks a rule is held back.
+      await add("m11", "Missed class", "Sam missed class yesterday, is it forfeit?");
+      const run44 = await irisRun();
+      check("REQ-44: the run answers ok and counts drafted", run44.status === 200 && run44.body?.result === "ok", JSON.stringify(run44.body));
+      check("REQ-44: the forfeit message is escalated draft_rule with no draft",
+        msg("m11", "state || '|' || escalation_reason") === "escalated|draft_rule" && draftCount("m11") === "0", msg("m11", "state || '|' || coalesce(escalation_reason, '')"));
+
+      // Edit, then approve the edit, then Copy.
+      const m9 = idOf("m9");
+      await teacher.goto(`${BASE}/iris/messages/${m9}`);
+      await teacher.locator("[data-draft-body]").waitFor({ timeout: 15000 });
+      check("REQ-44: the message page shows the policy used and the signature", (await teacher.locator("[data-policy-used]").innerText()).includes("A cancelled class has no fee") && (await teacher.locator("[data-signature]").innerText()).includes("AP Academy"));
+      await teacher.locator("[data-draft-body]").fill("Hi Pat,\n\nNo problem, I hope the dentist goes well.");
+      await teacher.getByRole("button", { name: "Save edit", exact: true }).click();
+      await teacher.locator('[data-draft-editor="2"]').waitFor({ timeout: 15000 });
+      check("REQ-44: Save edit stores version 2 by the owner, edited", draftOf("m9", "d.version || '|' || d.created_by || '|' || d.edited") === "2|owner|true");
+      await teacher.getByRole("button", { name: "Approve", exact: true }).click();
+      await teacher.locator("[data-copy-reply]").waitFor({ timeout: 15000 });
+      check("REQ-44: after Approve the page shows Copy with the signed reply",
+        (await teacher.locator("[data-approved-text]").innerText()).includes("I hope the dentist goes well.") && await teacher.getByRole("button", { name: "Copy", exact: true }).isVisible());
+      check("REQ-44: the draft and the message are approved", draftOf("m9", "d.state || '|' || d.approval_mode") === "approved|manual" && msg("m9", "state") === "approved");
+      check("REQ-44: the cancellation streak is 0 with edited_total 1", streak("cancellation") === "0|1|0", streak("cancellation"));
+      const again44 = await teacher.context().request.post(`${BASE}/api/iris/drafts/${draftOf("m9", "d.id")}/approve`, { data: { version: 2 } });
+      check("REQ-44: a second Approve is 409", again44.status() === 409, String(again44.status()));
+
+      // An unedited approval, then a reject.
+      await teacher.goto(`${BASE}/iris/messages/${idOf("m1")}`);
+      await teacher.getByRole("button", { name: "Approve", exact: true }).click();
+      await teacher.locator("[data-copy-reply]").waitFor({ timeout: 15000 });
+      check("REQ-44: an unedited approval gives the general_question streak 1", streak("general_question") === "1|0|0", streak("general_question"));
+      await teacher.goto(`${BASE}/iris/messages/${idOf("m2")}`);
+      await teacher.locator("[data-reject-reason]").fill("Too long");
+      await teacher.getByRole("button", { name: "Reject", exact: true }).click();
+      await teacher.locator('[data-draft-state="rejected"]').waitFor({ timeout: 15000 });
+      check("REQ-44: reject resets the streak and counts it", streak("general_question") === "0|0|1", streak("general_question"));
+      check("REQ-44: the rejected message is back in Needs you", msg("m2", "state || '|' || escalation_reason || '|' || (handled_at is null)") === "escalated|draft_rejected|true");
+      await teacher.goto(`${BASE}/iris`);
+      await teacher.getByRole("heading", { name: "Drafts waiting", exact: true }).waitFor({ timeout: 15000 });
+      check("REQ-44: the queue shows Needs you, Drafts waiting, Sent today and Failed",
+        (await section(teacher, "Needs you").innerText()).includes("You rejected the draft") && (await section(teacher, "Sent today").innerText()).includes("Approved, send by hand")
+          && await teacher.getByRole("heading", { name: "Failed", exact: true }).isVisible());
+
+      // Charlie answers m5 from Gmail: the next run supersedes its draft.
+      await gmail("/__gmail/add", "POST", {
+        id: "s1", threadId: "thread-m5", internalDate: String(Date.now()), snippet: "Thanks", labelIds: ["SENT"],
+        payload: { mimeType: "text/plain", headers: [{ name: "From", value: "Charlie <charlie@apacademy.ca>" }, { name: "Subject", value: "Re: Long note" }], body: { data: Buffer.from("Thanks, noted.").toString("base64url") } },
+      });
+      await irisRun();
+      check("REQ-44: the sent reply is stored once as charlie_manual", msg("s1", "direction || '|' || source") === "outbound|charlie_manual");
+      check("REQ-44: m5 is handled as answered_by_charlie and its draft superseded",
+        msg("m5", "state || '|' || escalation_reason || '|' || (handled_at is not null)") === "escalated|answered_by_charlie|true" && draftOf("m5", "d.state") === "superseded",
+        msg("m5", "state || '|' || coalesce(escalation_reason, '')"));
+      check("REQ-44: the streak is unchanged by a Gmail reply", streak("general_question") === "0|0|1");
+
+      // The phone backup: one page for today, one to-do per pushed item, one comment each.
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
+      const work = await (await fetch(`${MOCK_NOTION}/__work`, { headers: { "x-e2e-probe": "1" } })).json();
+      const irisPages = work.pages.filter((p) => JSON.stringify(p.props?.Name ?? {}).includes("Iris replies"));
+      check("REQ-44: one Notion Work page for today", irisPages.length === 1 && JSON.stringify(irisPages[0].props.Name).includes(`Iris replies — ${today}`), JSON.stringify(irisPages.map((p) => p.props?.Name)));
+      const pushed = psql("select count(*) from iris.pushes where state = 'pushed'");
+      check("REQ-44: one to-do per pushed item, all unchecked", String(irisPages[0]?.todos.length) === pushed && irisPages[0].todos.every((t) => !t.checked), `${irisPages[0]?.todos.length} vs ${pushed}`);
+      check("REQ-44: one comment per to-do, each mentioning Charlie",
+        work.comments.filter((c) => c.pageId === irisPages[0]?.id).length === Number(pushed)
+          && work.comments.every((c) => c.rich_text?.[0]?.mention?.user?.id === "6d3ca702-9281-4f05-860f-182f06b841c2"));
+      const m9Todo = irisPages[0]?.todos.find((t) => t.text.includes(`ref ${m9.slice(0, 8)}`));
+      check("REQ-44: the cancellation's to-do has a tracker link and the signed reply", !!m9Todo && m9Todo.children.some((c) => c.includes("AP Academy")), JSON.stringify(m9Todo));
+      check("REQ-44: the unknown sender's to-do names nobody", irisPages[0]?.todos.some((t) => t.text.startsWith("Unknown sender re -")) && !JSON.stringify(irisPages[0]).includes("lead@example.org"));
+      check("REQ-44: one Work Log entry for today", work.pages.filter((p) => p.ds === "03257601-dfe2-42dd-affb-49dcfe1d2dcf" && JSON.stringify(p.props?.Summary ?? {}).includes("Iris replies")).length === 1);
+
+      // Who may review.
+      await ryan.goto(`${BASE}/iris/messages/${m9}`);
+      check("REQ-44: Ryan opening a message page lands on /", /\/tracker\/?$/.test(new URL(ryan.url()).pathname), ryan.url());
+      const m11Draft = draftOf("m1", "d.id");
+      const ryanApprove = await ryan.context().request.post(`${BASE}/api/iris/drafts/${m11Draft}/approve`, { data: { version: 1 } });
+      check("REQ-44: Ryan gets 403 from approve", ryanApprove.status() === 403, String(ryanApprove.status()));
+      const evilApprove = await teacher.context().request.post(`${BASE}/api/iris/drafts/${m11Draft}/approve`, { data: { version: 1 }, headers: { Origin: "https://evil.example" } });
+      check("REQ-44: a cross-site approve is 403", evilApprove.status() === 403, String(evilApprove.status()));
+    }
 
     // 12. A Gmail list failure: Run now shows it, the run is 502, and the settings page shows the short error.
     await gmail("/__gmail/fail-list");

@@ -234,3 +234,14 @@ describe("runClassify: what the prompt is built from (AC12)", () => {
     expect(w.msg(second).state).toBe("classified");
   });
 });
+
+// REQ-44 AC7: a successful classification resets retry_count and records the chosen child.
+describe("runClassify: what drafting reads next", () => {
+  it("success resets retry_count to 0 and writes notionStudentId", async () => {
+    const w = world();
+    const id = await w.add({ students: [MAYA, LEO], body: "Leo is sick today.", retryCount: 2 });
+    w.setReply(() => good({ primary: "cancellation", intents: ["cancellation"], childName: "Leo" }));
+    await runClassify(w.deps());
+    expect(w.msg(id)).toMatchObject({ state: "classified", retryCount: 0, notionStudentId: LEO });
+  });
+});
