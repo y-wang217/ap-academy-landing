@@ -1576,9 +1576,11 @@ try {
       check("REQ-55: the sync line reports the health check and never says online", /^(Sources checked|Some sources failing)/.test(sync) && !/online/i.test(await p.locator("[data-console]").innerText()), sync);
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
-      check("REQ-55: production panels other than the north star are Not connected yet",
-        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 8
-          && (await p.locator('[data-panel]:not([data-panel="northStar"]) [data-panel-value]').count()) === 0);
+      // REQ-59 wires the trial funnel and cash pulse into conversion, cashflow, trials and finance.
+      const WIRED = ["northStar", "conversion", "cashflow", "trials", "finance"];
+      check("REQ-55: production panels other than the wired ones are Not connected yet",
+        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 6
+          && (await p.locator(`[data-panel]${WIRED.map((id) => `:not([data-panel="${id}"])`).join("")} [data-panel-value]`).count()) === 0);
 
       // REQ-56 AC5, AC9: the mock Notion serves Invoices, so the north star is a real read of this stack's series.
       const north = p.locator('#console-panel-sales [data-panel="northStar"]');
@@ -1616,6 +1618,74 @@ try {
       check("REQ-56: ?week=2026-03-04 shows the week of Mon 2 Mar with a Next week link", marchText.includes("Mon 2 Mar to Sun 8 Mar") && marchText.includes("Next week"), marchText.slice(0, 200));
       await p.goto(`${BASE}/console?mode=sales`);
       await p.locator("[data-console]").waitFor({ timeout: 15000 });
+
+      // REQ-59: the trial funnel and cash pulse over the mock's console leads, one trial lesson and the six invoices.
+      {
+        const ops = (id) => p.locator(`#console-panel-operations [data-panel="${id}"]`);
+        const countOf = async (label) => (await ops("trials").locator(`[data-funnel-count="${label}"]`).innerText()).replace(/\s+/g, " ").trim();
+        await p.goto(`${BASE}/console?mode=operations&window=90`);
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        const trialsText = await ops("trials").innerText();
+        const counts = [await countOf("Booked"), await countOf("Delivered"), await countOf("Closed"), await countOf("Verified enrolments"), await countOf("Outcome unknown")];
+        check("REQ-59: trials is ready with Booked 3, Delivered 2, Closed 1, Verified 1 and Outcome unknown 1",
+          (await ops("trials").getAttribute("data-status")) === "ready" && JSON.stringify(counts) === JSON.stringify(["Booked 3", "Delivered 2", "Closed 1", "Verified enrolments 1", "Outcome unknown 1"]),
+          `${await ops("trials").getAttribute("data-status")} ${counts.join("|")}`);
+        check("REQ-59: the count-over-count lines are shown and no percentage",
+          ["Delivered 2 of 3 booked", "Closed 1 of 2 delivered", "Verified 1 of 1 closed"].every((t) => trialsText.includes(t)) && !trialsText.includes("%"), trialsText.slice(0, 300));
+        await ops("trials").locator('[data-funnel-count="Outcome unknown"] summary').click();
+        check("REQ-59: Outcome unknown lists Console Lead Two", (await ops("trials").locator('[data-funnel-count="Outcome unknown"]').innerText()).includes("Console Lead Two"));
+        const financeText = await ops("finance").innerText();
+        const overdue = ops("finance").locator('[data-cash-line="Overdue"]');
+        await overdue.locator("summary").click();
+        const dueCents = async (label) => Number(((await ops("finance").locator(`[data-cash-line="${label}"] summary span`).first().innerText()).replace(/[$,]/g, "")));
+        check("REQ-59: finance is ready: $480.00 collected with paid date not recorded, $60.00 credits, drafts and voids as counts",
+          (await ops("finance").getAttribute("data-status")) === "ready" && financeText.includes("$480.00") && financeText.includes("1 paid date not recorded")
+            && financeText.includes("Drafts 1") && financeText.includes("Voids 1") && financeText.includes("Credits applied $60.00")
+            && financeText.includes("Card payments made through the website's payment links are not recorded in Notion and are not included."),
+          financeText.slice(0, 400));
+        check("REQ-59: the overdue list holds eeee…0001 at $420.00 and due plus overdue is $1,512.00",
+          (await overdue.locator('a[href*="eeeeeeeeeeee4eee8eeeeeeeeeee0001"]').count()) === 1 && (await overdue.innerText()).includes("$420.00")
+            && Math.round(((await dueCents("Outstanding due")) + (await dueCents("Overdue"))) * 100) === 151200,
+          await overdue.innerText());
+        const collectedText = await ops("finance").locator('[data-cash-line="Collected"]').innerText();
+        check("REQ-59: no $999 or $888 in collected", !collectedText.includes("999") && !collectedText.includes("888"), collectedText);
+
+        const billingFail2 = () => fetch(`${MOCK_NOTION}/__billing/fail`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+        let failing2 = (await billingFail2()).billingFails;
+        try {
+          await p.reload();
+          await p.locator("[data-console]").waitFor({ timeout: 15000 });
+          const fin = await ops("finance").innerText();
+          check("REQ-59: with Invoices failing finance is unverifiable, Payment records unavailable, no $ figure",
+            failing2 && (await ops("finance").getAttribute("data-status")) === "unverifiable" && fin.includes("Payment records unavailable") && !fin.includes("$"), fin.slice(0, 200));
+          const counts2 = [await countOf("Booked"), await countOf("Delivered"), await countOf("Closed"), await countOf("Outcome unknown")];
+          const verified = await countOf("Verified enrolments");
+          check("REQ-59: the funnel stays, stale, with only Verified enrolments Unverifiable",
+            (await ops("trials").getAttribute("data-status")) === "stale" && JSON.stringify(counts2) === JSON.stringify(["Booked 3", "Delivered 2", "Closed 1", "Outcome unknown 1"])
+              && verified.startsWith("Verified enrolments Unverifiable"),
+            `${await ops("trials").getAttribute("data-status")} ${counts2.join("|")} ${verified}`);
+        } finally {
+          if (failing2) failing2 = (await billingFail2()).billingFails;
+        }
+        await p.goto(`${BASE}/console?mode=operations&window=12`);
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        check("REQ-59: ?window=12 prints Last 30 days", (await ops("trials").innerText()).includes("Last 30 days"));
+        // The Sales tabpanel is hidden in Operations mode, so the links are read by text, not by role.
+        const headlineLink = (id) => p.locator(`#console-panel-sales [data-panel="${id}"] a`, { hasText: "Details in Operations" }).getAttribute("href");
+        const conversionLink = await headlineLink("conversion");
+        const cashflowLink = await headlineLink("cashflow");
+        check("REQ-59: the Sales headlines link to ?mode=operations&window=30", conversionLink === "?mode=operations&window=30" && cashflowLink === "?mode=operations&window=30", `${conversionLink} ${cashflowLink}`);
+        const SHOTS59 = new URL("../../docs/spec/founder-console/screenshots/req-59/", import.meta.url);
+        mkdirSync(SHOTS59, { recursive: true });
+        for (const [w, hgt] of [[390, 844], [1280, 720]]) {
+          const q = await bridgeAt(w, hgt, "/console?mode=operations");
+          check(`REQ-59: /console?mode=operations at ${w} has no sideways scroll`, await noSideScroll(q));
+          await q.goto(`${BASE}/console/preview?mode=operations`);
+          await q.locator("[data-console]").waitFor({ timeout: 15000 });
+          await q.screenshot({ path: new URL(`preview-operations-${w}x${hgt}.png`, SHOTS59).pathname, fullPage: true });
+          await q.context().close();
+        }
+      }
 
       // AC2: the mode switch by keyboard, in the URL and across a reload.
       await p.getByRole("tab", { name: "Sales", exact: true }).focus();

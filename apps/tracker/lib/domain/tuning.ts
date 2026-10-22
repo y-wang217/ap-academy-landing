@@ -80,4 +80,6 @@ export const TUNING = {
   consoleTouchesPerStudent: 5,
   /** Touches read back this many days. */
   consoleTouchesWindowDays: 90,
+  /** Rows a console detail list (trial funnel, cash pulse) shows before an "N more in Notion" link (REQ-59). */
+  consoleDetailListCap: 25,
 } as const;
