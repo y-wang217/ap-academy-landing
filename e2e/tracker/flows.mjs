@@ -1920,6 +1920,15 @@ try {
     const NINA_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0005";
     const ninaStart = isoIn(2);
     psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009', '${NINA_ID}', 'MPM2D', 'weekly', '${ninaStart}', '17:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
+    // The insert queues the daily-task export; an admin page's background drain settles it before the snapshot,
+    // so a later drain never changes the daily-task tables inside the Iris section.
+    await teacher.goto(`${BASE}/schedule`);
+    let exportsDue = "1";
+    for (let i = 0; i < 60 && exportsDue !== "0"; i++) {
+      exportsDue = psql("select count(*) from tracker.notion_outbox where status in ('pending', 'running') and next_attempt_at <= now() + interval '15 minutes'");
+      if (exportsDue !== "0") await teacher.waitForTimeout(250);
+    }
+    check("REQ-46: the export queued by Nina's series settles before the Iris section", exportsDue === "0", exportsDue);
     const trackerBefore = trackerSnapshot();
     const notionStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
     await gmail("/__gmail/reset");
