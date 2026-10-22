@@ -4,15 +4,16 @@ import { FailureState } from "./failure-state";
 import { FreshnessLine } from "./freshness-line";
 import { StatusBadge } from "./status-badge";
 
-/** What every kit component takes besides its result. `id` is the slot id. */
-export type PanelFrame = { id: string; title: string; emptyText: string; primary?: boolean; retryHref?: string; headingId?: string };
+/** What every kit component takes besides its result. `id` is the slot id. `canonical` is the real page behind the panel (REQ-58). */
+export type PanelFrame = { id: string; title: string; emptyText: string; primary?: boolean; retryHref?: string; headingId?: string; canonical?: { href: string; label: string } };
 
 /**
  * The console's panel frame (REQ-55 AC3, AC12): a focusable section named by
  * its h2, a status badge, a body switched on the result's status and a
  * freshness line. Only ready and stale render the caller's value; reasons and
  * messages are printed verbatim. `idle` is the instrument's empty dial,
- * shown when there is no value.
+ * shown when there is no value. A canonical link sits in the header in
+ * every status, so a failed panel still points at the real page.
  */
 export function InstrumentPanel<T>({
   id,
@@ -21,6 +22,7 @@ export function InstrumentPanel<T>({
   primary,
   retryHref = "?",
   headingId,
+  canonical,
   result,
   idle,
   children,
@@ -88,6 +90,11 @@ export function InstrumentPanel<T>({
       <header className="console-panel-head">
         <h2 id={heading}>{title}</h2>
         <StatusBadge status={result.status} />
+        {canonical && (
+          <a href={canonical.href} className="console-canonical" data-canonical="">
+            {canonical.label}
+          </a>
+        )}
       </header>
       <div className="console-panel-body">{body}</div>
       <FreshnessLine result={result} />

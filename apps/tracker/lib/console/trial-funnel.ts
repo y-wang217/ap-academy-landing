@@ -83,7 +83,7 @@ export function trialFunnel(input: {
         id: lead?.id ?? t.studentId, name: lead?.name ?? t.studentName ?? "Unknown student", date, href: lead?.pageUrl ?? t.pageUrl, label: "lesson", milestone: false, lesson: true,
       });
     }
-    delivered = ok([...entries.values()].map(({ milestone: _m, lesson: _l, ...r }) => r));
+    delivered = ok([...entries.values()].map((e): FunnelRef => ({ id: e.id, name: e.name, date: e.date, href: e.href, label: e.label })));
 
     const lessonsOf = (studentId: string) => lessons.filter((t) => t.studentId && normalId(t.studentId) === studentId);
     outcomeUnknown = ok(all

@@ -69,7 +69,7 @@ export function readComplete(r: Pick<PanelResult<unknown>, "status" | "staleReas
   return r.staleReason.split("; ").every((reason) => NAME_JOIN_REASONS.includes(reason));
 }
 
-function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+export function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -85,7 +85,7 @@ function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): P
 const isAbort = (e: unknown) => e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError");
 
 /** The fixed text a failure becomes: never a response body. */
-function messageOf(e: unknown, timeoutMs: number): string {
+export function messageOf(e: unknown, timeoutMs: number): string {
   const timedOut = `Timed out after ${timeoutMs / 1000} s`;
   if (e instanceof ProviderTimeoutError || isAbort(e)) return timedOut;
   if (e instanceof Error && e.name === "NotionError") {

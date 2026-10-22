@@ -594,6 +594,60 @@
   font-size: 13px;
 }
 
+/* REQ-58: the canonical header link and the Operations instruments. */
+.console-canonical {
+  margin-left: auto;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.console-load {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.console-load caption {
+  caption-side: top;
+  padding-bottom: 6px;
+  text-align: left;
+}
+.console-load th,
+.console-load td {
+  padding: 6px 8px 6px 0;
+  text-align: left;
+  vertical-align: top;
+}
+.console-load thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+.console-load tbody tr {
+  border-top: 1px solid var(--border);
+}
+.console-load-line,
+.console-load-flag {
+  display: block;
+}
+.console-load-flag {
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 400;
+}
+.console-gaps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.console-gaps code {
+  font-family: var(--font-readout);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.console-subhead {
+  margin: 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* Grid areas per mode at each range (design, Layout). Area names are slot ids. */
 @media (min-width: 1440px) {
   .console-grid-sales {
@@ -615,6 +669,7 @@
     grid-template-areas:
       "teacherLoad lessonGaps finance"
       "teacherLoad lessonGaps trials"
+      "upcoming upcoming upcoming"
       "integrations integrations integrations";
   }
 }
@@ -629,7 +684,7 @@
   }
   .console-grid-operations {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "teacherLoad lessonGaps" "finance trials" "integrations integrations";
+    grid-template-areas: "teacherLoad lessonGaps" "upcoming upcoming" "finance trials" "integrations integrations";
   }
 }
 @media (min-width: 901px) and (max-width: 1279px) {
@@ -643,7 +698,7 @@
   }
   .console-grid-operations {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "teacherLoad lessonGaps" "finance trials" "integrations integrations";
+    grid-template-areas: "teacherLoad lessonGaps" "upcoming upcoming" "finance trials" "integrations integrations";
   }
 }
 @media (min-width: 641px) and (max-width: 900px) {
@@ -657,7 +712,7 @@
   }
   .console-grid-operations {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "lessonGaps lessonGaps" "teacherLoad finance" "trials integrations";
+    grid-template-areas: "lessonGaps lessonGaps" "teacherLoad upcoming" "finance trials" "integrations integrations";
   }
 }
 @media (max-width: 640px) {
@@ -671,9 +726,17 @@
   }
   .console-grid-operations {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "teacherLoad" "lessonGaps" "finance" "trials" "integrations";
+    grid-template-areas: "teacherLoad" "lessonGaps" "upcoming" "finance" "trials" "integrations";
   }
   .console-horizon {
     display: none;
+  }
+  .console-load thead {
+    display: none;
+  }
+  .console-load tr,
+  .console-load th,
+  .console-load td {
+    display: block;
   }
 }

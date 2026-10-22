@@ -6,9 +6,12 @@ import { Metric, type MetricData } from "../kit/metric";
 import { QueueList, type QueueItem } from "../kit/queue-row";
 import { Radar, type RadarStage } from "../kit/radar";
 import { CashPulsePanel } from "../cash-pulse";
+import { LessonGaps } from "../lesson-gaps";
 import { NorthStar } from "../north-star";
+import { TeacherLoad } from "../teacher-load";
 import { TrialFunnelPanel } from "../trial-funnel";
 import type { CashPanelData, FunnelPanelData } from "../../../lib/console/finance-panels";
+import type { LessonGapsData, TeacherLoadData } from "../../../lib/console/operations";
 import type { NorthStarData } from "../../../lib/console/north-star";
 import { HeaderRail } from "./header-rail";
 import { Horizon } from "./horizon";
@@ -25,8 +28,11 @@ function Instrument({ slot, result }: { slot: PanelSlot; result: PanelView<unkno
     primary: slot.primary,
     retryHref: `?mode=${slot.mode}`,
     headingId: `console-${slot.mode}-${slot.id}-title`,
+    canonical: result.canonical,
   };
   if (slot.id === "northStar") return <NorthStar {...frame} result={result as PanelView<NorthStarData>} />;
+  if (slot.mode === "operations" && slot.id === "teacherLoad") return <TeacherLoad {...frame} result={result as PanelView<TeacherLoadData>} />;
+  if (slot.mode === "operations" && slot.id === "lessonGaps") return <LessonGaps {...frame} result={result as PanelView<LessonGapsData>} />;
   if (slot.id === "conversion" || slot.id === "trials") {
     return <TrialFunnelPanel {...frame} variant={slot.id === "trials" ? "full" : "headline"} result={result as PanelView<FunnelPanelData>} />;
   }
