@@ -1576,7 +1576,46 @@ try {
       check("REQ-55: the sync line reports the health check and never says online", /^(Sources checked|Some sources failing)/.test(sync) && !/online/i.test(await p.locator("[data-console]").innerText()), sync);
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
-      check("REQ-55: production panels are all Not connected yet", (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 9 && (await p.locator("[data-panel-value]").count()) === 0);
+      check("REQ-55: production panels other than the north star are Not connected yet",
+        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 8
+          && (await p.locator('[data-panel]:not([data-panel="northStar"]) [data-panel-value]').count()) === 0);
+
+      // REQ-56 AC5, AC9: the mock Notion serves Invoices, so the north star is a real read of this stack's series.
+      const north = p.locator('#console-panel-sales [data-panel="northStar"]');
+      const northStatus = await north.getAttribute("data-status");
+      const northText = await north.innerText();
+      check("REQ-56: the north star is wired: a verified read of the current week",
+        ["ready", "empty", "stale"].includes(northStatus) && /Mon \d+ \w+ to Sun \d+ \w+/.test(northText) && northText.includes("Previous week") && !northText.includes("Next week"),
+        `${northStatus} ${northText.slice(0, 200)}`);
+      if (northStatus !== "empty") {
+        const summary = north.locator("details summary");
+        await summary.focus();
+        await p.keyboard.press("Enter");
+        check("REQ-56: the north-star detail list opens with Enter", (await north.locator("details").evaluate((d) => d.open)) && /^Show \d+ counted, \d+ excluded$/.test((await summary.textContent()) ?? ""));
+      }
+
+      // REQ-56 AC4: with the Invoices read failing, the north star cannot verify: it says so, shows the gross moves
+      // unclassified and never a figure or a percentage.
+      const billingFail = () => fetch(`${MOCK_NOTION}/__billing/fail`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+      let failing = (await billingFail()).billingFails;
+      try {
+        await p.goto(`${BASE}/console?mode=sales`);
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        const failed = p.locator('#console-panel-sales [data-panel="northStar"]');
+        const failedText = await failed.innerText();
+        check("REQ-56: with Invoices failing the north star is unverifiable with the reason, unclassified gross and no percentage",
+          failing && (await failed.getAttribute("data-status")) === "unverifiable" && failedText.includes("Cannot verify weekly hours") && failedText.includes("unclassified")
+            && !failedText.includes("%") && !failedText.includes("net new verified") && (await failed.locator("[data-panel-value]").count()) === 0 && (await failed.getByRole("link", { name: "Retry" }).count()) === 1,
+          `${await failed.getAttribute("data-status")} ${failedText.slice(0, 200)}`);
+      } finally {
+        if (failing) failing = (await billingFail()).billingFails;
+      }
+      await p.goto(`${BASE}/console?mode=sales&week=2026-03-04`);
+      await p.locator("[data-console]").waitFor({ timeout: 15000 });
+      const marchText = await p.locator('#console-panel-sales [data-panel="northStar"]').innerText();
+      check("REQ-56: ?week=2026-03-04 shows the week of Mon 2 Mar with a Next week link", marchText.includes("Mon 2 Mar to Sun 8 Mar") && marchText.includes("Next week"), marchText.slice(0, 200));
+      await p.goto(`${BASE}/console?mode=sales`);
+      await p.locator("[data-console]").waitFor({ timeout: 15000 });
 
       // AC2: the mode switch by keyboard, in the URL and across a reload.
       await p.getByRole("tab", { name: "Sales", exact: true }).focus();
@@ -1704,7 +1743,7 @@ try {
         await p.keyboard.press("Tab");
         const s = await where();
         stops.push(s);
-        if (s.tag === "SUMMARY") break;
+        if (s.tag === "SUMMARY" && s.text === "Keyboard shortcuts") break;
       }
       const order = stops.filter((s) => s.panel).map((s) => s.panel).filter((id, i, a) => i === 0 || a[i - 1] !== id);
       const firstNorth = stops.findIndex((s) => s.panel === "northStar");

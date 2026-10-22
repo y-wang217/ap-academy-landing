@@ -1,21 +1,45 @@
 import { SessionExpired } from "@/components/console/session-expired";
 import { ConsoleBridge } from "@/components/console/shell/bridge";
-import { parseMode } from "@/lib/console/modes";
+import { loadConsolePanels } from "@/lib/console/facade";
+import { parseMode, parseWeek } from "@/lib/console/modes";
+import { buildNorthStar, CANNOT_VERIFY } from "@/lib/console/north-star";
 import { placeholderPanels } from "@/lib/console/panel-slots";
+import { createConsoleDeps, sharePeopleRead } from "@/lib/console/providers";
+import { createConsoleSeriesReader } from "@/lib/console/series-read";
+import { priorWeek } from "@/lib/domain/schedule/net-new";
 import { ownerViewer } from "@/lib/pages";
+import { todayIso } from "@/lib/time";
 
 // Per-user page: never prerender.
 export const dynamic = "force-dynamic";
 
+const settle = <T,>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> => p.then((value) => ({ ok: true as const, value }), () => ({ ok: false as const }));
+
 /**
  * The founder console (REQ-53 gate, REQ-55 bridge). Owner only, checked again
- * here. No data is wired yet: every panel is "Not connected yet" until the
- * later Console cards fill their slots.
+ * here. The north star (REQ-56) is wired from the facade, one shared people
+ * read and the series read; every other panel is "Not connected yet" until
+ * the later Console cards fill their slots.
  */
-export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[] }> }) {
+export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[] }> }) {
   const gate = await ownerViewer();
   if (gate.kind === "expired") return <SessionExpired />;
-  const mode = parseMode((await searchParams).mode);
+  const sp = await searchParams;
+  const mode = parseMode(sp.mode);
   const now = new Date();
-  return <ConsoleBridge mode={mode} panels={placeholderPanels(now)} email={gate.viewer.email} now={now} />;
+  const week = parseWeek(sp.week, todayIso(now));
+  const deps = sharePeopleRead(createConsoleDeps(gate.viewer, () => now));
+  const readSeries = createConsoleSeriesReader(gate.viewer.db.tracker, gate.viewer.orgId);
+  const [facade, people, series] = await Promise.all([
+    loadConsolePanels(deps),
+    settle(deps.people()),
+    settle(readSeries({ from: priorWeek(week).from, to: week.to })),
+  ]);
+  const panels = placeholderPanels(now);
+  try {
+    panels.sales.northStar = buildNorthStar({ week, now, panels: facade, people, series });
+  } catch {
+    panels.sales.northStar = { ...panels.sales.northStar, status: "error", staleReason: null, errorMessage: CANNOT_VERIFY };
+  }
+  return <ConsoleBridge mode={mode} panels={panels} email={gate.viewer.email} now={now} />;
 }

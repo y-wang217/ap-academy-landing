@@ -47,3 +47,12 @@ export function createConsoleDeps(viewer: OwnerViewer, now: () => Date = () => n
     freshness: consoleFreshness,
   };
 }
+
+/**
+ * The same deps with a people read that runs at most once (REQ-56 AC11): the facade and the north
+ * star share one promise, rejection included, so a page load reads the people copy once.
+ */
+export function sharePeopleRead(deps: FacadeDeps): FacadeDeps {
+  let read: Promise<Awaited<ReturnType<FacadeDeps["people"]>>> | null = null;
+  return { ...deps, people: () => (read ??= deps.people()) };
+}

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InvoiceSource, LeadSource, ReadResult, TouchSource, TrialLessonSource, WorkSource } from "./contracts";
-import { loadConsolePanels, ProviderTimeoutError, type FacadeDeps, type NotionPorts, type PeopleSnapshot } from "./facade";
+import { loadConsolePanels, NAME_JOIN_REASONS, ProviderTimeoutError, readComplete, type FacadeDeps, type NotionPorts, type PeopleSnapshot } from "./facade";
 
 // REQ-54 AC2, AC3, AC4, AC5, AC10, AC11: the facade over fake ports.
 const ORG = "10000000-0000-0000-0000-00000000aaaa";
@@ -194,5 +194,27 @@ describe("loadConsolePanels", () => {
     let since = "";
     await loadConsolePanels(deps({ notion: ports({ touches: async (o) => { since = o.since; return done([]); } }) }));
     expect(since).toBe("2026-07-24");
+  });
+});
+
+// REQ-56 AC4: which panel results the north star may treat as a complete read.
+describe("readComplete", () => {
+  const base = { panel: "invoices" as const, data: [], count: 0, lastCheckedAt: T1.toISOString(), lastSuccessfulFetchAt: null, errorMessage: null, sourceEvidence: [] };
+  it.each([
+    ["ready", null, true],
+    ["empty", null, true],
+    ["stale", "people_sync_stale", true],
+    ["stale", "names_unavailable", true],
+    ["stale", "Stopped after 10 pages; showing 1000 rows", false],
+    ["stale", "Stopped after 10 pages; showing 1000 rows; people_sync_stale", false],
+    ["stale", null, false],
+    ["error", null, false],
+    ["loading", null, false],
+    ["unverifiable", null, false],
+  ] as const)("%s with %j is %s", (status, staleReason, expected) => {
+    expect(readComplete({ ...base, status, staleReason })).toBe(expected);
+  });
+  it("names the facade's own join reasons", () => {
+    expect([...NAME_JOIN_REASONS].sort()).toEqual(["names_unavailable", "people_sync_stale"]);
   });
 });
