@@ -1,5 +1,6 @@
 import { SessionExpired } from "@/components/console/session-expired";
 import { ConsoleBridge } from "@/components/console/shell/bridge";
+import { creationPanels } from "@/lib/console/creation";
 import { loadConsolePanels } from "@/lib/console/facade";
 import { parseGapDays, parseMode, parseWeek } from "@/lib/console/modes";
 import { buildNorthStar, CANNOT_VERIFY } from "@/lib/console/north-star";
@@ -22,10 +23,11 @@ const settle = <T,>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok: false
  * here. The north star (REQ-56) is wired from the facade, one shared people
  * read and the series read; Operations' teacher load, lesson gaps and
  * upcoming classes and the Sales capacity gauge (REQ-58) from the scheduler
- * tables on the same people read. Every other panel is "Not connected yet"
- * until the later Console cards fill their slots.
+ * tables on the same people read. Creation's next asset, work queue and
+ * weekly review (REQ-60) come from the same facade's Work read. Every other
+ * panel is "Not connected yet" until the later Console cards fill their slots.
  */
-export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[]; gapDays?: string | string[] }> }) {
+export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[]; gapDays?: string | string[]; task?: string | string[] }> }) {
   const gate = await ownerViewer();
   if (gate.kind === "expired") return <SessionExpired />;
   const sp = await searchParams;
@@ -61,5 +63,12 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   panels.operations.lessonGaps = ops.lessonGaps;
   panels.operations.upcoming = ops.upcoming;
   panels.sales.capacity = ops.capacity;
+  const task = Array.isArray(sp.task) ? sp.task[0] : sp.task;
+  const creation = creationPanels(facade.work, {
+    today: todayIso(now), selectedId: task && task.length <= 64 ? task : null, search: new URLSearchParams(query), workSourceId: deps.sources.work,
+  });
+  panels.creation.nextAsset = creation.nextAsset;
+  panels.creation.work = creation.work;
+  panels.creation.pipeline = creation.pipeline;
   return <ConsoleBridge mode={mode} panels={panels} email={gate.viewer.email} now={now} />;
 }

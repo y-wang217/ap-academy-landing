@@ -34,7 +34,8 @@ const result = (status: PanelStatus, data: CreationView | null = view()): PanelV
   staleReason: status === "stale" ? "Stopped after 10 pages; showing 5 rows" : null, errorMessage: status === "error" ? "Work is missing Area" : null, sourceEvidence: [],
   canonical: { href: WORK_URL, label: "Open Work in Notion" },
 });
-const frame = (slot: string, title: string, emptyText: string) => ({ id: slot, title, emptyText });
+// The bridge passes the result's canonical link in the frame; so do these renders.
+const frame = (slot: string, title: string, emptyText: string) => ({ id: slot, title, emptyText, canonical: { href: WORK_URL, label: "Open Work in Notion" } });
 const next = (r: PanelView<CreationView>, interrupt?: ReturnType<typeof h>) =>
   renderToStaticMarkup(h(NextAsset, { ...frame("nextAsset", "Next asset", "Queue clear"), result: r, interrupt }));
 const queue = (r: PanelView<CreationView>) => renderToStaticMarkup(h(WorkQueue, { ...frame("work", "Work queue", "No tasks scheduled"), result: r }));

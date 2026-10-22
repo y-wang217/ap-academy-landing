@@ -11,6 +11,8 @@ import { weekOf } from "../../lib/domain/schedule/week";
 import { notConnected, type PanelStatus, type PanelView } from "../../lib/console/panel-view";
 import type { LessonGapsData, TeacherLoadData } from "../../lib/console/operations";
 import type { WeekLoad } from "../../lib/domain/schedule/operations";
+import type { WorkRow } from "../../lib/console/contracts";
+import { creationPanels } from "../../lib/console/creation";
 
 /**
  * Neutral test values for the kit preview and unit tests (REQ-55). Never imported by
@@ -134,15 +136,7 @@ export function demoPanels(now: Date): ConsolePanels {
       cashflow: result<MetricData>("cashflow", now, "error", null, { errorMessage: "Payment records unavailable" }),
       dispatch: result<QueueItem[]>("dispatch", now, "empty", null),
     },
-    creation: {
-      nextAsset: result<QueueItem[]>("nextAsset", now, "ready", [
-        { id: "asset-1", title: "Unit 3 worksheet", reason: "Due before Thursday class", due: "Thu", href: "#asset-1" },
-        { id: "asset-2", title: "Trial lesson plan", reason: "Lead B trial", due: "Fri", href: "#asset-2" },
-      ]),
-      work: result<QueueItem[]>("work", now, "ready", [{ id: "work-1", title: "Course outline draft", reason: "In progress", href: "#work-1" }]),
-      pipeline: result<QueueItem[]>("pipeline", now, "empty", null),
-      signals: result<QueueItem[]>("signals", now, "ready", [{ id: "sig-2", title: "Worksheet past its date", reason: "Unit 2 review" }]),
-    },
+    creation: demoCreation(now),
     operations: {
       teacherLoad: result<TeacherLoadData>("teacherLoad", now, "ready", demoLoad(now), { canonical: { href: "#schedule", label: "Open schedule" } }),
       lessonGaps: result<LessonGapsData>("lessonGaps", now, "stale", demoGaps(now), { staleReason: "Lesson candidates unavailable", canonical: { href: "#lessons", label: "Open unlinked lessons" } }),
@@ -155,4 +149,27 @@ export function demoPanels(now: Date): ConsolePanels {
       integrations: result<QueueItem[]>("integrations", now, "ready", [{ id: "int-1", title: "Notion", reason: "Read in time" }]),
     },
   };
+}
+
+/** Creation mode from neutral Work rows (REQ-60): a project with two tasks, a loose task and a weekly review. */
+function demoCreation(now: Date): ConsolePanels["creation"] {
+  const today = todayIso(now);
+  const id = (n: number) => `d0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const row = (n: number, over: Partial<WorkRow> & { name: string }): WorkRow => ({
+    id: id(n), pageUrl: `#work-${n}`, area: "Marketing", state: "Next", type: "Task", dueReview: null, dueReviewDate: null, owner: "Owner A",
+    taskTypes: [], parentProjectIds: [], expectedResult: null, ...over,
+  });
+  const rows: WorkRow[] = [
+    row(1, { name: "Video series A", type: "Project", state: "Doing" }),
+    row(2, { name: "Video A1 script", parentProjectIds: [id(1)], expectedResult: "A reviewed script", taskTypes: [{ id: id(9), name: "Script" }] }),
+    row(3, { name: "Video A2 recording", state: "Defined", parentProjectIds: [id(1)] }),
+    row(4, { name: "Course page update", state: "Inbox", owner: null, dueReview: addDays(today, -1), dueReviewDate: addDays(today, -1) }),
+    row(5, { name: "Weekly review", type: "Recurring", dueReview: addDays(today, 2), dueReviewDate: addDays(today, 2) }),
+  ];
+  const work: PanelResult<WorkRow[]> = {
+    panel: "work", status: "ready", data: rows, count: rows.length, lastCheckedAt: now.toISOString(), lastSuccessfulFetchAt: now.toISOString(),
+    staleReason: null, errorMessage: null, sourceEvidence: [],
+  };
+  const p = creationPanels(work, { today, selectedId: null, search: new URLSearchParams("mode=creation"), workSourceId: "d0000000-0000-4000-8000-0000000000ff", weeklyReviewId: id(5) });
+  return { nextAsset: p.nextAsset, work: p.work, pipeline: p.pipeline, signals: result<QueueItem[]>("signals", now, "ready", [{ id: "sig-2", title: "Worksheet past its date", reason: "Unit 2 review" }]) };
 }

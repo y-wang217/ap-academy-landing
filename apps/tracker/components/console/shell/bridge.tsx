@@ -1,6 +1,9 @@
 import { CONSOLE_MODES, type ConsoleMode } from "../../../lib/console/modes";
 import { connectedByMode, slotsFor, type ConsolePanels, type PanelSlot } from "../../../lib/console/panel-slots";
 import { notConnected, type PanelView } from "../../../lib/console/panel-view";
+import { NextAsset } from "../creation/next-asset";
+import { WeeklyReview } from "../creation/weekly-review";
+import { WorkQueue } from "../creation/work-queue";
 import { Gauge, type GaugeData } from "../kit/gauge";
 import { Metric, type MetricData } from "../kit/metric";
 import { QueueList, type QueueItem } from "../kit/queue-row";
@@ -8,6 +11,7 @@ import { Radar, type RadarStage } from "../kit/radar";
 import { LessonGaps } from "../lesson-gaps";
 import { NorthStar } from "../north-star";
 import { TeacherLoad } from "../teacher-load";
+import type { CreationView } from "../../../lib/console/creation";
 import type { LessonGapsData, TeacherLoadData } from "../../../lib/console/operations";
 import type { NorthStarData } from "../../../lib/console/north-star";
 import { HeaderRail } from "./header-rail";
@@ -30,6 +34,9 @@ function Instrument({ slot, result }: { slot: PanelSlot; result: PanelView<unkno
   if (slot.id === "northStar") return <NorthStar {...frame} result={result as PanelView<NorthStarData>} />;
   if (slot.mode === "operations" && slot.id === "teacherLoad") return <TeacherLoad {...frame} result={result as PanelView<TeacherLoadData>} />;
   if (slot.mode === "operations" && slot.id === "lessonGaps") return <LessonGaps {...frame} result={result as PanelView<LessonGapsData>} />;
+  if (slot.mode === "creation" && slot.id === "nextAsset") return <NextAsset {...frame} result={result as PanelView<CreationView>} />;
+  if (slot.mode === "creation" && slot.id === "work") return <WorkQueue {...frame} result={result as PanelView<CreationView>} />;
+  if (slot.mode === "creation" && slot.id === "pipeline") return <WeeklyReview {...frame} result={result as PanelView<CreationView>} />;
   switch (slot.kind) {
     case "metric":
       return <Metric {...frame} result={result as PanelView<MetricData>} />;
