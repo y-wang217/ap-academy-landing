@@ -18,6 +18,8 @@ export type PanelView<T> = {
   staleReason: string | null;
   errorMessage: string | null;
   sourceEvidence: SourceEvidence[];
+  /** The real page behind the panel, linked from its header in every status (REQ-58). */
+  canonical?: { href: string; label: string };
 };
 
 export const NOT_CONNECTED = "Not connected yet";
