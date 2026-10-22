@@ -103,3 +103,30 @@ describe("iris-text, drafting", () => {
     for (const v of Object.values(IRIS_TEXT)) if (typeof v === "string") expect(v).not.toMatch(/[—]/);
   });
 });
+
+// REQ-45 AC11: the eval page and readiness card copy.
+describe("eval text", () => {
+  it("words every gate condition for the readiness line", async () => {
+    const { gateConditionText, READINESS_CONDITIONS } = await import("./iris-text");
+    const ctx = { count: 9, streak: 7, threshold: 20 };
+    expect(READINESS_CONDITIONS.map((c) => gateConditionText(c, ctx))).toEqual(["9/20 labelled", "precision", "sensitive recall", "mean rating", "streak 7/20"]);
+    expect(gateConditionText("no_run", ctx)).toBe("no recorded run");
+    expect(gateConditionText("stale_run", ctx)).toBe("the recorded run is out of date");
+  });
+
+  it("has the never-sent line, met and not met, and no em or en dashes", async () => {
+    const { EVAL_TEXT, neverLineText, evalCountsText, evalProgressText, pageText, ratioText } = await import("./iris-text");
+    expect(neverLineText(["pause_or_stop", "billing_question"])).toBe("Never sent automatically: pause_or_stop, billing_question");
+    expect([EVAL_TEXT.met, EVAL_TEXT.notMet]).toEqual(["met", "not met"]);
+    expect(EVAL_TEXT.paused).toBe("Iris is paused: import and evaluation wait until it runs");
+    expect(EVAL_TEXT.empty).toBe("No history imported yet. Import history reads the last 365 days of family mail.");
+    expect(evalCountsText({ storedInbound: 212, storedReplies: 160, skipped: 9 })).toBe("212 messages, 160 replies, 9 skipped");
+    expect(ratioText(0.955)).toBe("0.95");
+    expect(ratioText(null)).toBe("-");
+    const all = [
+      ...Object.values(EVAL_TEXT).map((v) => (typeof v === "function" ? v(3) : v)),
+      evalProgressText(3, 4, 1), pageText(1, 9), neverLineText(["a"]),
+    ].join("\n");
+    expect(all).not.toMatch(/[–—]/);
+  });
+});

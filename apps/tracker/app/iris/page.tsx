@@ -8,7 +8,7 @@ import { createPeopleStore } from "@/lib/data/people";
 import { irisMailbox } from "@/lib/iris/config";
 import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { loadInbox, type InboxRow } from "@/lib/iris/handlers";
-import { IRIS_TEXT, ageText, confidenceText, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
+import { EVAL_TEXT, IRIS_TEXT, ageText, confidenceText, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +61,7 @@ export default async function IrisInboxPage() {
   return (
     <>
       {email && <TopBar email={email} />}
-      <Page title={IRIS_TEXT.title} back={{ href: "/", label: "Home" }} aside={<Link href="/iris/settings" className={secondaryButtonClass}>Settings</Link>}>
+      <Page title={IRIS_TEXT.title} back={{ href: "/", label: "Home" }} aside={<span className="flex gap-2"><Link href="/iris/eval" className={secondaryButtonClass}>{EVAL_TEXT.link}</Link><Link href="/iris/settings" className={secondaryButtonClass}>Settings</Link></span>}>
         {inbox.kind === "error" ? (
           <Notice tone="error">{IRIS_TEXT.loadError}</Notice>
         ) : (
