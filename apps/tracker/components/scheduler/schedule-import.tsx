@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { buttonClass, Card, Empty, inputClass, Notice, secondaryButtonClass } from "@/components/ui";
+import { buttonClass, Card, Empty, inputClass, linkClass, Notice, secondaryButtonClass } from "@/components/ui";
 
 /** The tracker is served under /tracker, and fetch does not add the base path. */
 const API = "/tracker/api/scheduler";
@@ -237,6 +238,7 @@ export function ScheduleImport() {
             </li>
           ))}
         </ul>
+        <Link href={`/scheduler/billing?month=${month}`} className={linkClass}>Compare billing counts</Link>
       </Card>
     </>
   );

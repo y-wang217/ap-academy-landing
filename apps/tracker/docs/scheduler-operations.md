@@ -71,3 +71,13 @@ Day to day:
 3. "Possible double logs" lists form rows on the same day as a class that is already logged. Check them before pay; nothing is deleted automatically.
 4. A wrong link or a wrong no-show: open the class and press Clear. The Notion row stays; only its class link is cleared. The old value is kept in the audit log.
 5. A logged or marked class cannot be cancelled or moved. Clear it first.
+
+## 9. Billing check
+Background: [0060](decisions/0060-structured-billing-input.md). Field reference: [`billing-input.md`](billing-input.md).
+
+1. Open [`/tracker/scheduler/billing`](https://www.apacademy.ca/tracker/scheduler/billing) (owners only), or Compare billing counts in the Monthly review card. Pick the month with the arrows.
+2. Each student shows what the Weekly Schedule text method would count next to the classes the scheduler holds, the charge states, and every difference by date and reason.
+3. "Weekly Schedule is out of date. Sync it first." means the text is not synced or differs from the classes. Sync it on `/tracker/scheduler/schedules` before the monthly run.
+4. "This text would stop the monthly run." means a line the run cannot read. Fix the text in the scheduler, then sync.
+5. Download JSON saves the export the monthly run will one day read. Until Charlie records a month with no "no class on this day" and no "class not in the text" differences, keep running the text-based run and use this page to check it.
+
