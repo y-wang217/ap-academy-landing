@@ -1,8 +1,8 @@
-# Iris operations (Iris 2/9 and 3/9)
+# Iris operations (Iris 2/9 to 4/9, and sending in 8/9)
 
-How to set up, run, pause and clean up Iris's read-only inbox (REQ-42,
-classification REQ-43, tracker ADRs 0057 to 0059 and 0061, workspace ADR 0005). Iris starts paused and sends
-nothing in this slice.
+How to set up, run, pause and clean up Iris's inbox (REQ-42,
+classification REQ-43, drafting REQ-44, sending REQ-48, tracker ADRs 0057 to 0059, 0061 and 0074, workspace ADR 0005). Iris starts paused.
+It sends a reply only when Charlie approves it.
 
 ## One-time setup (Charlie, after migration 0024 is applied)
 
@@ -15,8 +15,12 @@ nothing in this slice.
 3. **Domain-wide delegation.** Enable it on the service account. In the
    Workspace Admin console (Security, Access and data control, API controls,
    Domain-wide delegation), add its client id with exactly
-   `https://www.googleapis.com/auth/gmail.readonly`. Nothing else: Iris has no
-   write path until Iris 8/9.
+   `https://www.googleapis.com/auth/gmail.readonly`. For sending (Iris 8/9,
+   after migration 0027 is applied) add a second scope on the same line:
+   `https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send`.
+   Nothing else: no `gmail.modify` or `gmail.compose`. Until `gmail.send` is
+   granted, Approve saves the approval and the send shows "Gmail send is not
+   authorised"; reading mail keeps working.
 4. **Tracker env vars** in the tracker Vercel project:
    - `IRIS_GMAIL_MAILBOX=charlie@apacademy.ca`
    - `IRIS_ORG_ID`: the same value as `DAILY_TASK_ORG_ID`
@@ -92,8 +96,9 @@ version 3). Nothing is sent.
 Open a message to see the thread, what Iris read, the policy used and the
 draft, with the signature shown below it.
 
-- **Approve** marks the draft approved and shows Copy. Paste it into Gmail
-  and send it yourself (Iris sends nothing until Iris 8/9).
+- **Approve and send** approves the draft and sends it from the mailbox into
+  the parent's Gmail thread, once. The page then shows "Sent" with the time.
+  Copy appears only on drafts approved before sending existed.
 - **Save edit** stores your text as the next version; approve it after.
 - **Reject** needs a reason and puts the message back in Needs you.
 - **Streaks.** Each unedited approval counts toward the reply type's streak;
@@ -103,6 +108,30 @@ draft, with the signature shown below it.
 - **Replying from Gmail.** If you answer a parent in Gmail yourself, the next
   run sees your sent reply (`in:sent`, SENT label only) and the draft is
   replaced: the message leaves the queue as "You replied in Gmail".
+
+## Sending
+
+Each approved draft has one send (`iris.sends`, ADR 0074). It is sent at
+most once, however many times Approve or Retry is pressed.
+
+- **Sending.** Approve makes the first attempt at once. If it does not finish
+  (a Gmail error, a time-out), the page says "Approved. Not sent yet: ...
+  Iris tries again on its next run." The poll run (every 15 minutes) tries
+  again, after first checking Gmail for the message, so a reply Gmail
+  already accepted is recorded, never sent twice.
+- **Failed.** After 3 attempts the send is failed: the message shows "Send
+  failed: <reason>" and is listed under Failed in `/tracker/iris`, with
+  **Retry**. Retry checks Gmail first, then allows 3 more attempts. The
+  reason is a status line only (for example "Gmail returned 500").
+- **Paused.** Approve and Retry answer "paused" and send nothing; a send
+  already in progress waits until you unpause.
+- **First-send check.** After the first live send, open it in Gmail, choose
+  Show original, and confirm the `Message-ID` is
+  `<iris-...@apacademy.ca>` and `X-Iris-Send-Id` is present. If Gmail
+  rewrote the Message-ID, nothing breaks (Iris also matches
+  `X-Iris-Send-Id`), but note it on the REQ-48 card.
+- Do not send the same reply by hand from Gmail and then press Retry: Iris
+  cannot see a copy you wrote yourself and would send its own.
 
 ## Phone backup
 

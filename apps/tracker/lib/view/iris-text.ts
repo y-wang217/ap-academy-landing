@@ -1,7 +1,7 @@
 import { POLICY } from "../iris/policy";
 import type { MessageState } from "../iris/store";
 
-/** Every line of Iris copy (REQ-42, REQ-43, REQ-44). Plain, short, no em dashes. */
+/** Every line of Iris copy (REQ-42, REQ-43, REQ-44, REQ-48). Plain, short, no em dashes. */
 export const IRIS_TEXT = {
   title: "Iris inbox",
   settingsTitle: "Iris settings",
@@ -59,13 +59,20 @@ export const IRIS_TEXT = {
   policyUsed: "Policy used",
   policyVersionNote: (drafted: number, current: number) => `Drafted under policy version ${drafted}; current is ${current}.`,
   signatureNote: "Added below your reply:",
-  approve: "Approve",
+  approve: "Approve and send",
   saveEdit: "Save edit",
   reject: "Reject",
   rejectReason: "Why are you rejecting it?",
   copy: "Copy",
   copied: "Copied",
   approvedCopy: "Approved. Paste it into Gmail and send it yourself.",
+  sending: "Sending...",
+  sendingNow: "Approved. Sending now.",
+  sendPending: (error: string) => `Approved. Not sent yet: ${error}. Iris tries again on its next run.`,
+  sentAt: (time: string) => `Sent ${time}`,
+  sendFailed: (error: string) => `Send failed: ${error}`,
+  retry: "Retry",
+  retrying: "Retrying...",
   olderVersions: "Earlier versions",
   versionLine: (version: number, state: string, by: string) => `Version ${version}, ${state}, by ${by}`,
   phoneAlertsOff: "Phone alerts are off (NOTION_CHARLIE_USER_ID is not set).",
@@ -136,7 +143,7 @@ export function stateLabel(state: MessageState, reason: string | null, extra: { 
     case "drafted":
       return "Draft waiting";
     case "approved":
-      return "Approved, send by hand";
+      return "Approved, sending";
     case "sent":
       return "Sent";
     case "matched":

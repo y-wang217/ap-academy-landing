@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { RetrySend } from "@/components/iris/send-status";
 import { TopBar } from "@/components/top-bar";
 import { Card, Empty, Notice, Page, secondaryButtonClass } from "@/components/ui";
 import { getViewer } from "@/lib/data/queries";
@@ -22,6 +23,8 @@ function Row({ row, now, mailbox }: { row: InboxRow; now: number; mailbox: strin
         {stateLabel(row.state, row.escalationReason, { flags: row.flags, intent: row.intent })}
       </Link>
       {row.pushFailed && <span className="text-xs font-medium text-error" data-push-failed>{IRIS_TEXT.phoneCopyFailed}</span>}
+      {/* A failed send (REQ-48): Retry right here. */}
+      {row.sendId && <RetrySend sendId={row.sendId} />}
       {row.snippet && <span className="text-text-muted">&ldquo;{row.snippet}&rdquo;</span>}
       {/* Plain anchor: Gmail is outside the app. */}
       <a href={gmailThreadUrl(mailbox, row.gmailThreadId)} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
