@@ -8,6 +8,8 @@ import type { ClassifyPort } from "./classify";
 import { runClassify } from "./classify-step";
 import type { DraftPort } from "./draft";
 import { runDraft } from "./draft-step";
+import { runEval } from "./eval-step";
+import { runHistoryImport } from "./history-import";
 import { runIntake, type GmailPort } from "./intake";
 import type { PushOutcome } from "./notion-push";
 import { POLICY_VERSION } from "./policy";
@@ -36,6 +38,11 @@ export type IrisRunDeps = {
   draft: DraftPort | null;
   /** The Notion phone backup, or null when Notion Work is not set up (REQ-44). */
   push: ((d: { store: IrisStore; directory: () => Promise<FamilyEntry[]>; now: () => Date }) => Promise<PushOutcome>) | null;
+  /** The same model calls for the eval run (REQ-45); null when AI is not set up. */
+  evalClassify: ClassifyPort | null;
+  evalDraft: DraftPort | null;
+  /** The deployed model, stamped on eval requests (AI_MODEL). */
+  model: string;
 };
 
 /**
@@ -46,7 +53,8 @@ export type IrisRunDeps = {
  * writes the last-run columns and releases the lease. Only a Gmail list or
  * token failure is 502. It never throws. After a good intake it reads
  * Charlie's sent replies, classifies (REQ-43), drafts and pushes the phone
- * copies (REQ-44), then purges; Students & Parents is read at most once per run.
+ * copies (REQ-44), runs the owner's history import and eval (REQ-45), then
+ * purges; Students & Parents is read at most once per run.
  */
 export async function handleIrisRun(input: {
   authorization: string | null;
@@ -104,8 +112,15 @@ export async function handleIrisRun(input: {
   const pushed = ok && !failedStep && deps.push && now().getTime() - startedMs < TUNING.irisPushBudgetMs
     ? await deps.push({ store, directory, now })
     : null;
+  // REQ-45: the owner's history import and eval run, after the live steps and only on a good intake.
+  const imported = ok && !failedStep && now().getTime() - startedMs < TUNING.irisImportBudgetMs
+    ? await runHistoryImport({ store, gmail: deps.gmail, directory, now, settings: claimed })
+    : null;
+  const evaluated = ok && !failedStep && now().getTime() - startedMs < TUNING.irisEvalBudgetMs
+    ? await runEval({ store, classify: deps.evalClassify, draft: deps.evalDraft, directory, settings: claimed, model: deps.model, now, startedAtMs: startedMs })
+    : null;
   const outcome = { ...intake, result: failedStep ? ("failed" as const) : intake.result };
-  let error = intake.error ?? classified.error ?? drafted.error ?? superseded.error ?? pushed?.error ?? null;
+  let error = intake.error ?? classified.error ?? drafted.error ?? superseded.error ?? pushed?.error ?? imported?.error ?? evaluated?.error ?? null;
   let purged = 0;
   try {
     purged = await store.purge();
@@ -286,13 +301,13 @@ export function torontoMidnight(now: Date): string {
 }
 
 /** A page's first check. Anything but the owner is sent away; an unreachable identity is an error notice. */
-function pageGate(who: SchedulerIdentity): { kind: "denied" } | { kind: "error" } | { kind: "ok"; orgId: string } {
+export function pageGate(who: SchedulerIdentity): { kind: "denied" } | { kind: "error" } | { kind: "ok"; orgId: string } {
   if (who.scope === "unavailable" || who.scope === "unconfigured") return { kind: "error" };
   if (who.scope !== "admin") return { kind: "denied" };
   return { kind: "ok", orgId: who.orgId };
 }
 
-const familyLabel = (ids: string[], fallback: string, names: Map<string, string>) =>
+export const familyLabel = (ids: string[], fallback: string, names: Map<string, string>) =>
   ids.length > 0 ? ids.map((id) => names.get(id) ?? "Paused student").join(", ") : fallback;
 
 /** The /iris page. Family labels come from the local people copy (REQ-38), read for the owner's org; no parent field is read on page load. */

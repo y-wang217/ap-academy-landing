@@ -1,5 +1,5 @@
 import { getServiceClient } from "@ap-academy/db/service";
-import { aiConfigured } from "@/lib/ai/config";
+import { AI_MODEL, aiConfigured } from "@/lib/ai/config";
 import { createIrisStore } from "@/lib/data/iris";
 import { classifyMessage } from "@/lib/iris/classify";
 import { readCharlieUserId, readGmailConfig, readIrisRunEnv } from "@/lib/iris/config";
@@ -22,7 +22,8 @@ export const maxDuration = 120;
  * writes one org's `iris` rows with it, and reads the family directory from
  * Notion once per run. With ANTHROPIC_API_KEY set it then classifies matched
  * mail with Claude (REQ-43) and drafts replies (REQ-44); with Notion Work set
- * up it pushes the phone copies to Charlie's day page.
+ * up it pushes the phone copies to Charlie's day page. The owner's eval
+ * history import and eval run (REQ-45) ride the same run.
  */
 export async function POST(request: Request) {
   return handleIrisRun({
@@ -41,6 +42,9 @@ export async function POST(request: Request) {
         mailbox: gmail.mailbox,
         classify: aiConfigured() ? classifyMessage : null,
         draft: aiConfigured() ? draftReply : null,
+        evalClassify: aiConfigured() ? classifyMessage : null,
+        evalDraft: aiConfigured() ? draftReply : null,
+        model: AI_MODEL,
         push: work
           ? ({ store, directory, now }) =>
               runPush({ store, config: work, charlieUserId: readCharlieUserId(), siteUrl: SITE_URL, mailbox: gmail.mailbox, directory, now })

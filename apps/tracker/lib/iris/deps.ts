@@ -1,5 +1,8 @@
 import { getDb } from "../data/client";
+import { AI_MODEL } from "../ai/config";
 import { createIrisReader, irisSchema } from "../data/iris";
+import { createEvalReader, type EvalReader } from "../data/iris-eval";
+import type { EvalAdminDeps } from "./eval-handlers";
 import { realScheduleDeps } from "../scheduler/deps";
 import type { IrisAdminDeps, IrisReader } from "./handlers";
 
@@ -36,4 +39,31 @@ export function realIrisAdminDeps(): IrisAdminDeps {
     };
   };
   return { identity, reader };
+}
+
+/**
+ * The eval routes' dependencies (REQ-45): the same identity, and the eval
+ * reader on the owner's own client, opened on first use.
+ */
+export function realEvalAdminDeps(): EvalAdminDeps {
+  const identity = realScheduleDeps().identity;
+  const reader = (orgId: string): EvalReader => {
+    let inner: Promise<EvalReader> | undefined;
+    const get = () =>
+      (inner ??= getDb().then((db) => {
+        if (!db) throw new Error("iris unavailable");
+        const uid = async () => (await db.supabase.auth.getUser()).data.user?.id ?? null;
+        return createEvalReader(irisSchema(db.supabase), orgId, uid);
+      }));
+    return {
+      listEvalItems: async (filter, page) => (await get()).listEvalItems(filter, page),
+      evalStatus: async () => (await get()).evalStatus(),
+      saveLabel: async (id, input) => (await get()).saveLabel(id, input),
+      saveRating: async (id, resultId, rating) => (await get()).saveRating(id, resultId, rating),
+      requestEval: async (kind, detail) => (await get()).requestEval(kind, detail),
+      recordRun: async (requestId) => (await get()).recordRun(requestId),
+      gateInputs: async () => (await get()).gateInputs(),
+    };
+  };
+  return { identity, reader, model: AI_MODEL };
 }
