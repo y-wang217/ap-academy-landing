@@ -1805,6 +1805,7 @@ try {
       for (const [w, h] of [[390, 844], [1280, 720], [1440, 900], [1920, 1080]]) {
         for (const [name, path] of [["preview-creation", "/console/preview?mode=creation"], ["console-creation", "/console?mode=creation"]]) {
           const p = await bridgeAt(w, h, path);
+          await syncSettled(p);
           const next = await boxOf(p, "creation", "nextAsset");
           const work = await boxOf(p, "creation", "work");
           // 390: one column, next asset first. 1280 to 1439: next asset beside the queue. 1440 and up: next asset spans the left column.

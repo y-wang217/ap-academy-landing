@@ -146,7 +146,7 @@ const CONSOLE_WORK = [
   workRow(W.project, { name: "E2E video series", state: "Doing", type: "Project" }),
   workRow(W.childNext, { name: "E2E video 01 script", parent: W.project, types: [W.taskType], expected: "One reviewed script" }),
   workRow(W.childDefined, { name: "E2E video 02 recording", state: "Defined", parent: W.project }),
-  workRow(W.standalone, { name: "E2E course page update", due: torontoDate(1) }),
+  workRow(W.standalone, { name: "E2E course page update", state: "Inbox", due: torontoDate(1) }),
   workRow(W.waiting, { name: "E2E waiting on footage", state: "Waiting / Blocked" }),
   workRow(W.done, { name: "E2E finished marketing task", state: "Done" }),
   workRow(W.delivery, { name: "E2E delivery task", area: "Delivery" }),
