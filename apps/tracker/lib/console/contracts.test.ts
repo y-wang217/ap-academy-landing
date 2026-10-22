@@ -7,10 +7,10 @@ import {
 
 // REQ-54 AC2, AC9: strip-mode row schemas with exactly the design's keys, and the health shape.
 const DESIGN_KEYS: [string, z.ZodObject, string[]][] = [
-  ["LeadRow", LeadRow, ["id", "pageUrl", "createdAt", "name", "stage", "ownerStaffId", "ownerName", "nextAction", "nextActionDue", "nextActionDueDate", "attempts", "lastContact", "source", "lostReason", "contactedAt", "trialBookedAt", "trialAttendedAt", "closedAt", "trialTime", "trialTimeDate", "trialTeacherId", "trialTeacherName", "level", "hasMajorGaps", "recommendedPlan", "hasTrialSummary", "parentName", "inPeopleCopy"]],
+  ["LeadRow", LeadRow, ["id", "pageUrl", "createdAt", "name", "stage", "ownerStaffId", "ownerName", "nextAction", "nextActionDue", "nextActionDueDate", "attempts", "lastContact", "source", "lostReason", "contactedAt", "trialBookedAt", "trialAttendedAt", "closedAt", "trialTime", "trialTimeDate", "trialTeacherId", "trialTeacherName", "level", "hasMajorGaps", "recommendedPlan", "hasTrialSummary", "parentName", "inPeopleCopy", "dedupeKey", "grade", "subjects", "majorGaps", "trialSummary"]],
   ["TouchRow", TouchRow, ["id", "pageUrl", "when", "whenDate", "type", "outcome", "studentId", "staffId", "staffName", "note"]],
   ["TouchGroup", TouchGroup, ["studentId", "studentName", "touches"]],
-  ["TrialLessonRow", TrialLessonRow, ["id", "pageUrl", "date", "studentId", "studentName", "teacherId", "teacherName", "durationHours", "hasTopic", "hasDiagnosis", "preferredDays"]],
+  ["TrialLessonRow", TrialLessonRow, ["id", "pageUrl", "date", "studentId", "studentName", "teacherId", "teacherName", "durationHours", "hasTopic", "hasDiagnosis", "preferredDays", "diagnosis"]],
   ["WorkRow", WorkRow, ["id", "pageUrl", "name", "area", "state", "type", "dueReview", "dueReviewDate", "owner", "taskTypeIds"]],
   ["InvoiceRow", InvoiceRow, ["id", "pageUrl", "status", "paidOn", "amount", "creditApplied", "issued", "due", "month", "studentIds", "studentName"]],
 ];

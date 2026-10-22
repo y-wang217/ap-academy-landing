@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CONSOLE_MODES, MODE_LABELS, type ConsoleMode } from "../../../lib/console/modes";
 import { PANEL_SLOTS, placeholderPanels, slotsFor } from "../../../lib/console/panel-slots";
+import type { ConsolePanels as ConsolePanelResults } from "../../../lib/console/contracts";
+import { buildSalesView } from "../../../lib/console/sales-view";
+import { fixtureLeads, SALES_NOW, TRIAL_F } from "../../../test/console/sales-fixtures";
 import { ConsoleBridge } from "./bridge";
 
 // REQ-55 AC1, AC2, AC8, AC9: the production bridge, every panel a "Not connected yet" placeholder.
@@ -102,3 +105,41 @@ describe("ConsoleBridge focus order (AC12)", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+// REQ-57: with a sales view, the Sales next and radar slots are the live queue and radar.
+describe("ConsoleBridge with a sales view", () => {
+  const view = buildSalesView(salesPanels(), SALES_NOW);
+  const panels = placeholderPanels(NOW);
+  panels.sales.next = view.queue;
+  panels.sales.radar = view.radar;
+  const out = renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels, sales: view, email: "owner@example.com", now: NOW }));
+
+  it("renders the queue, the Rolodex and the bucket radar in their slots", () => {
+    const sales = tabpanel(out, "sales");
+    expect(sales).toContain('role="listbox"');
+    expect(sales).toContain("data-rolodex");
+    expect(sales).toContain("Callback due");
+    expect(count(sales, "Not connected yet")).toBe(7);
+  });
+
+  it("the rail counts 2 of 9 connected", () => {
+    expect(indicator(out, "panels")).toBe("2 of 9 connected");
+  });
+
+  it("without a sales view nothing changes", () => {
+    const plain = renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels: placeholderPanels(NOW), now: NOW }));
+    expect(plain).not.toContain('role="listbox"');
+    expect(count(tabpanel(plain, "sales"), "Not connected yet")).toBe(9);
+  });
+});
+
+function salesPanels(): ConsolePanelResults {
+  const at = SALES_NOW.toISOString();
+  const r = <T,>(panel: string, status: "ready" | "empty", data: T) => ({
+    panel, status, data, count: null, lastCheckedAt: at, lastSuccessfulFetchAt: at, staleReason: null, errorMessage: null, sourceEvidence: [],
+  });
+  return {
+    leads: r("leads", "ready", fixtureLeads()), touches: r("touches", "empty", []), trialLessons: r("trialLessons", "ready", [TRIAL_F]),
+    work: r("work", "empty", []), invoices: r("invoices", "empty", []), people: r("people", "ready", { syncedAt: at, students: 0, staff: 0 }),
+  } as ConsolePanelResults;
+}
