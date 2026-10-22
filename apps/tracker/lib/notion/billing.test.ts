@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  fetchChildBilling, fetchCredits, fetchInvoicePdf, fetchInvoices, fetchInvoiceSharers, fetchSiblingNames,
+  fetchChildBilling, fetchCredits, fetchInvoicePdf, fetchInvoices, fetchInvoiceSharers, fetchOrgInvoices, fetchSiblingNames, ORG_INVOICE_PROPS,
   type BillingConfig,
 } from "./billing";
+import { filterIds, notionFake, onlyReads, v } from "./console-reader.fake";
 import { NotionError } from "./staff";
 
 const INVOICES = "be0f91e4-f054-4055-9ca6-c4e1a22c4f27";
@@ -217,5 +218,35 @@ describe("fetchInvoicePdf (AC10)", () => {
     const { fetcher, calls } = fakeFetch();
     expect(await fetchInvoicePdf(config, "../secrets", CHILD, { fetcher })).toBeNull();
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("fetchOrgInvoices (REQ-54 AC1, AC6, AC7)", () => {
+  const inv = (id: string, status: string, student = CHILD) => ({
+    object: "page", id, properties: {
+      Status: v.select(status), "Paid On": v.date(status === "Paid" ? "2026-10-05" : null), "Amount (CAD)": v.num(240), "Credit Applied (CAD)": v.num(40),
+      Issued: v.date("2026-10-01"), Due: v.date("2026-10-15"), Month: v.text("2026-10"), Student: v.rel(student), Notes: v.text("family note"),
+    },
+  });
+  const ids = (n: number) => `eeeeeeee-eeee-4eee-8eee-${String(n).padStart(12, "0")}`;
+
+  it("ORG_INVOICE_PROPS is the design list; no student filter, every status, Month descending, listed ids only", async () => {
+    expect([...ORG_INVOICE_PROPS]).toEqual(["Status", "Paid On", "Amount (CAD)", "Credit Applied (CAD)", "Issued", "Due", "Month", "Student"]);
+    const f = notionFake({ dataSourceId: INVOICES, schema: SCHEMAS[INVOICES], pages: [[inv(ids(1), "Draft"), inv(ids(2), "Sent", OTHER), inv(ids(3), "Paid"), inv(ids(4), "Void")]] });
+    const r = await fetchOrgInvoices({ token: "t", dataSourceId: INVOICES }, { fetcher: f.fetcher, maxPages: 10 });
+    expect(filterIds(f.calls[1])).toEqual(["sta", "pon", "amt", "cap", "iss", "due", "mon", "stu"]);
+    expect(f.calls[1].body).toEqual({ page_size: 100, sorts: [{ property: "Month", direction: "descending" }] });
+    expect(r.rows.map((x) => x.status)).toEqual(["Draft", "Sent", "Paid", "Void"]);
+    expect(r.rows[2]).toEqual({ id: ids(3), status: "Paid", paidOn: "2026-10-05", amount: 240, creditApplied: 40, issued: "2026-10-01", due: "2026-10-15", month: "2026-10", studentIds: [CHILD] });
+    expect(JSON.stringify(r)).not.toContain("family note");
+  });
+
+  it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
+    for (const [pages, maxPages, complete] of [[[[inv(ids(1), "Sent")]], 10, true], [[[inv(ids(1), "Sent")], [inv(ids(2), "Paid")]], 10, true], [[[inv(ids(1), "Sent")], [inv(ids(2), "Paid")]], 1, false]] as const) {
+      const f = notionFake({ dataSourceId: INVOICES, schema: SCHEMAS[INVOICES], pages });
+      const r = await fetchOrgInvoices({ token: "t", dataSourceId: INVOICES }, { fetcher: f.fetcher, maxPages });
+      expect(r.complete).toBe(complete);
+      expect(onlyReads(f.calls, INVOICES)).toBe(true);
+    }
   });
 });

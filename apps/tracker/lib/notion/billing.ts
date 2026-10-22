@@ -1,7 +1,9 @@
 import "server-only";
 import { z } from "zod";
+import type { InvoiceSource, ReadResult } from "../console/contracts";
 import { normalId, type Credit, type CreditStatus, type Invoice, type Sibling } from "../domain/billing";
-import { NOTION_VERSION, notionApiBaseOverride, type BillingConfig } from "./config";
+import { NOTION_VERSION, notionApiBaseOverride, type BillingConfig, type NotionConfig } from "./config";
+import { pagedQuery, parseRows, prop, propertyFilter, type ReaderOptions, val } from "./paged";
 import { NotionError } from "./staff";
 
 export type { BillingConfig } from "./config";
@@ -318,4 +320,51 @@ export function createBillingReader(config: BillingConfig, opts: ReadOptions = {
     siblings: (ids) => fetchSiblingNames(config, ids, opts),
     invoicePdf: (invoiceId, id) => fetchInvoicePdf(config, invoiceId, id, opts),
   };
+}
+
+/**
+ * The Founder Console's org-wide invoice read (REQ-54, ADR 0065): every
+ * status, values passed through exactly as Notion holds them, nothing
+ * computed (ADR 0049). Read-only, through the shared pager.
+ */
+export const ORG_INVOICE_PROPS = ["Status", "Paid On", "Amount (CAD)", "Credit Applied (CAD)", "Issued", "Due", "Month", "Student"] as const;
+
+const OrgInvoicePage = z.object({
+  id: z.guid(),
+  properties: z.object({
+    Status: prop.select,
+    "Paid On": prop.date,
+    "Amount (CAD)": prop.number,
+    "Credit Applied (CAD)": prop.number,
+    Issued: prop.date,
+    Due: prop.date,
+    Month: prop.text,
+    Student: prop.relation,
+  }),
+});
+
+const toOrgInvoice = (page: z.output<typeof OrgInvoicePage>): InvoiceSource => {
+  const p = page.properties;
+  return {
+    id: page.id,
+    status: val.select(p.Status),
+    paidOn: val.date(p["Paid On"]),
+    amount: val.number(p["Amount (CAD)"]),
+    creditApplied: val.number(p["Credit Applied (CAD)"]),
+    issued: val.date(p.Issued),
+    due: val.date(p.Due),
+    month: val.text(p.Month),
+    studentIds: val.ids(p.Student),
+  };
+};
+
+/** Every invoice in the org, Month descending. */
+export async function fetchOrgInvoices(config: NotionConfig, opts: ReaderOptions): Promise<ReadResult<InvoiceSource>> {
+  const fetcher = opts.fetcher ?? fetch;
+  const filterQuery = await propertyFilter(config.token, fetcher, config.dataSourceId, ORG_INVOICE_PROPS, "Invoices");
+  const read = await pagedQuery({
+    token: config.token, fetcher, dataSourceId: config.dataSourceId, filterQuery, maxPages: opts.maxPages,
+    body: { sorts: [{ property: "Month", direction: "descending" }] },
+  });
+  return { ...parseRows(read.rows, OrgInvoicePage, toOrgInvoice), complete: read.complete, pages: read.pages };
 }

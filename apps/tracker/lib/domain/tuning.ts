@@ -72,4 +72,12 @@ export const TUNING = {
   irisMaxPushAttempts: 5,
   /** Unedited approvals in a row that make a reply type auto-send eligible. Mirrored as a constant in migration 0025. */
   irisAutoSendStreak: 20,
+  /** Founder Console (REQ-54): each provider read is abandoned after this long. */
+  consoleProviderTimeoutMs: 8_000,
+  /** Notion pages of 100 rows one console panel reads before it reports stale. */
+  consoleNotionMaxPages: 10,
+  /** Touches kept per student in the console's touch history. */
+  consoleTouchesPerStudent: 5,
+  /** Touches read back this many days. */
+  consoleTouchesWindowDays: 90,
 } as const;
