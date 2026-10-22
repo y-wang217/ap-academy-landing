@@ -78,3 +78,16 @@ describe("ADRs 0063 and 0064", () => {
     for (const h of ["## Drafting", "## Review", "## Phone backup"]) expect(src, h).toMatch(new RegExp(`^${h}$`, "m"));
   });
 });
+
+// REQ-45 AC15: the evaluation harness ADR.
+describe("ADR 0074", () => {
+  it("has every section, is indexed, has no em dash and records the rules", () => {
+    const file = "0074-iris-evaluation-harness.md";
+    const src = read(join(DECISIONS, file));
+    expect(src).toMatch(/^Status: accepted/m);
+    for (const h of ["## Context", "## Decision", "## Alternatives considered", "## Consequences"]) expect(src, h).toContain(h);
+    expect(read(join(DECISIONS, "README.md"))).toContain(`(${file})`);
+    expect(src).not.toMatch(/[–—]/);
+    for (const s of ["history_import", "gmail.readonly", "rated_result_id", "stale", "NEVER_AUTO_SEND", "0.95", "1.0", "retention_days"]) expect(src, s).toContain(s);
+  });
+});

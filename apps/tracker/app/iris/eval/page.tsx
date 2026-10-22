@@ -127,7 +127,7 @@ function Item({ row }: { row: EvalRow }) {
 const FILTERS: [EvalFilter, string][] = [["unlabelled", EVAL_TEXT.filterUnlabelled], ["labelled", EVAL_TEXT.filterLabelled], ["all", EVAL_TEXT.filterAll]];
 
 /**
- * The eval harness (REQ-45, tracker ADR 0069): import a year of family mail,
+ * The eval harness (REQ-45, tracker ADR 0074): import a year of family mail,
  * label it, run Iris over it, rate the drafts and record one aggregate run.
  * Owner only: anyone else goes home before any Iris read.
  */

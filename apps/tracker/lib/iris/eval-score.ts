@@ -1,5 +1,5 @@
 /**
- * The eval aggregates (REQ-45 AC8, AC9, tracker ADR 0069). Pure: one row per
+ * The eval aggregates (REQ-45 AC8, AC9, tracker ADR 0074). Pure: one row per
  * labelled message of a finished eval request, nothing else. "Sendable as T"
  * means predicted not escalated with reply type T; a gold T means gold not
  * escalated with reply type T. Escalating is never a false positive.

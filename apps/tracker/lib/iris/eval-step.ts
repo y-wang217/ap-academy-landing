@@ -11,7 +11,7 @@ import { routeClassification } from "./route";
 import type { EvalResultInsert, IrisSettings, IrisStore } from "./store";
 
 /**
- * The eval run (REQ-45 AC6, tracker ADR 0069). While the owner's
+ * The eval run (REQ-45 AC6, tracker ADR 0074). While the owner's
  * eval_run_requested event is pending, each run classifies and drafts up to
  * irisMaxEvalPerRun fully labelled history messages, with the same prompts,
  * router and draft rules as the live steps, and stores one eval_results row

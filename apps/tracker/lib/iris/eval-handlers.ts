@@ -8,7 +8,7 @@ import { familyLabel, pageGate, type IrisReader } from "./handlers";
 import { CLASSIFIER_INTENTS, NEVER_AUTO_SEND, POLICY_VERSION, REPLY_TYPES } from "./policy";
 
 /**
- * The owner's eval routes and page loaders (REQ-45, tracker ADR 0069). Owner
+ * The owner's eval routes and page loaders (REQ-45, tracker ADR 0074). Owner
  * only: the guard runs before any body or id is read, and every read goes
  * through the owner's own client, so RLS decides. Requests are events the
  * bearer run acts on; nothing here calls Gmail or Claude.

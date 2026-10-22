@@ -7,7 +7,7 @@ import { isAutomated } from "./mime";
 import { mergeThread, type IrisSettings, type IrisStore } from "./store";
 
 /**
- * The eval history import (REQ-45 AC1 to AC4, tracker ADR 0069). It runs
+ * The eval history import (REQ-45 AC1 to AC4, tracker ADR 0074). It runs
  * inside the bearer poll run, only while the owner's eval_import_requested
  * event is pending. It reads a year of mail from the family directory's
  * addresses, older than the live poll window, and stores each matched

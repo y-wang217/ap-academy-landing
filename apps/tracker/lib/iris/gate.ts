@@ -3,7 +3,7 @@ import type { TypeScore } from "./eval-score";
 import { NEVER_AUTO_SEND, REPLY_TYPES, type ReplyType } from "./policy";
 
 /**
- * The auto-send gate (REQ-45 AC10, spec decision 21, tracker ADR 0069).
+ * The auto-send gate (REQ-45 AC10, spec decision 21, tracker ADR 0074).
  * Pure. A reply type may be switched to auto-send (Iris 9/9) only when it
  * passes; this card only shows the result. Every failing condition is named.
  */
