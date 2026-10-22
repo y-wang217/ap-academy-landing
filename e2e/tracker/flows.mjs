@@ -1549,15 +1549,16 @@ try {
     // 6. A run stores the inbox.
     const first = await irisRun();
     check("REQ-42: the first run answers 200 ok", first.status === 200 && first.body?.result === "ok", JSON.stringify(first));
-    check("REQ-42: m1 is matched with its body", msg("m1", "state || '|' || body_text") === "matched|Hi Charlie, Sam is sick today and will miss class.", msg("m1", "state"));
+    // REQ-43: with the mock Anthropic key set, the same run classifies matched mail (general_question at 0.95).
+    check("REQ-42: m1 is matched with its body, then classified", msg("m1", "state || '|' || body_text") === "classified|Hi Charlie, Sam is sick today and will miss class.", msg("m1", "state"));
     const m2Thread = psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm2'");
-    check("REQ-42: m2 (HTML) is matched with both siblings on its thread", msg("m2", "state") === "matched" && m2Thread.includes(HAIDER_ID) && m2Thread.includes(ADA_ID), m2Thread);
+    check("REQ-42: m2 (HTML) is matched with both siblings on its thread", msg("m2", "state") === "classified" && m2Thread.includes(HAIDER_ID) && m2Thread.includes(ADA_ID), m2Thread);
     check("REQ-42: m3 (unknown) has no body and is escalated unknown_sender", msg("m3", "coalesce(body_text, 'NULL') || '|' || state || '|' || escalation_reason") === "NULL|escalated|unknown_sender");
     check("REQ-42: m4 (newsletter) has no body and is handled", msg("m4", "coalesce(body_text, 'NULL') || '|' || (handled_at is not null)::text") === "NULL|true");
     check("REQ-42: m5 is cut to 20,000 characters", msg("m5", "length(body_text) || '|' || body_truncated::text") === "20000|true");
     check("REQ-42: m6 is stored outbound in Sam's thread", msg("m6", "direction || '|' || source") === "outbound|charlie_manual");
     check("REQ-42: m7 (the mailbox in a new thread) is not stored", msg("m7", "count(*)") === "0");
-    check("REQ-42: every inbound row has policy version 1", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 1") === "0");
+    check("REQ-42: every inbound row has policy version 2 (REQ-43)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 2") === "0");
     check("REQ-42: Sam's thread carries his Notion page id", psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm1'") === SAM_ID);
 
     // 7. The owner's inbox: m3 needs him, m4 does not.
@@ -1590,7 +1591,7 @@ try {
     check("REQ-42: m8 waits at received with no body and a short error", /^received\|NULL\|([1-9]\d?|[12]\d\d|300)$/.test(m8), m8);
     await fetch(`${MOCK_NOTION}/__students/fail`, { method: "POST" });
     await irisRun();
-    check("REQ-42: once Notion is back, m8 is matched with its body", msg("m8", "state || '|' || body_text") === "matched|Running late today.");
+    check("REQ-42: once Notion is back, m8 is matched with its body, then classified", msg("m8", "state || '|' || body_text || '|' || retry_count") === "classified|Running late today.|0");
 
     // 11. Only the four properties were asked for, and Notion was never written.
     const journal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(notionStart);
@@ -1600,6 +1601,53 @@ try {
       familyQueries.length >= 3 && familyQueries.every((j) => props(j.path) === "filter_properties[]=pe&filter_properties[]=pn&filter_properties[]=stage&filter_properties[]=title"),
       familyQueries.map((j) => j.path).join(" "));
     check("REQ-42: no Notion write during the Iris section", !journal.some((j) => j.method === "PATCH" || j.method === "DELETE" || (j.method === "POST" && j.path === "/v1/pages") || j.path.includes("/comments")));
+
+    // REQ-43: Iris 3/9. A cancellation and a "charged twice" message from Sam's parent, classified through the
+    // mock Anthropic (54332); then the message page, Mark handled, and who may use them.
+    const add = (id, subject, text) => gmail("/__gmail/add", "POST", {
+      id, threadId: `thread-${id}`, internalDate: String(Date.now()), snippet: subject,
+      payload: { mimeType: "text/plain", headers: [{ name: "From", value: "sam.parent@example.com" }, { name: "Subject", value: subject }], body: { data: Buffer.from(text).toString("base64url") } },
+    });
+    await add("m9", "Thursday", "Please cancel Thursday's class, Sam has a dentist appointment.");
+    await add("m10", "October invoice", "We were charged twice this month. Please check.");
+    const run43 = await irisRun();
+    check("REQ-43: the run answers ok and counts classified", run43.status === 200 && run43.body?.result === "ok" && run43.body?.classified >= 1, JSON.stringify(run43.body));
+    check("REQ-43: the cancellation is classified at 0.95", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "classified|cancellation|0.95|2", msg("m9", "state"));
+    check("REQ-43: charged twice is escalated flagged with money_dispute", msg("m10", "state || '|' || escalation_reason || '|' || array_to_string(flags, ',')") === "escalated|flagged|money_dispute", msg("m10", "state || '|' || coalesce(escalation_reason, '')"));
+    check("REQ-43: one ok classify ai_calls row each",
+      psql("select count(*) from iris.ai_calls a join iris.messages m on m.id = a.message_id where m.gmail_message_id in ('m9', 'm10') and a.purpose = 'classify' and a.outcome = 'ok' and a.input_tokens = 300") === "2");
+    check("REQ-43: no message text in ai_calls", psql("select count(*) from iris.ai_calls where error ilike '%twice%' or model ilike '%twice%'") === "0");
+    const m9 = msg("m9", "id");
+    const m10 = msg("m10", "id");
+
+    await teacher.goto(`${BASE}/iris/messages/${m9}`);
+    await teacher.locator("[data-intent]").waitFor({ timeout: 15000 });
+    const shown = `${await teacher.locator("[data-intent]").innerText()}|${await teacher.locator("[data-confidence]").innerText()}`;
+    check("REQ-43: the owner's message page shows intent and 95%", shown === "Cancellation|95%", shown);
+
+    await teacher.goto(`${BASE}/iris`);
+    await teacher.getByRole("heading", { name: "Needs you", exact: true }).waitFor({ timeout: 15000 });
+    check("REQ-43: charged twice is in Needs you", (await section(teacher, "Needs you").innerText()).includes("October invoice"));
+    await teacher.goto(`${BASE}/iris/messages/${m10}`);
+    await teacher.getByRole("button", { name: "Mark handled", exact: true }).click();
+    await teacher.locator("[data-handled]").waitFor({ timeout: 15000 });
+    check("REQ-43: Mark handled sets handled_at and handled_by and logs one event",
+      msg("m10", "(handled_at is not null)::text || '|' || (handled_by is not null)::text") === "true|true" &&
+      psql(`select count(*) from iris.events where kind = 'handled' and message_id = '${m10}' and actor ~ '^[0-9a-f-]{36}$'`) === "1");
+    await teacher.goto(`${BASE}/iris`);
+    await teacher.getByRole("heading", { name: "Needs you", exact: true }).waitFor({ timeout: 15000 });
+    check("REQ-43: a handled message leaves Needs you", !(await section(teacher, "Needs you").innerText()).includes("October invoice"));
+    const again = await teacher.context().request.post(`${BASE}/api/iris/messages/${m10}/handled`);
+    check("REQ-43: a second Mark handled is 409", again.status() === 409, String(again.status()));
+
+    await ryan.goto(`${BASE}/iris/messages/${m10}`);
+    check("REQ-43: Ryan opening a message page lands on /", /\/tracker\/?$/.test(new URL(ryan.url()).pathname), ryan.url());
+    const ryanHandled = await ryan.context().request.post(`${BASE}/api/iris/messages/${m9}/handled`);
+    check("REQ-43: Ryan gets 403 from Mark handled", ryanHandled.status() === 403, String(ryanHandled.status()));
+    const evilHandled = await teacher.context().request.post(`${BASE}/api/iris/messages/${m9}/handled`, { headers: { Origin: "https://evil.example" } });
+    check("REQ-43: a cross-site Mark handled is 403", evilHandled.status() === 403, String(evilHandled.status()));
+    const signedOutPage = await fetch(`${BASE}/iris/messages/${m9}`, { redirect: "manual" });
+    check("REQ-43: signed out, the message page redirects to /login", signedOutPage.status >= 300 && signedOutPage.status < 400 && (signedOutPage.headers.get("location") ?? "").includes("/login"), String(signedOutPage.status));
 
     // 12. A Gmail list failure: Run now shows it, the run is 502, and the settings page shows the short error.
     await gmail("/__gmail/fail-list");

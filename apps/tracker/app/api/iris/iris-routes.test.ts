@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleIrisSettings, handleRunNow, loadInbox, loadIrisSettings, type IrisAdminDeps, type IrisReader } from "../../../lib/iris/handlers";
+import { handleIrisSettings, handleMarkHandled, handleRunNow, loadInbox, loadIrisSettings, loadMessage, type IrisAdminDeps, type IrisReader } from "../../../lib/iris/handlers";
+import type { MessageDetail } from "../../../lib/iris/schemas";
 import type { SchedulerIdentity } from "../../../lib/scheduler/identity";
 
 // REQ-42 AC23, AC27: the owner-only Iris routes and page loaders.
@@ -14,19 +15,28 @@ const NOT_OWNERS: [string, SchedulerIdentity][] = [
   ["parent", { scope: "none" }],
 ];
 
+const M1 = "22222222-2222-4222-8222-222222222222";
+const DETAIL: MessageDetail = {
+  id: M1, gmailThreadId: "g1", fromEmail: "ann@example.com", fromName: "Ann", subject: "Sick", receivedAt: "2026-10-20T10:00:00Z",
+  bodyText: "Sam is sick.", state: "classified", intent: "cancellation", confidence: 0.95, flags: [], escalationReason: null,
+  policyVersion: 2, handledAt: null, notionStudentIds: [S1],
+};
+
 function fakeReader(over: Partial<IrisReader> = {}) {
   const calls: string[] = [];
   const spy = <T,>(name: string, v: T) => async () => (calls.push(name), v);
   const reader: IrisReader = {
-    getSettings: spy("getSettings", { paused: true, mailbox: null, lastPollAt: null, lastPollResult: null, lastError: null }),
+    getSettings: spy("getSettings", { paused: true, mailbox: null, lastPollAt: null, lastPollResult: null, lastError: null, confidenceThreshold: 0.85 }),
     lastRun: spy("lastRun", null),
     listNeedsYou: spy("listNeedsYou", [
-      { id: "m1", gmailThreadId: "g1", fromEmail: "ann@example.com", subject: "Question", snippet: "Hi", receivedAt: "2026-10-20T10:00:00Z", state: "escalated" as const, escalationReason: "unknown_sender", notionStudentIds: [] },
+      { id: "m1", gmailThreadId: "g1", fromEmail: "ann@example.com", subject: "Question", snippet: "Hi", receivedAt: "2026-10-20T10:00:00Z", state: "escalated" as const, escalationReason: "unknown_sender", intent: null, flags: [], notionStudentIds: [] },
     ]),
     listRecent: spy("listRecent", [
-      { id: "m2", gmailThreadId: "g2", fromEmail: "pat@example.com", subject: "Re: Tuesday", snippet: "ok", receivedAt: "2026-10-20T11:00:00Z", state: "matched" as const, escalationReason: null, notionStudentIds: [S1] },
+      { id: "m2", gmailThreadId: "g2", fromEmail: "pat@example.com", subject: "Re: Tuesday", snippet: "ok", receivedAt: "2026-10-20T11:00:00Z", state: "matched" as const, escalationReason: null, intent: null, flags: [], notionStudentIds: [S1] },
     ]),
     updatePaused: spy("updatePaused", 1),
+    getMessage: spy("getMessage", DETAIL as MessageDetail | null),
+    markHandled: spy("markHandled", "ok" as const),
     ...over,
   };
   return { reader, calls };
@@ -147,6 +157,7 @@ describe("page loaders", () => {
       const names = vi.fn(async () => new Map<string, string>());
       expect(await loadInbox({ ...w.d, studentNames: names })).toEqual({ kind: "denied" });
       expect(await loadIrisSettings(w.d, [])).toEqual({ kind: "denied" });
+      expect(await loadMessage({ ...w.d, studentNames: names }, M1)).toEqual({ kind: "denied" });
       expect(w.readerFor).not.toHaveBeenCalled();
       expect(names).not.toHaveBeenCalled();
     });
@@ -182,6 +193,71 @@ describe("page loaders", () => {
   it("settings carry the state, the last run and the missing env names", async () => {
     const w = deps(ADMIN);
     const s = await loadIrisSettings(w.d, ["IRIS_GMAIL_PRIVATE_KEY"]);
-    expect(s).toEqual({ kind: "ok", paused: true, lastRun: null, lastError: null, missing: ["IRIS_GMAIL_PRIVATE_KEY"] });
+    expect(s).toEqual({ kind: "ok", paused: true, lastRun: null, lastError: null, missing: ["IRIS_GMAIL_PRIVATE_KEY"], aiConfigured: true, confidenceThreshold: 0.85 });
+  });
+});
+
+// REQ-43 AC11, AC14, AC15: AI not set up, the message page and Mark handled.
+describe("AI not set up (AC11)", () => {
+  it("settings say so when the key is unset", async () => {
+    const s = await loadIrisSettings(deps(ADMIN).d, [], false);
+    expect(s).toMatchObject({ kind: "ok", aiConfigured: false });
+  });
+});
+
+describe("loadMessage (AC14)", () => {
+  it("the owner gets the message with its family label", async () => {
+    const w = deps(ADMIN);
+    const r = await loadMessage({ ...w.d, studentNames: async () => new Map([[S1, "Sam Lee"]]) }, M1);
+    expect(r).toEqual({ kind: "ok", message: { ...DETAIL, family: "Sam Lee" } });
+  });
+
+  it("a bad id or a missing message is not found; a failed read is an error", async () => {
+    const names = async () => new Map<string, string>();
+    const w = deps(ADMIN);
+    expect(await loadMessage({ ...w.d, studentNames: names }, "nope")).toEqual({ kind: "not_found" });
+    expect(w.calls).not.toContain("getMessage");
+    expect(await loadMessage({ ...deps(ADMIN, { getMessage: async () => null }).d, studentNames: names }, M1)).toEqual({ kind: "not_found" });
+    expect(await loadMessage({ ...deps(ADMIN, { getMessage: async () => { throw new Error("x"); } }).d, studentNames: names }, M1)).toEqual({ kind: "error" });
+  });
+});
+
+describe("POST /api/iris/messages/[id]/handled (AC15)", () => {
+  for (const [who, identity] of NOT_OWNERS) {
+    it(`a ${who} gets 403 and nothing is read or written`, async () => {
+      const w = deps(identity);
+      expect((await handleMarkHandled(w.d, M1)).status).toBe(403);
+      expect(w.readerFor).not.toHaveBeenCalled();
+    });
+  }
+
+  it("signed out is 401", async () => {
+    const w = deps({ scope: "signed_out" });
+    expect((await handleMarkHandled(w.d, M1)).status).toBe(401);
+    expect(w.readerFor).not.toHaveBeenCalled();
+  });
+
+  it("the owner marks it handled, then a second call is 409", async () => {
+    let done = false;
+    const w = deps(ADMIN, { markHandled: async () => (done ? "conflict" : ((done = true), "ok")) });
+    const first = await handleMarkHandled(w.d, M1);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ handled: true });
+    const second = await handleMarkHandled(w.d, M1);
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({ error: "already_handled" });
+  });
+
+  it("an unknown or non-escalated message is 404, a bad id is 404 with no write", async () => {
+    expect((await handleMarkHandled(deps(ADMIN, { markHandled: async () => "not_found" }).d, M1)).status).toBe(404);
+    const w = deps(ADMIN);
+    expect((await handleMarkHandled(w.d, "not-a-guid")).status).toBe(404);
+    expect(w.calls).not.toContain("markHandled");
+  });
+
+  it("a failed save is 500 and never says handled", async () => {
+    const res = await handleMarkHandled(deps(ADMIN, { markHandled: async () => { throw new Error("x"); } }).d, M1);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "save_failed" });
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ClassifyPort } from "./classify";
 import { handleIrisRun, type IrisRunDeps } from "./handlers";
 import { GmailError, type GmailMessage } from "./gmail";
 import type { GmailPort } from "./intake";
@@ -15,7 +16,7 @@ const message = (id: string, from: string): GmailMessage => ({
   payload: { mimeType: "text/plain", headers: [{ name: "From", value: from }, { name: "Subject", value: "Hi" }], body: { data: Buffer.from("hello").toString("base64url") } },
 });
 
-function world(opts: { paused?: boolean; listFails?: boolean } = {}) {
+function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null } = {}) {
   const db = fakeIrisStore({ paused: opts.paused ?? false });
   const gmailCalls: string[] = [];
   const gmail: GmailPort = {
@@ -28,7 +29,7 @@ function world(opts: { paused?: boolean; listFails?: boolean } = {}) {
     get: async (_t, id) => (gmailCalls.push(`get:${id}`), message(id, "who@z.com")),
   };
   const directoryCalls: number[] = [];
-  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca" };
+  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null };
   const build = vi.fn((org: string) => (org ? deps : null));
   const run = (authorization: string | null = AUTH, env = { secret: SECRET as string | undefined, orgId: ORG as string | undefined }) =>
     handleIrisRun({ authorization, env, build, now: () => new Date(T0) });
@@ -149,5 +150,38 @@ describe("handleIrisRun: the end of every run (AC20)", () => {
     const res = await w.run();
     expect(res.status).toBe(200);
     expect((await res.json()).result).toBe("ok");
+  });
+});
+
+// REQ-43 AC7, AC13: the run classifies after intake, reading the directory once.
+describe("handleIrisRun: classification", () => {
+  const SAM = "11111111-1111-4111-8111-111111111111";
+  const family = [{ studentId: SAM, studentName: "Sam Lee", stage: "Active", parentEmail: "ann@x.com", parentName: "Ann Lee" }];
+  const port: ClassifyPort = async () => ({
+    ok: true, model: "m", inputTokens: 1, outputTokens: 1,
+    output: { intents: ["general_question"], primary: "general_question", confidence: 0.95, flags: [], childName: "", summary: "" },
+  });
+
+  it("carries classified in the response and the run row, with one directory read", async () => {
+    const w = world({ classify: port });
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.directory = async () => (w.directoryCalls.push(1), family);
+    deps.gmail.get = async (_t, id) => message(id, "ann@x.com");
+    const res = await w.run();
+    const body = await res.json();
+    expect(body).toMatchObject({ result: "ok", stored: 1, matched: 1, classified: 1 });
+    expect(w.db.runs[0]).toMatchObject({ classified: 1, matched: 1 });
+    expect(w.directoryCalls).toHaveLength(1);
+    expect(w.db.aiCalls).toHaveLength(1);
+  });
+
+  it("with no classify port the run classifies nothing", async () => {
+    const w = world({ classify: null });
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.directory = async () => family;
+    deps.gmail.get = async (_t, id) => message(id, "ann@x.com");
+    const body = await (await w.run()).json();
+    expect(body).toMatchObject({ matched: 1, classified: 0 });
+    expect(w.db.aiCalls).toHaveLength(0);
   });
 });

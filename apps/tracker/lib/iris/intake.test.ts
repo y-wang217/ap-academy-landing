@@ -183,7 +183,8 @@ describe("runIntake: failures", () => {
     const run2 = await runIntake(w.deps());
     expect(run2.result).toBe("ok");
     expect(w.gmail.gets().slice(getsBefore)).toEqual(expect.arrayContaining(["A", "B", "C"]));
-    expect(w.db.byGmailId("A")).toMatchObject({ state: "matched", bodyText: "Body A" });
+    // REQ-43 AC8: entering matched through the Notion retry resets the count, so classification gets its own tries.
+    expect(w.db.byGmailId("A")).toMatchObject({ state: "matched", bodyText: "Body A", retryCount: 0 });
     expect(w.db.threadOf("A")!.notionStudentIds).toEqual([SAM]);
     expect(w.db.byGmailId("B")).toMatchObject({ state: "escalated", escalationReason: "unknown_sender", bodyText: null });
   });

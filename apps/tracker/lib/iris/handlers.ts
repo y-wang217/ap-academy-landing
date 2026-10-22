@@ -4,8 +4,10 @@ import { TUNING } from "../domain/tuning";
 import type { FamilyEntry } from "../notion/parents";
 import { requireScheduler, type Denial } from "../scheduler/guard";
 import type { SchedulerIdentity } from "../scheduler/identity";
+import type { ClassifyPort } from "./classify";
+import { runClassify } from "./classify-step";
 import { runIntake, type GmailPort } from "./intake";
-import { IrisRunResponse, type InboxMessage, type OwnerSettings, type RunSummary } from "./schemas";
+import { IrisRunResponse, type InboxMessage, type MessageDetail, type OwnerSettings, type RunSummary } from "./schemas";
 import type { IrisStore } from "./store";
 
 const HEADERS = { "Cache-Control": "no-store" };
@@ -23,6 +25,8 @@ export type IrisRunDeps = {
   gmail: GmailPort;
   directory: () => Promise<FamilyEntry[]>;
   mailbox: string;
+  /** Null when AI is not set up: messages stay at matched (REQ-43). */
+  classify: ClassifyPort | null;
 };
 
 /**
@@ -31,7 +35,8 @@ export type IrisRunDeps = {
  * is 503, a missing or wrong bearer is 401. Paused touches nothing; a held
  * lease is "busy". Every run that took the lease purges, records a run row,
  * writes the last-run columns and releases the lease. Only a Gmail list or
- * token failure is 502. It never throws.
+ * token failure is 502. It never throws. After a good intake it classifies
+ * (REQ-43); Students & Parents is read at most once per run for both.
  */
 export async function handleIrisRun(input: {
   authorization: string | null;
@@ -72,9 +77,16 @@ export async function handleIrisRun(input: {
   }
   if (!claimed) return send(200, { result: "busy" });
 
-  const startedAt = now().toISOString();
-  const outcome = await runIntake({ store, gmail: deps.gmail, directory: deps.directory, now, mailbox: deps.mailbox, settings: claimed });
-  let error = outcome.error;
+  const startedMs = now().getTime();
+  const startedAt = new Date(startedMs).toISOString();
+  let once: Promise<FamilyEntry[]> | undefined;
+  const directory = () => (once ??= deps.directory());
+  const intake = await runIntake({ store, gmail: deps.gmail, directory, now, mailbox: deps.mailbox, settings: claimed });
+  const classified = intake.result === "ok"
+    ? await runClassify({ store, classify: deps.classify, directory, settings: claimed, now, startedAtMs: startedMs })
+    : { result: "ok" as const, classified: 0, escalated: 0, failed: 0, error: null };
+  const outcome = { ...intake, result: classified.result === "failed" ? ("failed" as const) : intake.result };
+  let error = intake.error ?? classified.error;
   let purged = 0;
   try {
     purged = await store.purge();
@@ -82,7 +94,10 @@ export async function handleIrisRun(input: {
     error = error ?? "Purge failed";
   }
   const finishedAt = now().toISOString();
-  const counts = { seen: outcome.seen, stored: outcome.stored, matched: outcome.matched, escalated: outcome.escalated, skipped: outcome.skipped, failed: outcome.failed, purged };
+  const counts = {
+    seen: intake.seen, stored: intake.stored, matched: intake.matched, classified: classified.classified,
+    escalated: intake.escalated + classified.escalated, skipped: intake.skipped, failed: intake.failed + classified.failed, purged,
+  };
   let runId: string | null = null;
   try {
     runId = await store.insertRun({ startedAt, finishedAt, result: outcome.result, ...counts, error });
@@ -105,6 +120,10 @@ export type IrisReader = {
   listRecent(limit: number): Promise<InboxMessage[]>;
   /** Rows updated: 0 means RLS or the grant refused it. */
   updatePaused(paused: boolean): Promise<number>;
+  /** One inbound message, or null when it is not in the owner's org. */
+  getMessage(id: string): Promise<MessageDetail | null>;
+  /** Sets handled_at and handled_by on an unhandled escalated message and logs one event (REQ-43). */
+  markHandled(id: string): Promise<"ok" | "conflict" | "not_found">;
 };
 
 export type IrisAdminDeps = {
@@ -159,6 +178,26 @@ export async function handleRunNow(input: {
   }
 }
 
+/**
+ * POST /api/iris/messages/[id]/handled (REQ-43 AC15). Owner only; the guard
+ * runs before the id is read. A second call is 409; anything not escalated or
+ * not in the org is 404. A failed save is 500 and never says handled.
+ */
+export async function handleMarkHandled(deps: IrisAdminDeps, id: string): Promise<Response> {
+  const gate = requireScheduler(await deps.identity(), ["admin"]);
+  if (!gate.ok) return deny(gate);
+  if (!z.guid().safeParse(id).success) return send(404, { error: "not_found" });
+  let result: Awaited<ReturnType<IrisReader["markHandled"]>>;
+  try {
+    result = await deps.reader(gate.identity.orgId).markHandled(id);
+  } catch {
+    return send(500, { error: "save_failed" });
+  }
+  if (result === "conflict") return send(409, { error: "already_handled" });
+  if (result === "not_found") return send(404, { error: "not_found" });
+  return send(200, { handled: true });
+}
+
 export type InboxRow = InboxMessage & { family: string };
 export type InboxResult = { kind: "denied" } | { kind: "error" } | { kind: "ok"; paused: boolean; needsYou: InboxRow[]; recent: InboxRow[]; nowMs: number };
 
@@ -168,6 +207,9 @@ function pageGate(who: SchedulerIdentity): { kind: "denied" } | { kind: "error" 
   if (who.scope !== "admin") return { kind: "denied" };
   return { kind: "ok", orgId: who.orgId };
 }
+
+const familyLabel = (ids: string[], fallback: string, names: Map<string, string>) =>
+  ids.length > 0 ? ids.map((id) => names.get(id) ?? "Paused student").join(", ") : fallback;
 
 /** The /iris page. Family labels come from the local people copy (REQ-38), read for the owner's org; no parent field is read on page load. */
 export async function loadInbox(deps: IrisAdminDeps & { studentNames: (orgId: string) => Promise<Map<string, string>> }): Promise<InboxResult> {
@@ -182,11 +224,24 @@ export async function loadInbox(deps: IrisAdminDeps & { studentNames: (orgId: st
       deps.studentNames(gate.orgId).catch(() => new Map<string, string>()),
     ]);
     if (!settings) return { kind: "error" };
-    const label = (m: InboxMessage): InboxRow => ({
-      ...m,
-      family: m.notionStudentIds.length > 0 ? m.notionStudentIds.map((id) => names.get(id) ?? "Paused student").join(", ") : m.fromEmail,
-    });
+    const label = (m: InboxMessage): InboxRow => ({ ...m, family: familyLabel(m.notionStudentIds, m.fromEmail, names) });
     return { kind: "ok", paused: settings.paused, needsYou: needs.map(label), recent: recent.map(label), nowMs: Date.now() };
+  } catch {
+    return { kind: "error" };
+  }
+}
+
+export type MessageResult = { kind: "denied" } | { kind: "error" } | { kind: "not_found" } | { kind: "ok"; message: MessageDetail & { family: string } };
+
+/** The /iris/messages/[id] page (REQ-43 AC14): owner only, checked before any Iris read. */
+export async function loadMessage(deps: IrisAdminDeps & { studentNames: (orgId: string) => Promise<Map<string, string>> }, id: string): Promise<MessageResult> {
+  const gate = pageGate(await deps.identity());
+  if (gate.kind !== "ok") return gate;
+  if (!z.guid().safeParse(id).success) return { kind: "not_found" };
+  try {
+    const [message, names] = await Promise.all([deps.reader(gate.orgId).getMessage(id), deps.studentNames(gate.orgId).catch(() => new Map<string, string>())]);
+    if (!message) return { kind: "not_found" };
+    return { kind: "ok", message: { ...message, family: familyLabel(message.notionStudentIds, message.fromEmail, names) } };
   } catch {
     return { kind: "error" };
   }
@@ -195,17 +250,17 @@ export async function loadInbox(deps: IrisAdminDeps & { studentNames: (orgId: st
 export type IrisSettingsResult =
   | { kind: "denied" }
   | { kind: "error" }
-  | { kind: "ok"; paused: boolean; lastRun: RunSummary | null; lastError: string | null; missing: string[] };
+  | { kind: "ok"; paused: boolean; lastRun: RunSummary | null; lastError: string | null; missing: string[]; aiConfigured: boolean; confidenceThreshold: number };
 
-/** The /iris/settings page: state, the last run, its error, and the unset env names. */
-export async function loadIrisSettings(deps: IrisAdminDeps, missing: string[]): Promise<IrisSettingsResult> {
+/** The /iris/settings page: state, the last run, its error, the unset env names, and whether AI is set up. */
+export async function loadIrisSettings(deps: IrisAdminDeps, missing: string[], aiConfigured = true): Promise<IrisSettingsResult> {
   const gate = pageGate(await deps.identity());
   if (gate.kind !== "ok") return gate;
   try {
     const reader = deps.reader(gate.orgId);
     const [settings, lastRun] = await Promise.all([reader.getSettings(), reader.lastRun()]);
     if (!settings) return { kind: "error" };
-    return { kind: "ok", paused: settings.paused, lastRun, lastError: settings.lastError, missing };
+    return { kind: "ok", paused: settings.paused, lastRun, lastError: settings.lastError, missing, aiConfigured, confidenceThreshold: settings.confidenceThreshold };
   } catch {
     return { kind: "error" };
   }

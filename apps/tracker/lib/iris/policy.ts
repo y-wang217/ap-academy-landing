@@ -1,9 +1,10 @@
 // Iris policy (REQ-42, spec decision 11): the one place policy text lives.
 // Plain data with no imports, so tests and later prompts read it as it is.
 // Founder values of Oct 16, 2026. Changing any text means bumping
-// POLICY_VERSION, which every stored message records.
+// POLICY_VERSION, which every stored message records. Version 2 (REQ-43)
+// adds the classifier intents, the flags and the sensitive-trigger phrases.
 
-export const POLICY_VERSION = 1;
+export const POLICY_VERSION = 2;
 
 /** A cancellation with at least this many hours of notice is "with notice". */
 export const NOTICE_HOURS = 12;
@@ -102,3 +103,59 @@ export const HARD_RULES: readonly string[] = [
 ];
 
 export const HOLDING_LINE = "Charlie will follow up with you personally.";
+
+/**
+ * What the classifier may answer (REQ-43). cancel_with_notice, late_cancel
+ * (Iris 6/9) and reschedule_offer (Iris 7/9) are reply types it never picks.
+ */
+export const CLASSIFIER_INTENTS = [
+  "cancellation",
+  "reschedule_request",
+  "pause_or_stop",
+  "general_question",
+  "no_reply_needed",
+  "billing_question",
+  "refund_request",
+  "no_show",
+  "other",
+] as const;
+export type ClassifierIntent = (typeof CLASSIFIER_INTENTS)[number];
+
+export const INTENT_HINTS: Record<ClassifierIntent, string> = {
+  cancellation: "The family says a class will not happen, for example the student is sick or away.",
+  reschedule_request: "The family asks to move a class to another time.",
+  pause_or_stop: "The family wants to pause or stop tutoring.",
+  general_question: "A question about classes, timing or tutoring that is not about money.",
+  no_reply_needed: "A thank-you, an acknowledgement or a note that needs no answer.",
+  billing_question: "Anything about an invoice, a payment, a charge or a price.",
+  refund_request: "The family asks for money back.",
+  no_show: "The family explains or asks about a class the student missed without telling anyone first.",
+  other: "Anything that fits none of the intents above.",
+};
+
+/** Intents that need one named child: a sibling family that names none escalates. */
+export const CHILD_SCOPED: readonly ClassifierIntent[] = ["cancellation", "reschedule_request"];
+
+/** Sensitive flags (Iris Policy Rules R-3, plus refund). Any flag escalates. */
+export const FLAGS = ["money_dispute", "legal_threat", "crisis", "hardship", "refund"] as const;
+export type Flag = (typeof FLAGS)[number];
+
+export const FLAG_HINTS: Record<Flag, string> = {
+  money_dispute: "The family disputes a charge, an amount or a payment.",
+  legal_threat: "A threat of legal action, a chargeback, a complaint body or a public review.",
+  crisis: "Self-harm, abuse, danger or a family crisis.",
+  hardship: "Medical trouble, a death, or financial hardship.",
+  refund: "Any mention of a refund or money back.",
+};
+
+/**
+ * The keyword backstop: lower-case phrases that add a flag whatever the model
+ * says. They can only escalate. Synthetic, no real parent words.
+ */
+export const SENSITIVE_TRIGGERS: Record<Flag, readonly string[]> = {
+  money_dispute: ["charged twice", "double charged", "didn't authorize", "did not authorize", "overcharged", "wrong amount", "dispute the charge", "never agreed to pay"],
+  legal_threat: ["chargeback", "lawyer", "legal action", "small claims", "better business bureau", "bbb", "bad review", "sue you", "report you"],
+  crisis: ["self-harm", "hurt himself", "hurt herself", "hurt themselves", "suicid", "abuse", "unsafe at home", "police were called", "family emergency"],
+  hardship: ["passed away", "funeral", "in the hospital", "lost his job", "lost her job", "lost my job", "laid off", "can't afford", "cannot afford", "diagnosed with"],
+  refund: ["refund", "money back", "reimburse"],
+};
