@@ -350,8 +350,8 @@ describe("REQ-30 AC4: a change between the check and the write", () => {
 });
 
 describe("REQ-30 AC5: the locked write is the only class write", () => {
-  it("the store's writes are exactly lockedWrite, adoptStudent and markSummary", () => {
-    expect([...WRITES]).toEqual(["lockedWrite", "adoptStudent", "markSummary"]);
+  it("the store's writes are exactly lockedWrite, adoptStudent, markSummary and markDriftSeen (REQ-34, no class write)", () => {
+    expect([...WRITES]).toEqual(["lockedWrite", "adoptStudent", "markSummary", "markDriftSeen"]);
     type Has<K extends string> = K extends keyof ScheduleStore ? true : false;
     const removed: [Has<"createSeries">, Has<"upsertException">, Has<"split">, Has<"endSeries">, Has<"updateSeriesFields">, Has<"getSeriesByRequest">] =
       [false, false, false, false, false, false];

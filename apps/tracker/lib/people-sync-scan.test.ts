@@ -41,7 +41,8 @@ describe("people reads are local (REQ-38)", () => {
   });
 
   it("the Weekly Schedule and billing reads stay live (AC10)", () => {
-    expect(read("lib/scheduler/deps.ts")).toMatch(/fetchScheduledStudents[\s\S]*fetchStudentSchedule[\s\S]*writeWeeklySchedule/);
+    // REQ-34: the Weekly Schedule write goes through writeStudentSchedule, which also sets Schedule Source.
+    expect(read("lib/scheduler/deps.ts")).toMatch(/fetchScheduledStudents[\s\S]*fetchStudentSchedule[\s\S]*writeStudentSchedule/);
     expect(read("lib/notion/cached.ts")).toContain("getBillingReader");
   });
 

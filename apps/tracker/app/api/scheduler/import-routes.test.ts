@@ -5,7 +5,8 @@ import type { ClassException } from "../../../lib/domain/schedule/recurrence";
 import type { StaffRecord } from "../../../lib/notion/staff";
 import type { StudentRecord } from "../../../lib/notion/students";
 import type { SchedulerIdentity } from "../../../lib/scheduler/guard";
-import { handleImportPreview, handleImportRun, handleMonthlyReview, handleSyncSummaries } from "../../../lib/scheduler/import-handlers";
+import { unseenDrift } from "../../../lib/domain/schedule/drift-notice";
+import { handleDriftSeen, handleImportPreview, handleImportRun, handleMonthlyReview, handleSyncSummaries } from "../../../lib/scheduler/import-handlers";
 import { fakeOutbox } from "../../../lib/scheduler/outbox.fake";
 import { lockedWrites } from "./series-writes.fake";
 import { handleCancelOccurrence, handleCreateClass, handleEditOccurrence, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
@@ -28,7 +29,7 @@ function fakeStore() {
   const series = new Map<string, SeriesRecord>();
   const exceptions: (ClassException & { requestId: string })[] = [];
   const summaries = new Map<string, SummaryRecord>();
-  const log = { adopt: 0, markSummary: 0, createSeries: 0 };
+  const log = { adopt: 0, markSummary: 0, createSeries: 0, markDriftSeen: 0 };
   let n = 100;
   // REQ-7: classes are checked against availability, so every teacher is open all week.
   const openWeek = (staffId: string) => [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ id: REQ(900 + weekday), staffId, weekday, startTime: "00:00", endTime: "23:55", effectiveFrom: "2026-01-01", effectiveUntil: null, updatedAt: "2026-10-14T12:00:00.000Z" }));
@@ -58,8 +59,8 @@ function fakeStore() {
       log.adopt++;
       for (const { requestId, ...s } of input.series) insertSeries((void requestId, { ...s, studentId: input.studentId }));
       const rec: SummaryRecord = {
-        id: REQ(++n), studentId: input.studentId, adoptedAt: TODAY, adoptedFromText: input.sourceText, lastWrittenText: null, lastWrittenAt: null,
-        syncState: "pending", lastError: null, lastDriftText: null,
+        id: REQ(++n), studentId: input.studentId, adoptedAt: `${TODAY}T16:00:00+00:00`, adoptedFromText: input.sourceText, lastWrittenText: null, lastWrittenAt: null,
+        syncState: "pending", lastError: null, lastDriftText: null, lastDriftAt: null, driftSeenAt: null,
       };
       summaries.set(input.studentId, rec);
       return { ok: true, value: rec, created: true };
@@ -71,31 +72,53 @@ function fakeStore() {
       summaries.set(studentId, {
         ...row, syncState: patch.syncState, lastError: patch.lastError ?? null,
         lastWrittenText: patch.lastWrittenText ?? row.lastWrittenText, lastDriftText: patch.lastDriftText ?? row.lastDriftText,
+        lastDriftAt: patch.lastDriftAt ?? row.lastDriftAt,
       });
       return true;
+    },
+    // The 0026 rule: mark only rows whose last_drift_at is not distinct from the posted value.
+    markDriftSeen: async (items: { studentId: string; lastDriftAt: string | null }[]) => {
+      log.markDriftSeen++;
+      let changed = 0;
+      for (const i of items) {
+        const row = summaries.get(i.studentId);
+        if (!row || row.lastDriftAt !== i.lastDriftAt || (i.lastDriftAt === null && row.lastDriftText === null)) continue;
+        summaries.set(i.studentId, { ...row, driftSeenAt: new Date().toISOString() });
+        changed++;
+      }
+      return changed;
     },
   } as unknown as ScheduleStore;
   return { store, series, summaries, log, exceptions };
 }
 
 function world(initial: Record<string, string>, opts: { identity?: SchedulerIdentity } = {}) {
-  const notion = new Map<string, StudentRecord>(Object.entries(initial).map(([id, text]) => [id, { id, name: `Student ${id.slice(0, 2)}`, stage: "Active", weeklySchedule: text }]));
+  const notion = new Map<string, StudentRecord>(Object.entries(initial).map(([id, text]) => [id, { id, name: `Student ${id.slice(0, 2)}`, stage: "Active", weeklySchedule: text, scheduleSource: "" }]));
   const f = fakeStore();
-  const calls = { get: 0, list: 0, write: [] as { id: string; text: string }[] };
+  /** `write` holds Weekly Schedule writes, as before REQ-34; `source` holds Schedule Source writes. */
+  const calls = { get: 0, list: 0, write: [] as { id: string; text: string }[], source: [] as { id: string; text: string }[] };
   let writeFails = false;
   const deps: ScheduleDeps = {
     identity: async () => opts.identity ?? admin,
     fetchStaff: async () => [jane],
     store: f.store,
     today: () => TODAY,
+    siteUrl: "https://www.apacademy.ca",
     students: {
       list: async () => { calls.list++; return [...notion.values()]; },
       get: async (id) => { calls.get++; return notion.get(id) ?? null; },
-      write: async (id, text) => {
+      write: async (id, patch) => {
         if (writeFails) throw new Error("Notion returned 500");
-        calls.write.push({ id, text });
         const cur = notion.get(id);
-        if (cur) notion.set(id, { ...cur, weeklySchedule: text });
+        if (patch.weeklySchedule !== undefined) {
+          calls.write.push({ id, text: patch.weeklySchedule });
+          if (cur) notion.set(id, { ...cur, weeklySchedule: patch.weeklySchedule });
+        }
+        if (patch.scheduleSource !== undefined) {
+          calls.source.push({ id, text: patch.scheduleSource });
+          const now = notion.get(id);
+          if (now) notion.set(id, { ...now, scheduleSource: patch.scheduleSource });
+        }
       },
     },
   };
@@ -303,7 +326,7 @@ describe("AC13: when the summary is rewritten", () => {
 
   it("a split to a student who is not adopted and still has legacy text is 409", async () => {
     const w = await adopted();
-    w.notion.set(S3, { id: S3, name: "S3", stage: "Active", weeklySchedule: CLEAN });
+    w.notion.set(S3, { id: S3, name: "S3", stage: "Active", weeklySchedule: CLEAN, scheduleSource: "" });
     const target = [...w.series.values()].find((s) => s.studentId === S1)!;
     const r = await json(await handleEditOccurrence(w.deps, target.id, "2026-11-10", { requestId: REQ(23), expectedUpdatedAt: target.updatedAt, scope: "future", changes: { studentId: S3 } }));
     expect(r).toMatchObject({ status: 409, body: { error: "legacy_schedule_pending" } });
@@ -344,6 +367,7 @@ describe("routes and source scans (AC18, AC4, AC21)", () => {
   for (const [file, exp] of [
     ["app/api/scheduler/import/route.ts", ["GET", "POST"]],
     ["app/api/scheduler/summaries/sync/route.ts", ["POST"]],
+    ["app/api/scheduler/summaries/drift-seen/route.ts", ["POST"]],
     ["app/api/scheduler/monthly-review/route.ts", ["GET"]],
   ] as const) {
     it(`${file} exports ${exp.join(", ")} and force-dynamic`, () => {
@@ -432,5 +456,110 @@ describe("REQ-35 AC15: summaries go through the outbox when it is wired in", () 
     expect(r.body.results).toEqual([{ studentId: S1, summarySync: "queued" }]);
     expect(w.summaries.get(S1)).toMatchObject({ syncState: "failed", lastError: "Notion returned 500" });
     expect(out.rows.at(-1)).toMatchObject({ status: "pending", attempts: 1 }); // a 500 is retried with backoff (AC4)
+  });
+});
+
+describe("REQ-34: Schedule Source and the drift notice", () => {
+  const T_1 = "2026-10-20T10:00:00.123456+00:00";
+  const T_2 = "2026-10-21T10:00:00.654321+00:00";
+  const adopted = async (initial: Record<string, string>) => {
+    const w = world(initial);
+    await handleImportRun(w.deps, { dryRun: false });
+    return w;
+  };
+
+  it("AC2, AC3: the import run still adopts and syncs, and writes the source line beside slot-only Weekly Schedule", async () => {
+    const w = await adopted({ [S1]: CLEAN, [S2]: NO_TEACHER });
+    expect(w.summaries.get(S1)).toMatchObject({ syncState: "synced" });
+    const written = w.notion.get(S1)!.weeklySchedule;
+    expect(written).toBe(w.calls.write[0].text);
+    expect(written.split("\n").every((l) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) /.test(l))).toBe(true);
+    expect(w.notion.get(S1)!.scheduleSource).toBe(`Generated by the scheduler since ${TODAY}. Edits to Weekly Schedule are replaced. Change classes at https://www.apacademy.ca/tracker/schedule?staffId=${T1}`);
+    expect(w.calls.source.map((c) => c.id)).toEqual([S1]);
+    expect(w.notion.get(S2)!.scheduleSource).toBe("");
+  });
+
+  it("AC9: preview items carry lastDriftAt and driftSeen", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    w.summaries.set(S1, { ...w.summaries.get(S1)!, lastDriftText: "typed", lastDriftAt: T_1, driftSeenAt: null });
+    const r = await json(await handleImportPreview(w.deps));
+    expect(r.body.adopted[0]).toMatchObject({ studentId: S1, lastDriftText: "typed", lastDriftAt: T_1, driftSeen: false });
+    w.summaries.set(S1, { ...w.summaries.get(S1)!, driftSeenAt: T_2 });
+    expect((await json(await handleImportPreview(w.deps))).body.adopted[0].driftSeen).toBe(true);
+  });
+
+  it("AC10: Mark as seen answers 200 with the count, and the notice hides the row", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    w.summaries.set(S1, { ...w.summaries.get(S1)!, lastDriftText: "typed", lastDriftAt: T_1 });
+    const r = await json(await handleDriftSeen(w.deps, { items: [{ studentId: S1, lastDriftAt: T_1 }] }));
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ updated: 1 });
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
+    expect(unseenDrift([...w.summaries.values()])).toEqual([]);
+  });
+
+  it("AC10: an empty or bad body, or a duplicate studentId, is 400 and nothing is written", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    for (const body of [{}, { items: [] }, { items: [{ studentId: "x", lastDriftAt: null }] }, { items: [{ studentId: S1 }] }, { items: [{ studentId: S1, lastDriftAt: null, extra: 1 }] },
+      { items: [{ studentId: S1, lastDriftAt: null }, { studentId: S1, lastDriftAt: T_1 }] }, { items: Array.from({ length: 201 }, (_, i) => ({ studentId: REQ(i), lastDriftAt: null })) }, null]) {
+      expect((await handleDriftSeen(w.deps, body)).status, JSON.stringify(body)?.slice(0, 80)).toBe(400);
+    }
+    expect(w.log.markDriftSeen).toBe(0);
+  });
+
+  it("AC10: a teacher gets 403 and the store is never called", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    expect((await handleDriftSeen(as(w.deps, teacher), { items: [{ studentId: S1, lastDriftAt: null }] })).status).toBe(403);
+    expect(w.log.markDriftSeen).toBe(0);
+  });
+
+  it("AC10: an id that is not adopted is ignored", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    expect((await json(await handleDriftSeen(w.deps, { items: [{ studentId: S3, lastDriftAt: null }] }))).body).toEqual({ updated: 0 });
+  });
+
+  it("AC10 race: a drift recorded after the page loaded is not marked, while a current one is", async () => {
+    const w = await adopted({ [S1]: CLEAN, [S3]: CLEAN });
+    w.summaries.set(S1, { ...w.summaries.get(S1)!, lastDriftText: "typed", lastDriftAt: T_1 });
+    w.summaries.set(S3, { ...w.summaries.get(S3)!, lastDriftText: "other", lastDriftAt: T_1 });
+    // A sync records a newer drift for S1 while the page is open.
+    w.summaries.set(S1, { ...w.summaries.get(S1)!, lastDriftText: "typed again", lastDriftAt: T_2 });
+    const r = await json(await handleDriftSeen(w.deps, { items: [{ studentId: S1, lastDriftAt: T_1 }, { studentId: S3, lastDriftAt: T_1 }] }));
+    expect(r.body).toEqual({ updated: 1 });
+    expect(unseenDrift([...w.summaries.values()]).map((s) => s.studentId)).toEqual([S1]);
+  });
+
+  it("AC10: a legacy row with no drift time is marked with null", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    w.summaries.set(S1, { ...w.summaries.get(S1)!, lastDriftText: "old", lastDriftAt: null });
+    expect((await json(await handleDriftSeen(w.deps, { items: [{ studentId: S1, lastDriftAt: null }] }))).body).toEqual({ updated: 1 });
+    expect(unseenDrift([...w.summaries.values()])).toEqual([]);
+  });
+
+  it("AC5, AC8: a hand edit is replaced and recorded with its time; a later one shows again after Mark as seen", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    const generated = w.notion.get(S1)!.weeklySchedule;
+    w.notion.set(S1, { ...w.notion.get(S1)!, weeklySchedule: "typed by hand" });
+    await handleSyncSummaries(w.deps, {});
+    const row = w.summaries.get(S1)!;
+    expect(w.notion.get(S1)!.weeklySchedule).toBe(generated);
+    expect(row.lastDriftText).toBe("typed by hand");
+    expect(row.lastDriftAt).not.toBeNull();
+    await handleDriftSeen(w.deps, { items: [{ studentId: S1, lastDriftAt: row.lastDriftAt }] });
+    expect(unseenDrift([...w.summaries.values()])).toEqual([]);
+    await new Promise((r) => setTimeout(r, 5));
+    w.notion.set(S1, { ...w.notion.get(S1)!, weeklySchedule: "typed again" });
+    await handleSyncSummaries(w.deps, {});
+    expect(unseenDrift([...w.summaries.values()]).map((s) => s.lastDriftText)).toEqual(["typed again"]);
+  });
+
+  it("AC11: no handler turns drifted text into a class", async () => {
+    const w = await adopted({ [S1]: CLEAN });
+    const before = w.log.createSeries;
+    w.notion.set(S1, { ...w.notion.get(S1)!, weeklySchedule: "Mon 09:00-10:00 | New Class | Jane Doe" });
+    await handleSyncSummaries(w.deps, {});
+    await handleDriftSeen(w.deps, { items: [{ studentId: S1, lastDriftAt: w.summaries.get(S1)!.lastDriftAt }] });
+    expect(w.log.createSeries).toBe(before);
+    expect(w.series.size).toBe(2);
   });
 });

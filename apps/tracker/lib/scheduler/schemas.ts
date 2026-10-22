@@ -181,6 +181,9 @@ const AdoptedOut = z.strictObject({
   lastError: z.string().nullable(),
   lastWrittenAt: z.string().nullable(),
   lastDriftText: z.string().nullable(),
+  // REQ-34: the drift time exactly as stored, and whether the owner has seen it.
+  lastDriftAt: z.string().nullable(),
+  driftSeen: z.boolean(),
 });
 export const ImportPreviewResponse = z.strictObject({ plan: ImportPlanOut, adopted: z.array(AdoptedOut) });
 export const ImportRunResponse = z.strictObject({
@@ -188,6 +191,7 @@ export const ImportRunResponse = z.strictObject({
   plan: ImportPlanOut,
   results: z.array(z.strictObject({ studentId: z.guid(), name: z.string(), status: z.enum(["adopted", "failed"]), summarySync: SummarySync })),
 });
+export const DriftSeenResponse = z.strictObject({ updated: z.number().int().min(0) });
 export const SyncSummariesResponse = z.strictObject({ results: z.array(z.strictObject({ studentId: z.guid(), summarySync: SummarySync })) });
 
 const ReviewItem = z.strictObject({ date: IsoDate, startTime: Hhmm, subject: z.string() });

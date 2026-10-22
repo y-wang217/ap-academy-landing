@@ -3,7 +3,7 @@ import { handleMonthlyBillingInput } from "../../../lib/scheduler/billing-handle
 import { handleDailyTaskCreate, handleDailyTaskStatus } from "../../../lib/scheduler/daily-task-handlers";
 import { handleMe, handleStaffById, handleStaffList } from "../../../lib/scheduler/handlers";
 import { resolveSchedulerIdentity } from "../../../lib/scheduler/identity";
-import { handleImportPreview, handleImportRun, handleMonthlyReview, handleSyncSummaries } from "../../../lib/scheduler/import-handlers";
+import { handleDriftSeen, handleImportPreview, handleImportRun, handleMonthlyReview, handleSyncSummaries } from "../../../lib/scheduler/import-handlers";
 import {
   handleAvailability, handleCancelOccurrence, handleConflicts, handleCreateAvailabilityException, handleCreateClass, handleCreateWindow,
   handleDeleteAvailabilityException, handleDeleteWindow, handleEditOccurrence, handleOccurrences, handlePatchWindow, handleStudentCancellations,
@@ -30,6 +30,7 @@ const ROWS: Row[] = [
   { route: "GET /import", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleImportPreview(d) },
   { route: "POST /import", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleImportRun(d, {}) },
   { route: "POST /summaries/sync", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleSyncSummaries(d, {}) },
+  { route: "POST /summaries/drift-seen", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleDriftSeen(d, {}) },
   { route: "GET /monthly-review", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleMonthlyReview(d, q()) },
   { route: "GET /monthly-billing-input", column: "billing input", allowed: ["admin"], call: (d) => handleMonthlyBillingInput(d, q("month=2026-10")) },
   { route: "GET /daily-task", column: "daily task", allowed: ["admin"], call: (d) => handleDailyTaskStatus(d, q()) },

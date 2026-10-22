@@ -22,6 +22,7 @@ const series = (studentId: string): SeriesRecord => ({
 });
 const summary = (studentId: string): SummaryRecord => ({
   id: `s-${studentId}`, studentId, adoptedAt: TODAY, adoptedFromText: "", lastWrittenText: "", lastWrittenAt: null, syncState: "synced", lastError: null, lastDriftText: null,
+  lastDriftAt: null, driftSeenAt: null,
 });
 
 /** A clock that only moves when the drain sleeps or a test advances it. */
@@ -29,6 +30,7 @@ function harness(opts: { daily?: Partial<DailyTaskDeps> } = {}) {
   let now = T0;
   const out = fakeOutbox(ORG, () => now);
   const notion = new Map<string, string>([[S1, ""], [S2, ""]]);
+  const source = new Map<string, string>();
   const writes: string[] = [];
   const marks: SummaryPatch[] = [];
   /** Each entry is consumed by one Notion write: "ok", an error to throw, or "commit-then-throw". */
@@ -46,12 +48,13 @@ function harness(opts: { daily?: Partial<DailyTaskDeps> } = {}) {
       fetchStaff: async () => [{ id: T1, name: "Ryan", email: null, functions: ["Teacher"], status: "Active", subjects: [] }],
       students: {
         list: async () => [],
-        get: async (id): Promise<StudentRecord | null> => ({ id, name: "x", stage: "Active", weeklySchedule: notion.get(id) ?? "" }),
-        write: async (id, text) => {
+        get: async (id): Promise<StudentRecord | null> => ({ id, name: "x", stage: "Active", weeklySchedule: notion.get(id) ?? "", scheduleSource: source.get(id) ?? "" }),
+        write: async (id, patch) => {
           const step = plan.shift() ?? "ok";
           if (step instanceof Error) throw step;
           writes.push(id);
-          notion.set(id, text);
+          if (patch.weeklySchedule !== undefined) notion.set(id, patch.weeklySchedule);
+          if (patch.scheduleSource !== undefined) source.set(id, patch.scheduleSource);
           if (typeof step === "object") throw step.commitThen;
         },
       },
@@ -191,7 +194,7 @@ describe("drainOutbox: limits (AC5)", () => {
   it("stops after 20 s", async () => {
     const h = harness();
     many(h, 12);
-    h.deps.summary!.students.get = async (id) => { h.advance(4_000); return { id, name: "x", stage: "Active", weeklySchedule: "" }; };
+    h.deps.summary!.students.get = async (id) => { h.advance(4_000); return { id, name: "x", stage: "Active", weeklySchedule: "", scheduleSource: "" }; };
     const done = await drainOutbox(h.deps);
     expect(done.length).toBeLessThan(10);
     expect(done.length).toBe(5);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isUnseenDrift } from "../domain/schedule/drift-notice";
 import { planImport, type ImportPlan, type StudentInput } from "../domain/schedule/import-plan";
 import { monthlyReview, renderSummary } from "../domain/schedule/summary";
 import type { StaffRecord } from "../notion/staff";
@@ -6,14 +7,15 @@ import type { StudentRecord } from "../notion/students";
 import { requireScheduler, type Allowed, type Denial } from "./guard";
 import { importRequestId } from "./request-id";
 import type { ScheduleDeps } from "./schedule-handlers";
-import { ImportPlanOut, ImportPreviewResponse, ImportRunResponse, MonthlyReviewResponse, SyncSummariesResponse } from "./schemas";
+import { DriftSeenResponse, ImportPlanOut, ImportPreviewResponse, ImportRunResponse, MonthlyReviewResponse, SyncSummariesResponse } from "./schemas";
 import { syncStudentSummary, type StudentsPort } from "./summary-sync";
 import { deliverSummaries, type SummaryOutcome } from "./outbox-wiring";
 import { summaryKey } from "./outbox-store";
 
 /**
  * Admin-only endpoints for the Weekly Schedule import (REQ-4): preview and run
- * the import, retry the Notion write-back, and the monthly review list. The
+ * the import, retry the Notion write-back, mark replaced Notion edits as seen
+ * (REQ-34), and the monthly review list. The
  * handlers hold no Notion or Supabase code: both arrive through ScheduleDeps.
  */
 const HEADERS = { "Cache-Control": "no-store" };
@@ -61,6 +63,7 @@ async function handleImportPreviewInner(deps: ScheduleDeps): Promise<Response> {
     adopted: summaries.map((s) => ({
       studentId: s.studentId, name: names.get(s.studentId) ?? null, adoptedAt: s.adoptedAt, syncState: s.syncState,
       lastError: s.lastError, lastWrittenAt: s.lastWrittenAt, lastDriftText: s.lastDriftText,
+      lastDriftAt: s.lastDriftAt, driftSeen: !isUnseenDrift(s),
     })),
   }));
 }
@@ -132,6 +135,26 @@ async function handleSyncSummariesInner(deps: ScheduleDeps, body: unknown): Prom
   return send(200, SyncSummariesResponse.parse({ results }));
 }
 
+const DriftSeenBody = z.strictObject({
+  items: z.array(z.strictObject({ studentId: z.guid(), lastDriftAt: z.string().max(40).nullable() })).min(1).max(200),
+});
+
+/**
+ * POST: mark replaced Notion edits as seen (REQ-34 AC10). Each item carries the
+ * drift time the page showed; a row whose drift moved since is left unseen.
+ * An id that is not adopted matches no row and is ignored.
+ */
+async function handleDriftSeenInner(deps: ScheduleDeps, body: unknown): Promise<Response> {
+  const g = requireScheduler(await deps.identity(), ["admin"]);
+  if (!g.ok) return deny(g);
+  const parsed = DriftSeenBody.safeParse(body);
+  if (!parsed.success) return send(400, { error: "invalid_request" });
+  const ids = parsed.data.items.map((i) => i.studentId);
+  if (new Set(ids).size !== ids.length) return send(400, { error: "invalid_request" });
+  const updated = await deps.store.markDriftSeen(parsed.data.items);
+  return send(200, DriftSeenResponse.parse({ updated }));
+}
+
 const Month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 
 /** GET ?month=YYYY-MM: what Charlie should check before the monthly run. */
@@ -184,4 +207,5 @@ async function guarded(fn: () => Promise<Response>): Promise<Response> {
 export const handleImportPreview = (...args: Parameters<typeof handleImportPreviewInner>) => guarded(() => handleImportPreviewInner(...args));
 export const handleImportRun = (...args: Parameters<typeof handleImportRunInner>) => guarded(() => handleImportRunInner(...args));
 export const handleSyncSummaries = (...args: Parameters<typeof handleSyncSummariesInner>) => guarded(() => handleSyncSummariesInner(...args));
+export const handleDriftSeen = (...args: Parameters<typeof handleDriftSeenInner>) => guarded(() => handleDriftSeenInner(...args));
 export const handleMonthlyReview = (...args: Parameters<typeof handleMonthlyReviewInner>) => guarded(() => handleMonthlyReviewInner(...args));

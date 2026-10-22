@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { buttonClass, Card, Empty, inputClass, linkClass, Notice, secondaryButtonClass } from "@/components/ui";
+import { unseenDrift } from "@/lib/domain/schedule/drift-notice";
+import { todayIso } from "@/lib/time";
 
 /** The tracker is served under /tracker, and fetch does not add the base path. */
 const API = "/tracker/api/scheduler";
@@ -13,7 +15,11 @@ type Plan = {
   repair: { studentId: string; name: string; lines: Line[] }[];
   skipped: { studentId: string }[];
 };
-type Adopted = { studentId: string; name: string | null; syncState: "pending" | "synced" | "failed"; lastError: string | null; lastDriftText: string | null };
+type Adopted = {
+  studentId: string; name: string | null; syncState: "pending" | "synced" | "failed"; lastError: string | null; lastDriftText: string | null;
+  /** REQ-34: exactly as the preview returned it; posted back unchanged by Mark as seen. */
+  lastDriftAt: string | null; driftSeen: boolean;
+};
 type Review = {
   studentId: string; name: string | null; needsReview: boolean;
   cancelled: { date: string; subject: string }[]; moved: { originalDate: string; date: string; startTime: string; subject: string }[];
@@ -57,6 +63,8 @@ export function ScheduleImport() {
   const [month, setMonth] = useState(nextMonth);
   const [review, setReview] = useState<Review[] | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [seenBusy, setSeenBusy] = useState(false);
+  const [seenError, setSeenError] = useState<string | null>(null);
 
   // readPlan and loadReview set state only in promise callbacks, so the effects
   // below can call them (react-hooks/set-state-in-effect).
@@ -137,6 +145,26 @@ export function ScheduleImport() {
     }
   }
 
+  // REQ-34: the preview says per row whether the owner has seen the replaced edit; unseenDrift orders them.
+  const replaced = unseenDrift(adopted.filter((a) => !a.driftSeen).map((a) => ({ ...a, driftSeenAt: null })));
+
+  async function markSeen() {
+    setSeenBusy(true);
+    setSeenError(null);
+    try {
+      const res = await fetch(`${API}/summaries/drift-seen`, {
+        method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: replaced.map((a) => ({ studentId: a.studentId, lastDriftAt: a.lastDriftAt })) }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      await readPlan();
+    } catch {
+      setSeenError("Could not save. Try again.");
+    } finally {
+      setSeenBusy(false);
+    }
+  }
+
   const ready = plan?.ready.length ?? 0;
   const repair = plan?.repair.length ?? 0;
 
@@ -182,6 +210,26 @@ export function ScheduleImport() {
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {replaced.length > 0 && (
+        <Card title="Notion edits replaced">
+          <p className="text-sm">These edits in Weekly Schedule were replaced by the scheduler.</p>
+          <p className="text-sm">A Notion edit does not change the calendar. Change classes in the schedule.</p>
+          {seenError && <Notice tone="error">{seenError}</Notice>}
+          <ul className="divide-y divide-border">
+            {replaced.map((a) => (
+              <li key={a.studentId} className="flex flex-col gap-1 py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <strong>{a.name ?? "Student not in the Active list"}</strong>
+                  <span className="text-text-muted">{a.lastDriftAt ? `Replaced ${todayIso(new Date(a.lastDriftAt))}` : "Before this notice existed"}</span>
+                </div>
+                <pre className="whitespace-pre-wrap text-text-muted">{a.lastDriftText}</pre>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={markSeen} disabled={seenBusy} className={secondaryButtonClass}>{seenBusy ? "Saving..." : "Mark as seen"}</button>
         </Card>
       )}
 

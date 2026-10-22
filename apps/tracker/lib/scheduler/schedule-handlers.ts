@@ -33,6 +33,8 @@ export type ScheduleDeps = HandlerDeps & {
   store: ScheduleStore;
   today: () => string;
   students?: StudentsPort;
+  /** The origin the Schedule Source link points at (REQ-34). Defaults to SITE_URL in the sync. */
+  siteUrl?: string;
   /** Student names for the calendar (REQ-6), from the local people copy (REQ-38), archived included. Names only. */
   studentNames?: () => Promise<Map<string, string>>;
   /** Active, not archived students for pickers (REQ-38 AC14). */
@@ -535,7 +537,7 @@ async function syncStudents(deps: ScheduleDeps, studentIds: string[]): Promise<S
   if (!deps.students) return undefined;
   const results: SyncResult[] = [];
   for (const id of new Set(studentIds)) {
-    results.push(await syncStudentSummary({ store: deps.store, students: deps.students, fetchStaff: deps.fetchStaff, today: deps.today }, id));
+    results.push(await syncStudentSummary({ store: deps.store, students: deps.students, fetchStaff: deps.fetchStaff, today: deps.today, siteUrl: deps.siteUrl }, id));
   }
   return results.includes("failed") ? "failed" : results.includes("synced") ? "synced" : "skipped";
 }

@@ -7,7 +7,7 @@ import type { SyncResult } from "./summary-sync";
 export function drainDepsOf(deps: ScheduleDeps & { outbox: OutboxStore }): DrainDeps {
   return {
     outbox: deps.outbox,
-    summary: deps.students ? { store: deps.store, students: deps.students, fetchStaff: deps.fetchStaff, today: deps.today } : undefined,
+    summary: deps.students ? { store: deps.store, students: deps.students, fetchStaff: deps.fetchStaff, today: deps.today, siteUrl: deps.siteUrl } : undefined,
     dailyTask: deps.dailyTask,
     today: deps.today,
     now: () => new Date(),

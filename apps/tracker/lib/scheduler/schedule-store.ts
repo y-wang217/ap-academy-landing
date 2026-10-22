@@ -52,9 +52,14 @@ export type SummaryRecord = {
   syncState: SummaryState;
   lastError: string | null;
   lastDriftText: string | null;
+  /** When a sync last replaced a hand edit, and when the owner last marked that seen (0026, REQ-34). */
+  lastDriftAt: string | null;
+  driftSeenAt: string | null;
 };
 export type AdoptInput = { studentId: string; sourceText: string; series: NewSeries[] };
-export type SummaryPatch = { syncState: SummaryState; lastWrittenText?: string; lastError?: string | null; lastDriftText?: string };
+export type SummaryPatch = { syncState: SummaryState; lastWrittenText?: string; lastError?: string | null; lastDriftText?: string; lastDriftAt?: string };
+/** One row the owner saw on the drift notice, with its drift time exactly as the preview returned it. */
+export type DriftSeenItem = { studentId: string; lastDriftAt: string | null };
 
 /**
  * Everything the scheduling handlers need from storage. The real one
@@ -92,4 +97,10 @@ export type ScheduleStore = {
   /** One transaction: the student's series and the summary row, or nothing. A repeat returns the existing row. */
   adoptStudent(input: AdoptInput): Promise<StoreResult<SummaryRecord>>;
   markSummary(studentId: string, patch: SummaryPatch): Promise<boolean>;
+  /**
+   * Marks each row seen only where its drift time is still the one posted, so
+   * a drift recorded after the page loaded stays unseen. Returns the rows
+   * changed. Throws when storage is down (REQ-34 AC10).
+   */
+  markDriftSeen(items: DriftSeenItem[]): Promise<number>;
 };
