@@ -1,3 +1,6 @@
+import { weekOf } from "../domain/schedule/week";
+import { addDays } from "../domain/schedule/wallclock";
+
 /** The console's three modes (REQ-55 AC2). The URL's ?mode= picks one; anything else is Sales. */
 export const CONSOLE_MODES = ["sales", "creation", "operations"] as const;
 export type ConsoleMode = (typeof CONSOLE_MODES)[number];
@@ -23,4 +26,14 @@ export function tabKeyTarget(key: string, index: number, count: number): number 
     default:
       return null;
   }
+}
+
+/**
+ * The Toronto week ?week= picks (REQ-56 AC9): the week of a valid YYYY-MM-DD date, or the current
+ * week for anything missing, malformed or in the future.
+ */
+export function parseWeek(value: unknown, today: string): { from: string; to: string } {
+  const first = Array.isArray(value) ? value[0] : value;
+  const valid = typeof first === "string" && /^\d{4}-\d{2}-\d{2}$/.test(first) && addDays(first, 0) === first;
+  return weekOf(valid && first <= today ? first : today);
 }

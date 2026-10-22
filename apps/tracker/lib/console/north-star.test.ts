@@ -16,7 +16,8 @@ const INVOICES_FETCHED = "2026-10-22T15:59:00.000Z";
 function result<T>(panel: PanelResult<T>["panel"], status: PanelStatus, data: T | null, staleReason: string | null = null): PanelResult<T> {
   return {
     panel, status, data, count: Array.isArray(data) ? data.length : null, lastCheckedAt: NOW.toISOString(),
-    lastSuccessfulFetchAt: status === "error" ? null : INVOICES_FETCHED, staleReason, errorMessage: status === "error" ? "Timed out after 8 s" : null, sourceEvidence: [],
+    lastSuccessfulFetchAt: status === "error" ? null : INVOICES_FETCHED, staleReason, errorMessage: status === "error" ? "Timed out after 8 s" : null,
+    sourceEvidence: [{ source: "notion", sourceId: `${panel}-source`, sourceUrl: null, observedAt: NOW.toISOString() }],
   };
 }
 const invoice = (studentId: string, status = "Paid"): InvoiceRow => ({
@@ -70,8 +71,7 @@ describe("buildNorthStar", () => {
     expect(v.data?.current.netNewVerifiedMinutes).toBe(60);
     expect(v.data?.weekLabel).toBe("Mon 19 Oct to Sun 25 Oct");
     expect(v.data?.names[S1.replaceAll("-", "")]).toBe("Sam R.");
-    expect(v.sourceEvidence.map((e) => e.sourceId)).toEqual(expect.arrayContaining(["tracker.class_series", "tracker.schedule_summaries", "tracker.student_people"]));
-    expect(v.sourceEvidence).toHaveLength(4);
+    expect(v.sourceEvidence.map((e) => e.sourceId)).toEqual(["tracker.class_series", "tracker.schedule_summaries", "tracker.student_people", "invoices-source"]);
     expect(v.lastSuccessfulFetchAt).toBe(INVOICES_FETCHED);
     expect(v.count).toBe(1);
   });
@@ -81,7 +81,7 @@ describe("buildNorthStar", () => {
   });
 
   it.each([
-    ["Invoices error", panels({ invoices: result("invoices", "error", null) }), "Cannot verify weekly hours: Timed out after 8 s"],
+    ["Invoices error", panels({ invoices: result<InvoiceRow[]>("invoices", "error", null) }), "Cannot verify weekly hours: Timed out after 8 s"],
     ["Invoices stopped at the page cap", panels({ invoices: result("invoices", "stale", [invoice(S1)], "Stopped after 10 pages; showing 1000 rows") }), "Cannot verify weekly hours: Stopped after 10 pages; showing 1000 rows"],
   ])("%s: unverifiable with gross figures and no classified figure (AC4)", (_, p, reason) => {
     const v = buildNorthStar(input({ panels: p }, [series(), series({ startDate: "2026-09-01", effectiveUntil: "2026-10-20" })]));
@@ -128,7 +128,7 @@ describe("buildNorthStar", () => {
   });
 
   it.each([
-    ["Invoices error", { panels: panels({ invoices: result("invoices", "error", null) }) }],
+    ["Invoices error", { panels: panels({ invoices: result<InvoiceRow[]>("invoices", "error", null) }) }],
     ["people failure", { people: { ok: false } as const }],
   ])("a failed series read wins over %s", (_, over) => {
     expect(buildNorthStar(input({ ...over, series: { ok: false } })).status).toBe("error");
@@ -157,8 +157,8 @@ describe("buildNorthStar", () => {
   });
 
   it("AC10: an unusable leads panel gives no lead readouts", () => {
-    expect(buildNorthStar(input({ panels: panels({ leads: result("leads", "error", null) }) })).data?.diagnostics.leads).toBeNull();
-    expect(buildNorthStar(input({ panels: panels({ leads: result("leads", "stale", [], "Stopped after 10 pages; showing 0 rows") }) })).data?.diagnostics.leads).toBeNull();
+    expect(buildNorthStar(input({ panels: panels({ leads: result<LeadRow[]>("leads", "error", null) }) })).data?.diagnostics.leads).toBeNull();
+    expect(buildNorthStar(input({ panels: panels({ leads: result<LeadRow[]>("leads", "stale", [], "Stopped after 10 pages; showing 0 rows") }) })).data?.diagnostics.leads).toBeNull();
   });
 
   it("week links: previous always, next only before the current week (AC9)", () => {

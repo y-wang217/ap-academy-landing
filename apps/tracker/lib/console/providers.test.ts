@@ -46,9 +46,9 @@ describe("sharePeopleRead", () => {
   it("passes every other dep through unchanged", () => {
     const base = createConsoleDeps(viewer("10000000-0000-0000-0000-00000000aaaa"));
     const shared = sharePeopleRead(base);
-    const { people: _a, ...rest } = shared;
-    const { people: _b, ...restBase } = base;
-    expect(rest).toEqual(restBase);
+    const withoutPeople = (d: typeof base) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== "people"));
+    expect(withoutPeople(shared)).toEqual(withoutPeople(base));
+    expect(shared.people).not.toBe(base.people);
     expect(shared.freshness).toBe(base.freshness);
   });
 });

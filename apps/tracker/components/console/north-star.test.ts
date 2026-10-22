@@ -54,7 +54,7 @@ describe("NorthStar", () => {
   it("verified: the value, week, opening, unverified net and diagnostics", () => {
     const out = render(build());
     expect(out).toContain('data-status="ready"');
-    expect(out).toMatch(/data-panel-value="">\+1 h</);
+    expect(out).toMatch(/data-panel-value=""[^>]*>\+1 h</);
     expect(out).toContain("net new verified hours, Mon 19 Oct to Sun 25 Oct");
     expect(out).toContain("Unverified net -1 h (not counted)");
     expect(out).toContain("Leads awaiting first contact 0");
@@ -80,7 +80,7 @@ describe("NorthStar", () => {
   });
 
   it("unverifiable: the reason, the week, a retry, gross unclassified, never a verified figure (AC4)", () => {
-    const out = render(build({ panels: panels(result("invoices", "error", null)) }));
+    const out = render(build({ panels: panels(result<InvoiceRow[]>("invoices", "error", null)) }));
     expect(out).toContain('data-status="unverifiable"');
     expect(out).toContain("Cannot verify weekly hours");
     expect(out).toContain("Timed out after 8 s");
@@ -130,6 +130,6 @@ describe("NorthStar", () => {
     const zeroPrior = render(build({}, [series({ durationMinutes: 90 })]));
     expect(zeroPrior).toContain("vs last week +1.5 h");
     expect(zeroPrior).not.toContain("%");
-    expect(render(build({ panels: panels(result("invoices", "error", null)) }))).not.toContain("vs last week");
+    expect(render(build({ panels: panels(result<InvoiceRow[]>("invoices", "error", null)) }))).not.toContain("vs last week");
   });
 });
