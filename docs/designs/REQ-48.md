@@ -68,5 +68,7 @@ Auto-send, quiet hours, `sending_enabled`, per-type switches and the automated l
 
 ## Built differently from the design, and why
 
+- **`approve_draft` is not revoked in 0028.** Revoking it in the migration breaks the deployed app's Approve while 0028 is live and this feature is not, and it turned the migration PR's own e2e red (the REQ-44 Approve flow timed out on #122). The feature never calls `approve_draft`, so approving through the tracker always creates a send; the revoke (and the AC11 assertion that `approve_draft` is denied to `authenticated`) moves to a one-line follow-up migration, run once this card is live.
+
 - The design shows Retry on a `sending` send once its lease has passed. `retry_send` (AC6) refuses anything not `failed` with 409, so the page shows Retry only on a failed send; a stuck `sending` send is picked up by the next poll run.
 - The `/send` scan rule is written as "`messages/send` only in `gmail.ts`", because the handler's own `import ... from "./send"` would otherwise match.
