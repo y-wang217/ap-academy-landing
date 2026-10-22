@@ -1,4 +1,6 @@
 import { notFound, redirect } from "next/navigation";
+import { cache } from "react";
+import type { OwnerViewer } from "./console/guard";
 import { getViewer, listChildren, listLoginEmails, loadBundle, type Bundle } from "./data/queries";
 import type { ChildRecord } from "./data/schemas";
 import { todayIso } from "./time";
@@ -45,3 +47,17 @@ export async function parentChild(studentId: string): Promise<{
   if (!child) notFound();
   return { viewer, children, child };
 }
+
+/**
+ * For the founder console layout and page (REQ-53, tracker ADR 0062): the org
+ * owner, or a 404 for anyone else. A session that is gone by render time (a
+ * prefetch skips the proxy) is "expired", so the caller shows the notice. No
+ * resolveSchedulerIdentity(): no staff-link claim, no Notion, no outbox drain.
+ * Cached, so the layout and the page share one getViewer() per request.
+ */
+export const ownerViewer = cache(async (): Promise<{ kind: "expired" } | { kind: "owner"; viewer: OwnerViewer }> => {
+  const viewer = await getViewer();
+  if (viewer.kind === "signed_out") return { kind: "expired" };
+  if (viewer.kind !== "staff" || viewer.role !== "owner") notFound();
+  return { kind: "owner", viewer: { ...viewer, role: "owner" } };
+});

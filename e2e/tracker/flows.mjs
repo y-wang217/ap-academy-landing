@@ -1434,6 +1434,56 @@ try {
   await teacher2.goto(`${BASE}`);
   check("REQ-33: teacher2's home has no Setup link", (await teacher2.getByRole("link", { name: "Setup", exact: true }).count()) === 0);
 
+  // REQ-53: the founder console. Only the owner gets the page and the health route; every other viewer gets the
+  // same 404 body and a fixed 403, and a cross-site write is refused by the proxy before the session is read.
+  const consolePage = async (who) => {
+    const res = await who.context().request.get(`${BASE}/console`, { maxRedirects: 0 });
+    return { status: res.status(), body: await res.text() };
+  };
+  const consoleHealth = async (who, init = {}) => {
+    const res = await who.context().request.fetch(`${BASE}/api/console/health`, { maxRedirects: 0, ...init });
+    return { status: res.status(), body: await res.text(), headers: res.headers() };
+  };
+  const ownerConsole = await consolePage(teacher);
+  check("REQ-53: the owner reaches /tracker/console", ownerConsole.status === 200 && ownerConsole.body.includes("data-console") && ownerConsole.body.includes(">Console<"), String(ownerConsole.status));
+  const ownerHealth = await consoleHealth(teacher);
+  const ownerHealthBody = ownerHealth.status === 200 ? JSON.parse(ownerHealth.body) : null;
+  check("REQ-53: the owner's health check is 200 ok, no-store",
+    ownerHealth.status === 200 && ownerHealthBody?.status === "ok" && !Number.isNaN(Date.parse(ownerHealthBody?.checkedAt)) && Object.keys(ownerHealthBody).length === 2 && ownerHealth.headers["cache-control"] === "no-store",
+    `${ownerHealth.status} ${ownerHealth.body}`);
+  await teacher.goto(`${BASE}`);
+  check("REQ-53: the owner's home links Console", (await teacher.getByRole("link", { name: "Console", exact: true }).count()) === 1);
+  {
+    const guestContext = await browser.newContext();
+    const guestReq = guestContext.request;
+    const guestPage = await guestReq.get(`${BASE}/console`, { maxRedirects: 0 });
+    const guestBody = await guestPage.text();
+    check("REQ-53: a guest gets 307 to /login?next=/tracker/console with no console markup",
+      guestPage.status() === 307 && guestPage.headers()["location"] === "/login?next=/tracker/console" && !guestBody.includes("Console") && !guestBody.includes("data-console"),
+      `${guestPage.status()} ${guestPage.headers()["location"]}`);
+    const guestHealth = await guestReq.get(`${BASE}/api/console/health`, { maxRedirects: 0 });
+    check("REQ-53: a guest's health check gets the same 307", guestHealth.status() === 307 && guestHealth.headers()["location"] === "/login?next=/tracker/api/console/health", `${guestHealth.status()} ${guestHealth.headers()["location"]}`);
+    await guestContext.close();
+  }
+  const SENTINELS = ["Console", "data-console", "Sam", "parent@example.com", "teacher@example.com"];
+  const nobodyConsole = await consolePage(outsider);
+  check("REQ-53: the role-less user gets 404 with no sensitive text", nobodyConsole.status === 404 && SENTINELS.every((s) => !nobodyConsole.body.includes(s)), String(nobodyConsole.status));
+  const consoleDenied = async (label, who) => {
+    const page = await consolePage(who);
+    check(`REQ-53: ${label} gets 404 from /tracker/console, byte-identical to the role-less body`, page.status === 404 && page.body === nobodyConsole.body, String(page.status));
+    const health = await consoleHealth(who);
+    check(`REQ-53: ${label} gets 403 forbidden from the health route`, health.status === 403 && health.body === '{"error":"forbidden"}' && health.headers["cache-control"] === "no-store", `${health.status} ${health.body}`);
+  };
+  await consoleDenied("Ryan (scheduling teacher)", ryan);
+  await consoleDenied("teacher2 (grade teacher)", teacher2);
+  await consoleDenied("sam (student)", student);
+  await consoleDenied("the parent", parent);
+  await consoleDenied("nobody (no role)", outsider);
+  const crossSite = await consoleHealth(teacher, { method: "POST", headers: { origin: "https://evil.example" } });
+  check("REQ-53: a cross-site POST to the console is refused by the proxy", crossSite.status === 403 && crossSite.body === '{"error":"forbidden"}', `${crossSite.status} ${crossSite.body}`);
+  const sameSite = await consoleHealth(teacher, { method: "POST", headers: { origin: ORIGIN } });
+  check("REQ-53: the same POST same-site reaches the route and gets 405", sameSite.status === 405, String(sameSite.status));
+
   // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.
   const timing = teacher;
   const timingRes = await timing.context().request.get(`${BASE}/api/scheduler/me`);
@@ -1701,6 +1751,10 @@ try {
   check("REQ-32: after removal the parent gets [] for that child", isEmpty(await restAs("parent@example.com", `students?id=eq.${diId}`)));
   psql("delete from tracker.memberships where user_id = (select id from auth.users where email = 'teacher2@example.com')");
   check("REQ-32: after the membership is deleted teacher2 gets [] from students", isEmpty(await restAs("teacher2@example.com", "students")));
+
+  // REQ-53: a revoked staff link and a deleted membership still get nothing from the console.
+  await consoleDenied("Ryan after his link is revoked", ryan);
+  await consoleDenied("teacher2 after the membership is deleted", teacher2);
 
   // REQ-33 step B: fill every gap by psql, then the five rows turn Done with exact counts. Runs last: it links the parent to every child.
   for (const [staffId, email] of [[SETUP_STAFF[0], "ryan@example.com"], [SETUP_STAFF[1], "kuby@example.com"]]) {
