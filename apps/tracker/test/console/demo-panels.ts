@@ -3,7 +3,10 @@ import type { MetricData } from "../../components/console/kit/metric";
 import type { QueueItem } from "../../components/console/kit/queue-row";
 import type { RadarStage } from "../../components/console/kit/radar";
 import type { ConsolePanels } from "../../lib/console/panel-slots";
+import type { ConsolePanels as ConsolePanelResults } from "../../lib/console/contracts";
 import { notConnected, type PanelStatus, type PanelView } from "../../lib/console/panel-view";
+import { buildSalesView, type SalesView } from "../../lib/console/sales-view";
+import { fixtureLeads, TRIAL_F } from "./sales-fixtures";
 
 /**
  * Neutral test values for the kit preview and unit tests (REQ-55). Never imported by
@@ -70,4 +73,14 @@ export function demoPanels(now: Date): ConsolePanels {
       integrations: result<QueueItem[]>("integrations", now, "ready", [{ id: "int-1", title: "Notion", reason: "Read in time" }]),
     },
   };
+}
+
+/** REQ-57: a Sales queue and radar from the ranking fixtures, for the preview's NEXT and radar slots. */
+export function demoSales(now: Date): SalesView {
+  const at = now.toISOString();
+  const r = <T,>(panel: string, data: T) => ({ panel, status: "ready", data, count: null, lastCheckedAt: at, lastSuccessfulFetchAt: at, staleReason: null, errorMessage: null, sourceEvidence: [] });
+  return buildSalesView({
+    leads: r("leads", fixtureLeads()), touches: r("touches", []), trialLessons: r("trialLessons", [TRIAL_F]), work: r("work", []), invoices: r("invoices", []),
+    people: r("people", { syncedAt: at, students: 0, staff: 0 }),
+  } as ConsolePanelResults, now);
 }

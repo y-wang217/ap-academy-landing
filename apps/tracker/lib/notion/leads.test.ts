@@ -83,7 +83,7 @@ describe("fetchLeads", () => {
     expect(r.complete).toBe(true);
     expect(r.skipped).toBe(0);
     const row = r.rows[0];
-    expect(Object.keys(row).sort()).toEqual(LEAD_SOURCE_KEYS);
+    expect(Object.keys(row).sort()).toEqual([...LEAD_SOURCE_KEYS].sort());
     expect(row).toMatchObject({
       id: S1, name: "Sam Lee", stage: "New", ownerStaffId: OWNER, trialTeacherId: TEACHER, attempts: 2,
       nextActionDue: "2026-11-01T04:30:00.000Z", lastContact: "2026-10-19", lostReason: null, hasMajorGaps: true, hasTrialSummary: false,

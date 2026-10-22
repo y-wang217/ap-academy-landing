@@ -33,7 +33,12 @@ function panels(over: Partial<ConsolePanels> = {}, leads: LeadRow[] = fixtureLea
 }
 const keysDeep = (v: unknown, out = new Set<string>()): Set<string> => {
   if (Array.isArray(v)) v.forEach((x) => keysDeep(x, out));
-  else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) (out.add(k), keysDeep(x, out));
+  else if (v && typeof v === "object") {
+    for (const [k, x] of Object.entries(v)) {
+      out.add(k);
+      keysDeep(x, out);
+    }
+  }
   return out;
 };
 
@@ -60,7 +65,7 @@ describe("buildSalesView", () => {
   });
 
   it("leads error gives queue and radar error, with no data (AC6, AC9)", () => {
-    const v = buildSalesView(panels({ leads: result("leads", "error", null) }), SALES_NOW);
+    const v = buildSalesView(panels({ leads: result("leads", "error", null as never) }), SALES_NOW);
     expect([v.queue.status, v.radar.status]).toEqual(["error", "error"]);
     expect(v.queue.data).toBeNull();
     expect(v.queue.errorMessage).toBe("Timed out after 8 s");
@@ -87,14 +92,14 @@ describe("buildSalesView", () => {
   });
 
   it("trial lessons failing with a Trial Claimed row is stale with the trial reason (AC4)", () => {
-    const v = buildSalesView(panels({ trialLessons: result("trialLessons", "error", null) }), SALES_NOW);
+    const v = buildSalesView(panels({ trialLessons: result("trialLessons", "error", null as never) }), SALES_NOW);
     expect(v.queue.status).toBe("stale");
     expect(v.queue.staleReason).toBe("Trial lessons unavailable; post-trial order may be incomplete");
     const f = v.queue.data!.items.find((i) => i.id === LEAD_IDS.F)!;
     expect(f.trial?.lesson).toEqual({ state: "unavailable" });
     const capped = buildSalesView(panels({ trialLessons: result("trialLessons", "stale", [TRIAL_F], { staleReason: `${PAGE_CAP_PREFIX}10 pages; showing 1 rows` }) }), SALES_NOW);
     expect(capped.queue.status).toBe("stale");
-    const noClaim = buildSalesView(panels({ trialLessons: result("trialLessons", "error", null) }, [lead("A", { stage: "New" })]), SALES_NOW);
+    const noClaim = buildSalesView(panels({ trialLessons: result("trialLessons", "error", null as never) }, [lead("A", { stage: "New" })]), SALES_NOW);
     expect(noClaim.queue.status).toBe("ready");
   });
 
@@ -120,7 +125,7 @@ describe("buildSalesView", () => {
   });
 
   it("touches error gives lastTouch unavailable", () => {
-    const items = buildSalesView(panels({ touches: result("touches", "error", null) }), SALES_NOW).queue.data!.items;
+    const items = buildSalesView(panels({ touches: result("touches", "error", null as never) }), SALES_NOW).queue.data!.items;
     expect(items.every((i) => i.lastTouch.state === "unavailable")).toBe(true);
   });
 

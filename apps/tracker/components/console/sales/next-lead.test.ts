@@ -31,7 +31,7 @@ function salesView(
   return buildSalesView(panels, SALES_NOW);
 }
 const frame = { id: "next", title: "Next contact", emptyText: "Queue clear", primary: true, retryHref: "?mode=sales" };
-const render = (v: SalesView) => renderToStaticMarkup(h(SalesProvider, { initial: v }, h(NextLead, frame)));
+const render = (v: SalesView) => renderToStaticMarkup(h(SalesProvider, { initial: v, children: h(NextLead, frame) }));
 const count = (src: string, needle: string) => src.split(needle).length - 1;
 const rolodex = (out: string) => out.slice(out.indexOf("data-rolodex"));
 
@@ -114,7 +114,7 @@ describe("NextLead", () => {
 });
 
 describe("SalesRadar (AC9)", () => {
-  const radar = (v: SalesView) => renderToStaticMarkup(h(SalesProvider, { initial: v }, h(SalesRadar, { id: "radar", title: "Lead radar", emptyText: "No active leads", retryHref: "?mode=sales" })));
+  const radar = (v: SalesView) => renderToStaticMarkup(h(SalesProvider, { initial: v, children: h(SalesRadar, { id: "radar", title: "Lead radar", emptyText: "No active leads", retryHref: "?mode=sales" }) }));
 
   it("has five rows with the bucket labels and counts", () => {
     const out = radar(salesView());

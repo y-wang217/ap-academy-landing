@@ -17,6 +17,18 @@ export function ShortcutHelp() {
           <dd>Next panel or link</dd>
         </div>
         <div>
+          <dt>Up, Down, Home, End</dt>
+          <dd>Move in the lead queue</dd>
+        </div>
+        <div>
+          <dt>Enter</dt>
+          <dd>Open the selected lead in Notion</dd>
+        </div>
+        <div>
+          <dt>/</dt>
+          <dd>Focus the queue filter</dd>
+        </div>
+        <div>
           <dt>?</dt>
           <dd>Open this list</dd>
         </div>
