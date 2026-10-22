@@ -1,0 +1,655 @@
+/*
+ * The founder console's command bridge (REQ-55, tracker ADR 0066). Scoped to
+ * [data-console]. Tokens from VISUAL_DIRECTION.md; system fonts only; 12 px is
+ * the smallest type. Panels sit in the DOM in slot order (lib/console/panel-slots.ts)
+ * and grid-template-areas places them, so focus order never follows the layout.
+ */
+[data-console] {
+  --canvas: #100D18;
+  --surface: #1D1422;
+  --surface-raised: #281926;
+  --border: #754454;
+  --amber: #FFC078;
+  --coral: #FF6B65;
+  --magenta: #E14E87;
+  --cyan: #6FCDD2;
+  --green: #86D7A0;
+  --muted: #BB9DAF;
+  --text: #FFE8D1;
+  --shadow-glow: 0 0 22px #FF6B6533;
+  --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-readout: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--canvas);
+  color: var(--text);
+  color-scheme: dark;
+  font-family: var(--font-display);
+  font-size: 14px;
+  overflow-x: clip;
+}
+
+[data-console] :focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+[data-console] [role="tabpanel"][hidden] {
+  display: none;
+}
+
+/* A: the horizon. */
+.console-horizon {
+  position: relative;
+  height: clamp(120px, 18vh, 210px);
+  overflow: hidden;
+  border-bottom: 3px solid #AD5364;
+}
+.console-horizon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.console-horizon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 10px solid #1B121E;
+  border-bottom: 0;
+  box-shadow: inset 0 0 0 2px #9B495C, inset 0 -18px 30px #140D1C;
+  pointer-events: none;
+}
+
+/* B: the header rail. */
+.console-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 12px clamp(12px, 2vw, 28px);
+  background: linear-gradient(180deg, #1B121E, var(--canvas));
+  border-bottom: 1px solid var(--border);
+}
+.console-brand {
+  margin: 0;
+  font-family: var(--font-readout);
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  color: #FFE0B2;
+  text-shadow: 0 0 12px #FF6B6555;
+}
+.console-brand small {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.32em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.console-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.console-tab {
+  padding: 6px 14px;
+  font-family: var(--font-readout);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.console-tab[aria-selected="true"] {
+  color: #FFE0B8;
+  background: #4D2339;
+  border-color: var(--coral);
+  box-shadow: inset 0 -2px 0 var(--coral);
+}
+.console-tab:hover {
+  border-color: var(--muted);
+}
+.console-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  font-family: var(--font-readout);
+  font-size: 13px;
+  color: var(--muted);
+}
+.console-clock {
+  color: var(--text);
+}
+.console-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.console-exit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin-left: auto;
+  font-size: 13px;
+}
+.console-exit a,
+[data-console] .console-exit button {
+  color: var(--amber);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.console-email {
+  color: var(--muted);
+  font-family: var(--font-readout);
+  font-size: 12px;
+}
+
+/* C to E: the panel grid. */
+.console-main {
+  flex: 1;
+  padding: 16px clamp(12px, 2vw, 28px) 20px;
+}
+.console-grid {
+  display: grid;
+  gap: 14px;
+  align-items: stretch;
+}
+.console-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px 10px;
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface) 46%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 #FFFFFF0D;
+}
+.console-panel::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 16px;
+  height: 16px;
+  border-top: 2px solid var(--coral);
+  border-left: 2px solid var(--coral);
+  border-top-left-radius: 6px;
+  pointer-events: none;
+}
+.console-panel[data-primary] {
+  border-color: var(--amber);
+  box-shadow: var(--shadow-glow), inset 0 0 0 1px #FFC07833;
+}
+.console-panel[data-primary]::before {
+  border-color: var(--amber);
+}
+.console-panel:hover {
+  border-color: var(--muted);
+}
+.console-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.console-panel h2 {
+  margin: 0;
+  font-family: var(--font-readout);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #FFE0B2;
+}
+.console-panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 60px;
+}
+.console-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-readout);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.console-badge[data-status="ready"] {
+  color: var(--green);
+}
+.console-badge[data-status="stale"] {
+  color: var(--amber);
+}
+.console-badge[data-status="error"] {
+  color: var(--coral);
+}
+.console-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.console-note-stale {
+  color: var(--amber);
+}
+.console-fresh {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px dashed #563240;
+  font-family: var(--font-readout);
+  font-size: 12px;
+  color: var(--muted);
+}
+.console-skeleton {
+  height: 28px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface-raised), #3A2333, var(--surface-raised));
+}
+.console-failure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--coral);
+}
+.console-failure-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--coral);
+}
+.console-failure a {
+  align-self: flex-start;
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Readouts. */
+.console-metric {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0;
+}
+.console-readout {
+  font-family: var(--font-readout);
+  font-size: clamp(28px, 2.4vw, 40px);
+  line-height: 1.1;
+  color: var(--text);
+}
+.console-readout-sm {
+  font-size: 18px;
+}
+.console-delta {
+  font-family: var(--font-readout);
+  font-size: 13px;
+  color: var(--green);
+}
+.console-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.console-gauge-dial {
+  width: 100%;
+  max-width: 180px;
+}
+.console-gauge-track {
+  fill: none;
+  stroke: #3A2333;
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+.console-gauge-fill {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+/* The radar. */
+.console-radar {
+  display: grid;
+  grid-template-columns: minmax(140px, 240px) 1fr;
+  gap: 14px;
+  align-items: center;
+}
+.console-radar-dial {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+}
+.console-rings circle,
+.console-rings path {
+  fill: none;
+  stroke: #6A3A4C;
+  stroke-width: 1;
+}
+.console-sector {
+  opacity: 0.8;
+}
+.console-sector-0 {
+  fill: var(--coral);
+}
+.console-sector-1 {
+  fill: var(--amber);
+}
+.console-sector-2 {
+  fill: var(--magenta);
+}
+.console-sector-3 {
+  fill: var(--cyan);
+}
+.console-sector-4 {
+  fill: var(--green);
+}
+.console-sweep-wedge {
+  fill: var(--cyan);
+  opacity: 0.22;
+}
+@keyframes console-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.console-sweep {
+  transform-origin: 100px 100px;
+  animation: console-sweep 10s linear infinite;
+}
+[data-hidden] .console-sweep {
+  animation-play-state: paused;
+}
+.console-stage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.console-stage-table th,
+.console-stage-table td {
+  padding: 3px 4px;
+  text-align: left;
+  border-bottom: 1px solid #3A2333;
+}
+.console-stage-table thead th {
+  font-family: var(--font-readout);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.console-stage-table tbody th {
+  font-weight: 400;
+}
+.console-stage-table td {
+  font-family: var(--font-readout);
+  text-align: right;
+}
+
+/* Queue rows. */
+.console-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #160F1B;
+  border: 1px solid #563240;
+  border-radius: 4px;
+}
+.console-row[data-selected] {
+  background: #3A2128;
+  border-color: var(--amber);
+}
+.console-row:hover {
+  border-color: var(--muted);
+}
+.console-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.console-row-title {
+  margin: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-row-reason {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.console-next-tag {
+  padding: 1px 6px;
+  font-family: var(--font-readout);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #1B1015;
+  background: var(--amber);
+  border-radius: 3px;
+}
+.console-row-due {
+  font-family: var(--font-readout);
+  font-size: 13px;
+  color: var(--amber);
+}
+.console-row a {
+  color: var(--amber);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* F: the physical rail. */
+.console-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 14px clamp(12px, 2vw, 28px);
+  background: repeating-linear-gradient(90deg, #1B121E 0 6px, #22161F 6px 7px);
+  border-top: 2px solid #66394C;
+  box-shadow: inset 0 1px 0 #9B495C55, inset 0 6px 14px #00000066;
+}
+.console-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-readout);
+  font-size: 13px;
+}
+.console-indicator-label {
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+.console-dot {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  background: var(--muted);
+  border-radius: 50%;
+}
+.console-dot[data-tone="ok"] {
+  background: var(--green);
+  box-shadow: 0 0 8px #86D7A088;
+}
+.console-dot[data-tone="amber"] {
+  background: var(--amber);
+}
+.console-dot[data-tone="bad"] {
+  background: var(--coral);
+}
+.console-shortcuts summary {
+  font-family: var(--font-readout);
+  font-size: 13px;
+  color: var(--amber);
+  cursor: pointer;
+}
+.console-shortcuts dl {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.console-shortcuts dl div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.console-shortcuts dt {
+  font-family: var(--font-readout);
+  color: var(--text);
+}
+.console-shortcuts dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Motion: both labels are rendered; the query shows the true one. */
+.console-motion-reduced {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-sweep { animation: none; }
+  .console-motion-on { display: none; }
+  .console-motion-reduced { display: inline; }
+}
+
+/* Small screens: the horizon becomes a strip, the radar stacks. */
+@media (max-width: 900px) {
+  .console-horizon {
+    height: 48px;
+  }
+  .console-horizon::after {
+    border-width: 4px;
+  }
+  .console-radar {
+    grid-template-columns: 1fr;
+  }
+  .console-exit {
+    margin-left: 0;
+  }
+}
+
+/* Grid areas per mode at each range (design, Layout). Area names are slot ids. */
+@media (min-width: 1440px) {
+  .console-grid-sales {
+    grid-template-columns: 1.1fr 1.4fr 1fr;
+    grid-template-areas:
+      "radar next conversion"
+      "radar next capacity"
+      "northStar followUps signals"
+      "dispatch dispatch cashflow";
+  }
+  .console-grid-creation {
+    grid-template-columns: 1.4fr 1fr 1fr;
+    grid-template-areas:
+      "nextAsset work signals"
+      "nextAsset pipeline pipeline";
+  }
+  .console-grid-operations {
+    grid-template-columns: 1fr 1.4fr 1fr;
+    grid-template-areas:
+      "teacherLoad lessonGaps finance"
+      "teacherLoad lessonGaps trials"
+      "integrations integrations integrations";
+  }
+}
+@media (min-width: 1280px) and (max-width: 1439px) {
+  .console-grid-sales {
+    grid-template-columns: 1.4fr 1fr;
+    grid-template-areas: "next radar" "followUps conversion" "northStar capacity" "signals cashflow" "dispatch dispatch";
+  }
+  .console-grid-creation {
+    grid-template-columns: 1.4fr 1fr;
+    grid-template-areas: "nextAsset work" "pipeline signals";
+  }
+  .console-grid-operations {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "teacherLoad lessonGaps" "finance trials" "integrations integrations";
+  }
+}
+@media (min-width: 901px) and (max-width: 1279px) {
+  .console-grid-sales {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "next radar" "followUps conversion" "northStar capacity" "signals cashflow" "dispatch dispatch";
+  }
+  .console-grid-creation {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "nextAsset work" "pipeline signals";
+  }
+  .console-grid-operations {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "teacherLoad lessonGaps" "finance trials" "integrations integrations";
+  }
+}
+@media (min-width: 641px) and (max-width: 900px) {
+  .console-grid-sales {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "next next" "radar northStar" "followUps signals" "conversion capacity" "cashflow dispatch";
+  }
+  .console-grid-creation {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "nextAsset nextAsset" "work signals" "pipeline pipeline";
+  }
+  .console-grid-operations {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "lessonGaps lessonGaps" "teacherLoad finance" "trials integrations";
+  }
+}
+@media (max-width: 640px) {
+  .console-grid-sales {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "next" "northStar" "signals" "followUps" "radar" "conversion" "capacity" "cashflow" "dispatch";
+  }
+  .console-grid-creation {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "nextAsset" "work" "pipeline" "signals";
+  }
+  .console-grid-operations {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "teacherLoad" "lessonGaps" "finance" "trials" "integrations";
+  }
+  .console-horizon {
+    display: none;
+  }
+}
