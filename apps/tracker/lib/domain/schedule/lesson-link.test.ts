@@ -86,6 +86,8 @@ describe("REQ-39: the link is wired, and still pure (supersedes ADR 0040 AC4)", 
       "lib/scheduler/schedule-handlers.ts", "lib/scheduler/deps.ts",
       // REQ-40: the billing input names each class by the same occurrenceRef (pure, no port).
       "lib/domain/billing/month-input.ts",
+      // REQ-58: the console's operations aggregation (pure) and its read-only reader (listUnlinkedLessons only).
+      "lib/domain/schedule/operations.ts", "lib/console/operations-read.ts",
     ];
     for (const h of hits) expect(allowed, h).toContain(h);
     expect(hits).toContain("lib/scheduler/lesson-handlers.ts");

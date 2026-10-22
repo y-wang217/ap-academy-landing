@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONSOLE_MODES, MODE_LABELS, parseMode, parseWeek, tabKeyTarget } from "./modes";
+import { CONSOLE_MODES, MODE_LABELS, parseGapDays, parseMode, parseWeek, tabKeyTarget } from "./modes";
 
 // REQ-55 AC2: the mode switch.
 describe("parseMode", () => {
@@ -57,5 +57,15 @@ describe("parseWeek", () => {
   });
   it("takes the first value of a repeated parameter", () => {
     expect(parseWeek(["2026-10-12", "2026-10-05"], today)).toEqual({ from: "2026-10-12", to: "2026-10-18" });
+  });
+});
+
+// REQ-58 AC8: the lesson-gap window.
+describe("parseGapDays", () => {
+  it.each([[undefined], ["abc"], ["0"], ["32"], ["7.5"], [""], ["-3"], [["x", "7"]]])("falls back to 14 for %j", (raw) => {
+    expect(parseGapDays(raw)).toBe(14);
+  });
+  it.each([["1", 1], ["31", 31], ["7", 7], [["21", "3"], 21]])("%j gives %i", (raw, n) => {
+    expect(parseGapDays(raw)).toBe(n);
   });
 });

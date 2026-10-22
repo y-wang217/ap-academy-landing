@@ -1576,9 +1576,11 @@ try {
       check("REQ-55: the sync line reports the health check and never says online", /^(Sources checked|Some sources failing)/.test(sync) && !/online/i.test(await p.locator("[data-console]").innerText()), sync);
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
-      check("REQ-55: production panels other than the north star are Not connected yet",
-        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 8
-          && (await p.locator('[data-panel]:not([data-panel="northStar"]) [data-panel-value]').count()) === 0);
+      // REQ-58 wires Sales capacity and three Operations panels; the rest stay Not connected yet.
+      const WIRED = ["northStar", "capacity", "teacherLoad", "lessonGaps", "upcoming"];
+      check("REQ-55: production panels other than the wired ones are Not connected yet",
+        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 7
+          && (await p.locator(`[data-panel]${WIRED.map((id) => `:not([data-panel="${id}"])`).join("")} [data-panel-value]`).count()) === 0);
 
       // REQ-56 AC5, AC9: the mock Notion serves Invoices, so the north star is a real read of this stack's series.
       const north = p.locator('#console-panel-sales [data-panel="northStar"]');
@@ -1616,6 +1618,41 @@ try {
       check("REQ-56: ?week=2026-03-04 shows the week of Mon 2 Mar with a Next week link", marchText.includes("Mon 2 Mar to Sun 8 Mar") && marchText.includes("Next week"), marchText.slice(0, 200));
       await p.goto(`${BASE}/console?mode=sales`);
       await p.locator("[data-console]").waitFor({ timeout: 15000 });
+
+      // REQ-58: Operations mode over this stack's schedule. The REQ-39 weekly class for Ryan and Sam left a linked
+      // class 21 days ago, nothing 14 days ago, a no-show 7 days ago and a logged class today.
+      {
+        const RYAN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001";
+        const ops = (id) => p.locator(`#console-panel-operations [data-panel="${id}"]`);
+        await p.goto(`${BASE}/console?mode=operations&gapDays=31`);
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        const loadStatus = await ops("teacherLoad").getAttribute("data-status");
+        const ryanRow = ops("teacherLoad").locator(`[data-teacher="${RYAN_ID}"]`);
+        check("REQ-58: teacher load is wired and lists Ryan's scheduled hours",
+          ["ready", "stale"].includes(loadStatus) && (await ryanRow.count()) === 1 && /h scheduled/.test(await ryanRow.innerText()) && (await ops("teacherLoad").locator("[data-canonical]").count()) === 1,
+          `${loadStatus} ${(await ops("teacherLoad").innerText()).slice(0, 200)}`);
+        const gapsStatus = await ops("lessonGaps").getAttribute("data-status");
+        const gapKeys = await ops("lessonGaps").locator("[data-gap]").evaluateAll((els) => els.map((e) => e.getAttribute("data-gap")));
+        const noShowKeys = await ops("lessonGaps").locator("[data-no-show]").evaluateAll((els) => els.map((e) => e.getAttribute("data-no-show")));
+        check("REQ-58: with gapDays=31 the gaps list 14 days ago and not the logged, linked or no-show classes",
+          ["ready", "stale"].includes(gapsStatus) && gapKeys.includes(lessonRef(-14)) && ![lessonRef(-21), lessonRef(-7), lessonRef(0)].some((k) => gapKeys.includes(k)),
+          `${gapsStatus} ${gapKeys.join(",")}`);
+        check("REQ-58: the no-show from 7 days ago is in the No-shows list", noShowKeys.includes(lessonRef(-7)), noShowKeys.join(","));
+        const gapHref = await ops("lessonGaps").locator(`[data-gap="${lessonRef(-14)}"] a`).getAttribute("href");
+        const followed = await p.context().request.get(new URL(gapHref, `${BASE}/console`).toString(), { maxRedirects: 0 });
+        check("REQ-58: the gap's link opens the schedule page", followed.status() === 200 && gapHref.startsWith("/tracker/schedule"), `${followed.status()} ${gapHref}`);
+        const upStatus = await ops("upcoming").getAttribute("data-status");
+        const upReasons = await ops("upcoming").locator(".console-row-reason").allInnerTexts();
+        check("REQ-58: upcoming classes is wired, each row with a purpose badge",
+          ["ready", "stale", "empty"].includes(upStatus) && upReasons.every((r) => /^(Regular|Trial|Makeup|Extra|One-off)/.test(r)), `${upStatus} ${upReasons.join("|")}`);
+        await p.goto(`${BASE}/console?mode=operations&gapDays=14`);
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        const keys14 = await ops("lessonGaps").locator("[data-gap]").evaluateAll((els) => els.map((e) => e.getAttribute("data-gap")));
+        check("REQ-58: gapDays=14 drops the class from 14 days ago and offers Show 31 days",
+          !keys14.includes(lessonRef(-14)) && (await ops("lessonGaps").getByRole("link", { name: "Show 31 days" }).count()) === 1, keys14.join(","));
+        check("REQ-58: Sales capacity is wired", (await p.locator('#console-panel-sales [data-panel="capacity"]').getAttribute("data-status")) !== null
+          && (await p.locator('#console-panel-sales [data-panel="capacity"]').getByText("Not connected yet", { exact: true }).count()) === 0);
+      }
 
       // AC2: the mode switch by keyboard, in the URL and across a reload.
       await p.getByRole("tab", { name: "Sales", exact: true }).focus();
