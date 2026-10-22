@@ -12,8 +12,10 @@
 -- locked, so a double click or two tabs create one send. claim_send,
 -- finish_send and fail_send_attempt move a send through its attempts, for the
 -- owner (Approve, Retry) or the run (service_role). retry_send is the owner's
--- Retry. approve_draft is revoked from authenticated, so approving always
--- creates a send.
+-- Retry. The tracker stops calling approve_draft with this card; it stays
+-- granted here so the app deployed before this card keeps working while
+-- this file is live and the card is not, and a follow-up migration revokes
+-- it once the card is live.
 -- Tested by supabase/tests/iris_sends.sql.
 
 -- Table ----------------------------------------------------------------------------
@@ -317,9 +319,6 @@ grant execute on function iris.retry_send(uuid, integer) to authenticated;
 grant execute on function iris.claim_send(uuid, integer, integer) to authenticated, service_role;
 grant execute on function iris.finish_send(uuid, text, text, text, timestamptz) to authenticated, service_role;
 grant execute on function iris.fail_send_attempt(uuid, text, integer) to authenticated, service_role;
-
--- The only way to approve is the one that sends.
-revoke execute on function iris.approve_draft(uuid, integer) from authenticated;
 
 -- RLS: the org owner reads; service_role does the rest. ---------------------------------
 

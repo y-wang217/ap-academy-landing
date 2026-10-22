@@ -221,8 +221,6 @@ begin
   perform idt.expect_error($q$select iris.approve_draft_for_send('40000000-0000-0000-0000-000000000001', 1, 60)$q$, '42501');
   perform idt.expect_error($q$select iris.count_review('10000000-0000-0000-0000-000000000001', 'x', 'approve', false, 3)$q$, '42501');
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  -- 0028 revokes the old approve: the only way to approve is the one that sends.
-  perform idt.expect_error($q$select iris.approve_draft('40000000-0000-0000-0000-000000000001', 1)$q$, '42501');
   perform idt.expect_error($q$select iris.count_review('10000000-0000-0000-0000-000000000001', 'x', 'approve', false, 3)$q$, '42501');
   -- An unknown id reads as not_found too.
   if iris.approve_draft_for_send(gen_random_uuid(), 1, 60) ->> 'result' <> 'not_found' then

@@ -90,13 +90,6 @@ select ist.new_draft('10000000-0000-0000-0000-000000000001', '30000000-0000-0000
 select ist.new_draft('10000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002',
                      '31000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000002');
 
--- approve_draft is no longer executable by authenticated -----------------------------
-do $$ begin
-  perform ist.as_user('a0000000-0000-0000-0000-000000000001');
-  perform ist.expect_error($q$select iris.approve_draft('40000000-0000-0000-0000-000000000001', 1)$q$, '42501');
-  perform ist.as_super();
-end $$;
-
 -- Refused callers change nothing --------------------------------------------------
 do $$
 declare
