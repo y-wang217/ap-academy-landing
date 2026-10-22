@@ -206,6 +206,37 @@ export const MonthlyReviewResponse = z.strictObject({
   })),
 });
 
+// Billing input (REQ-40, docs/billing-input.md) ----------------------------------
+/** The month export for the monthly billing run. IDs only; no names, emails or money. Shape changes bump schemaVersion. */
+export const BillingInputResponse = z.strictObject({
+  schemaVersion: z.literal(1),
+  rulesVersion: z.literal(1),
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  asOf: z.iso.datetime(),
+  students: z.array(z.strictObject({
+    studentId: z.guid(),
+    sync: z.strictObject({ state: SyncState, stale: z.boolean() }),
+    occurrences: z.array(z.strictObject({
+      occurrenceRef: z.string().regex(/^sched:[0-9a-f-]{36}:\d{4}-\d{2}-\d{2}$/),
+      seriesId: z.guid(),
+      originalDate: IsoDate,
+      date: IsoDate,
+      startTime: Hhmm,
+      durationMinutes: z.number().int().positive(),
+      subject: z.string(),
+      teacherId: z.guid(),
+      schedulerState: z.enum(["scheduled", "moved", "cancelled", "one_off"]),
+      purpose: z.enum(["makeup", "trial", "extra"]).nullable(),
+      movedFrom: IsoDate.nullable(),
+      makeupFor: IsoDate.nullable(),
+      unlinkedMakeup: z.boolean(),
+      outcome: z.enum(["delivered", "no_show", "none"]),
+      chargeState: z.enum(["chargeable", "credit_owed", "made_up", "forfeit_pending", "not_charged"]),
+      unconfirmed: z.boolean(),
+    })),
+  })),
+});
+
 // Booking (REQ-7) ---------------------------------------------------------------
 /** A rejected booking: where and why, never whose other class it hit. */
 export const BookingConflictResponse = z.strictObject({

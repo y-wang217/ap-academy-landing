@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { handleMonthlyBillingInput } from "../../../lib/scheduler/billing-handlers";
 import { handleDailyTaskCreate, handleDailyTaskStatus } from "../../../lib/scheduler/daily-task-handlers";
 import { handleMe, handleStaffById, handleStaffList } from "../../../lib/scheduler/handlers";
 import { resolveSchedulerIdentity } from "../../../lib/scheduler/identity";
@@ -30,6 +31,7 @@ const ROWS: Row[] = [
   { route: "POST /import", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleImportRun(d, {}) },
   { route: "POST /summaries/sync", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleSyncSummaries(d, {}) },
   { route: "GET /monthly-review", column: "Weekly Schedule text", allowed: ["admin"], call: (d) => handleMonthlyReview(d, q()) },
+  { route: "GET /monthly-billing-input", column: "billing input", allowed: ["admin"], call: (d) => handleMonthlyBillingInput(d, q("month=2026-10")) },
   { route: "GET /daily-task", column: "daily task", allowed: ["admin"], call: (d) => handleDailyTaskStatus(d, q()) },
   { route: "POST /daily-task", column: "daily task", allowed: ["admin"], call: (d) => handleDailyTaskCreate(d, {}) },
   { route: "GET /availability", column: "availability", allowed: ["admin", "teacher"], call: (d) => handleAvailability(d, q()) },

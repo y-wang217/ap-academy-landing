@@ -70,7 +70,7 @@ describe("REQ-39: the link is wired, and still pure (supersedes ADR 0040 AC4)", 
     expect(source).not.toMatch(/6300f58a/);
     expect(source).toMatch(/export type LessonLinkPort/);
   });
-  it("is imported only by the lesson handlers, the Notion adapter, the outcome store and the week files", () => {
+  it("is imported only by the lesson handlers, the Notion adapter, the outcome store, the week files and the billing input", () => {
     const hits: string[] = [];
     const walk = (d: string) => {
       for (const name of readdirSync(d)) {
@@ -84,6 +84,8 @@ describe("REQ-39: the link is wired, and still pure (supersedes ADR 0040 AC4)", 
     const allowed = [
       "lib/scheduler/lesson-handlers.ts", "lib/notion/lessons.ts", "lib/scheduler/outcome-store.ts", "lib/data/outcomes.ts",
       "lib/scheduler/schedule-handlers.ts", "lib/scheduler/deps.ts",
+      // REQ-40: the billing input names each class by the same occurrenceRef (pure, no port).
+      "lib/domain/billing/month-input.ts",
     ];
     for (const h of hits) expect(allowed, h).toContain(h);
     expect(hits).toContain("lib/scheduler/lesson-handlers.ts");
