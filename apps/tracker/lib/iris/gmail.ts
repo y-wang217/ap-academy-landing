@@ -65,13 +65,21 @@ export async function getAccessToken(config: GmailConfig, fetcher: typeof fetch 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 const ListPage = z.object({
-  messages: z.array(z.object({ id: z.string().min(1) })).optional(),
+  messages: z.array(z.object({ id: z.string().min(1), threadId: z.string().min(1) })).optional(),
   nextPageToken: z.string().optional(),
 });
 
+/** The most ids one list returns: 5 pages of 100. A list this long may have been cut (REQ-45). */
+export const MAX_LIST_IDS = MAX_LIST_PAGES * 100;
+
 /** Message ids for a query, newest first as Gmail gives them, across at most 5 pages. */
 export async function listMessageIds(token: string, q: string, fetcher: typeof fetch = fetch): Promise<string[]> {
-  const ids: string[] = [];
+  return (await listMessageRefs(token, q, fetcher)).map((r) => r.id);
+}
+
+/** Message ids with their thread ids, from the same messages.list call (REQ-45). */
+export async function listMessageRefs(token: string, q: string, fetcher: typeof fetch = fetch): Promise<{ id: string; threadId: string }[]> {
+  const ids: { id: string; threadId: string }[] = [];
   let pageToken: string | undefined;
   for (let page = 0; page < MAX_LIST_PAGES; page++) {
     const params = new URLSearchParams({ q, maxResults: "100" });
@@ -79,7 +87,7 @@ export async function listMessageIds(token: string, q: string, fetcher: typeof f
     const res = await call(fetcher, `${gmailBases().api}/users/me/messages?${params}`, { method: "GET", headers: auth(token) });
     if (!res.ok) throw new GmailError(`Gmail returned ${res.status}`, res.status);
     const data = await parse(res, ListPage);
-    ids.push(...(data.messages ?? []).map((m) => m.id));
+    ids.push(...(data.messages ?? []).map((m) => ({ id: m.id, threadId: m.threadId })));
     if (!data.nextPageToken) break;
     pageToken = data.nextPageToken;
   }
@@ -118,6 +126,7 @@ export function gmailPort(config: GmailConfig, fetcher: typeof fetch = fetch): G
   return {
     token: () => getAccessToken(config, fetcher),
     list: (token, q) => listMessageIds(token, q, fetcher),
+    listRefs: (token, q) => listMessageRefs(token, q, fetcher),
     get: (token, id) => getMessage(token, id, fetcher),
   };
 }

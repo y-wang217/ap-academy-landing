@@ -19,6 +19,7 @@ function world(mail: GmailMessage[]) {
   const queries: string[] = [];
   const gmail: GmailPort = {
     token: async () => "tok",
+    listRefs: async () => [],
     list: async (_t, q) => (queries.push(q), mail.map((m) => m.id)),
     get: async (_t, id) => mail.find((m) => m.id === id)!,
   };
@@ -78,7 +79,7 @@ describe("runSupersede", () => {
 
   it("a Gmail list failure is an error line, not a throw", async () => {
     const w = world([]);
-    const gmail: GmailPort = { token: async () => "tok", list: async () => { throw new Error("down"); }, get: async () => { throw new Error("x"); } };
+    const gmail: GmailPort = { token: async () => "tok", listRefs: async () => [], list: async () => { throw new Error("down"); }, get: async () => { throw new Error("x"); } };
     expect(await runSupersede({ store: w.db.store, gmail, settings: w.db.settings })).toEqual({ stored: 0, superseded: 0, error: "Gmail request failed" });
   });
 });

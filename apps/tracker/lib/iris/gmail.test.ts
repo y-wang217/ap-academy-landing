@@ -1,7 +1,7 @@
 import { generateKeyPairSync, verify } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { gmailBases, readGmailConfig } from "./config";
-import { GMAIL_SCOPE, GmailError, getAccessToken, getMessage, listMessageIds, signJwt } from "./gmail";
+import { GMAIL_SCOPE, GmailError, MAX_LIST_IDS, getAccessToken, getMessage, listMessageIds, listMessageRefs, signJwt } from "./gmail";
 
 // REQ-42 AC8, AC9: the read-only Gmail client.
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -89,6 +89,13 @@ describe("listMessageIds", () => {
     expect(u.searchParams.get("maxResults")).toBe("100");
     expect(new URL(r.calls[1].url).searchParams.get("pageToken")).toBe("p1");
     for (const c of r.calls) expect(c.method).toBe("GET");
+  });
+
+  it("listMessageRefs keeps each thread id from the same call (REQ-45)", async () => {
+    const r = recorder(() => json({ messages: [{ id: "m1", threadId: "t1" }, { id: "m2", threadId: "t1" }] }));
+    expect(await listMessageRefs("tok", "q", r.fetcher)).toEqual([{ id: "m1", threadId: "t1" }, { id: "m2", threadId: "t1" }]);
+    expect(new URL(r.calls[0].url).pathname).toBe("/gmail/v1/users/me/messages");
+    expect(MAX_LIST_IDS).toBe(500);
   });
 
   it("returns an empty list for an empty inbox", async () => {

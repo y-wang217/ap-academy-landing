@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AiCallRecord, IrisSettings, IrisStore, MessageInsert, MessagePatch, PushDay, PushRecord, RunRecord, StoredThread, ThreadPatch } from "./store";
+import type { AiCallRecord, EvalResultInsert, IrisSettings, IrisStore, MessageInsert, MessagePatch, PushDay, PushRecord, RunRecord, StoredThread, ThreadPatch } from "./store";
 
 /** An in-memory IrisStore for the intake and handler tests. `fail` makes the named method throw. */
 export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
@@ -10,7 +10,23 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
   const threads = new Map<string, StoredThread & ThreadPatch & { lastOutboundAt: string | null }>();
   const messages = new Map<string, MessageInsert & Partial<MessagePatch> & { id: string }>();
   const aiCalls: AiCallRecord[] = [];
-  const events: { kind: string; messageId: string | null; draftId?: string | null; detail: Record<string, unknown> }[] = [];
+  type FakeEvent = { kind: string; messageId: string | null; draftId?: string | null; detail: Record<string, unknown> };
+  const events: FakeEvent[] = [];
+  // The identity id, time and actor, kept apart so the events read as the tests expect.
+  const eventMeta = new WeakMap<FakeEvent, { id: number; at: string; actor: string }>();
+  let eventSeq = 0;
+  const pushEvent = (e: FakeEvent, actor = "iris") => {
+    const row = { ...e };
+    const meta = { id: ++eventSeq, at: new Date(now()).toISOString(), actor };
+    eventMeta.set(row, meta);
+    events.push(row);
+    return meta;
+  };
+  const idOf = (e: FakeEvent) => eventMeta.get(e)!.id;
+  /** REQ-45: owner labels and the run's eval results. */
+  const labels = new Map<string, { goldIntent: string | null; goldReplyType: string | null; goldEscalate: boolean | null }>();
+  const evalResults: (EvalResultInsert & { id: string })[] = [];
+  const FINISHED: Record<string, string> = { eval_import_requested: "eval_import_finished", eval_run_requested: "eval_run_finished" };
   type FakeDraft = { id: string; messageId: string; version: number; replyType: string; bodyText: string; policyVersion: number; state: string; createdBy: "iris" | "owner"; edited: boolean };
   const drafts = new Map<string, FakeDraft>();
   const pushes = new Map<string, PushRecord & { id: string }>();
@@ -128,7 +144,7 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
       for (const m of hit) {
         Object.assign(m, { escalationReason: "answered_by_charlie", state: "escalated", handledAt: sentAt });
         for (const d of drafts.values()) if (d.messageId === m.id && d.state === "proposed") d.state = "superseded";
-        events.push({ kind: "superseded", messageId: m.id, detail: { reason: "answered_by_charlie" } });
+        pushEvent({ kind: "superseded", messageId: m.id, detail: { reason: "answered_by_charlie" } });
       }
       return hit.map((m) => m.id);
     },
@@ -190,7 +206,7 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
     },
     async insertEvent(e) {
       check("insertEvent");
-      events.push(e);
+      pushEvent(e);
     },
     async insertRun(r) {
       check("insertRun");
@@ -201,6 +217,55 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
     async purge() {
       check("purge");
       return 0;
+    },
+    async pendingRequest(kind) {
+      check("pendingRequest");
+      const newest = events.filter((e) => e.kind === kind).at(-1);
+      if (!newest) return null;
+      const meta = eventMeta.get(newest)!;
+      if (events.some((e) => e.kind === FINISHED[kind] && e.detail.request_id === meta.id)) return null;
+      return { id: meta.id, at: meta.at, detail: newest.detail };
+    },
+    async requestBatches(requestId) {
+      check("requestBatches");
+      return events
+        .filter((e) => e.kind === "eval_import_batch" && e.detail.request_id === requestId)
+        .map((e) => ({
+          storedInbound: Number(e.detail.stored_inbound ?? 0), storedReplies: Number(e.detail.stored_replies ?? 0),
+          skipped: (e.detail.skipped as string[] | undefined) ?? [], capped: e.detail.capped === true,
+        }));
+    },
+    async storedThreadIds(gmailThreadIds) {
+      check("storedThreadIds");
+      const out = new Map<string, string>();
+      for (const g of gmailThreadIds) {
+        const t = threads.get(g);
+        if (t) out.set(g, t.id);
+      }
+      return out;
+    },
+    async listEvalPending(requestId, limit) {
+      check("listEvalPending");
+      const done = new Set(evalResults.filter((r) => r.requestEventId === requestId).map((r) => r.messageId));
+      return [...messages.values()]
+        .filter((m) => m.escalationReason === "history_import" && !done.has(m.id))
+        .filter((m) => {
+          const l = labels.get(m.id);
+          return l && l.goldIntent !== null && l.goldEscalate !== null;
+        })
+        .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+        .slice(0, limit)
+        .map((m) => ({ id: m.id, threadId: m.threadId, receivedAt: m.receivedAt, bodyText: m.bodyText }));
+    },
+    async insertEvalResult(r) {
+      check("insertEvalResult");
+      if (evalResults.some((x) => x.requestEventId === r.requestEventId && x.messageId === r.messageId)) return;
+      evalResults.push({ ...r, id: randomUUID() });
+    },
+    async evalResultCounts(requestId) {
+      check("evalResultCounts");
+      const rows = evalResults.filter((r) => r.requestEventId === requestId);
+      return { ok: rows.filter((r) => r.outcome === "ok").length, error: rows.filter((r) => r.outcome === "error").length };
     },
   };
 
@@ -217,6 +282,12 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
     pushDays,
     calls,
     fail,
+    labels,
+    evalResults,
+    eventId: idOf,
+    /** An owner request event, as the eval routes insert it (REQ-45). */
+    request: (kind: "eval_import_requested" | "eval_run_requested", detail: Record<string, unknown> = {}) =>
+      pushEvent({ kind, messageId: null, detail }, "a0000000-0000-0000-0000-000000000001").id,
     setNow: (fn: () => number) => (now = fn),
     byGmailId: (gid: string) => [...messages.values()].find((m) => m.gmailMessageId === gid),
     threadOf: (gid: string) => {

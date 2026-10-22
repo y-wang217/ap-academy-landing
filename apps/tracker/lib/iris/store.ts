@@ -93,7 +93,7 @@ export type ThreadHistoryRow = { receivedAt: string; direction: "inbound" | "out
 /** One iris.ai_calls row: tokens and outcome, never prompt or answer text. */
 export type AiCallRecord = {
   messageId: string | null;
-  purpose: "classify" | "draft";
+  purpose: "classify" | "draft" | "eval";
   model: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -168,6 +168,30 @@ export type PushCandidate = {
 
 export type PushDay = { day: string; workPageId: string | null; logEntryId: string | null };
 
+/** The eval request kinds (REQ-45): an iris.events row the owner inserts. */
+export type EvalRequestKind = "eval_import_requested" | "eval_run_requested";
+/** The newest request of a kind with no finished event naming it. */
+export type PendingRequest = { id: number; at: string; detail: Record<string, unknown> };
+
+/** A fully labelled imported message with no eval result for the request yet, oldest first. */
+export type EvalPendingMessage = { id: string; threadId: string; receivedAt: string; bodyText: string | null };
+
+/** One iris.eval_results row, written by the run only. */
+export type EvalResultInsert = {
+  requestEventId: number;
+  messageId: string;
+  policyVersion: number;
+  model: string | null;
+  predictedIntent: string | null;
+  predictedReplyType: string | null;
+  predictedEscalate: boolean;
+  escalationReason: string | null;
+  flags: string[];
+  draftBody: string | null;
+  outcome: "ok" | "error";
+  error: string | null;
+};
+
 export interface IrisStore {
   getSettings(): Promise<IrisSettings | null>;
   /** iris.claim_poll: the row to the first caller, null while another run holds the lease. */
@@ -216,6 +240,18 @@ export interface IrisStore {
   insertRun(r: RunRecord): Promise<string>;
   /** iris.purge_expired: the number of rows deleted. */
   purge(): Promise<number>;
+  /** REQ-45: the newest request of this kind not yet finished, or null. */
+  pendingRequest(kind: EvalRequestKind): Promise<PendingRequest | null>;
+  /** REQ-45: the eval_import_batch events of one import request, oldest first. */
+  requestBatches(requestId: number): Promise<{ storedInbound: number; storedReplies: number; skipped: string[]; capped: boolean }[]>;
+  /** REQ-45: Gmail thread id to stored thread id, for the ones stored. */
+  storedThreadIds(gmailThreadIds: string[]): Promise<Map<string, string>>;
+  /** REQ-45: labelled history messages (gold intent and escalate set) with no result for this request. */
+  listEvalPending(requestId: number, limit: number): Promise<EvalPendingMessage[]>;
+  /** REQ-45: on conflict (request, message) do nothing. */
+  insertEvalResult(r: EvalResultInsert): Promise<void>;
+  /** REQ-45: this request's results, by outcome. */
+  evalResultCounts(requestId: number): Promise<{ ok: number; error: number }>;
 }
 
 /**
