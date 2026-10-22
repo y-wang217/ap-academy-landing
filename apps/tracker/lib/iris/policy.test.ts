@@ -8,8 +8,8 @@ const ROOT = join(__dirname, "..", "..");
 const SOURCE = readFileSync(join(__dirname, "policy.ts"), "utf8");
 
 describe("policy.ts", () => {
-  it("is version 2 (REQ-43) with a 12-hour notice window", () => {
-    expect(POLICY_VERSION).toBe(2);
+  it("is version 3 (REQ-44) with a 12-hour notice window", () => {
+    expect(POLICY_VERSION).toBe(3);
     expect(NOTICE_HOURS).toBe(12);
   });
 

@@ -74,6 +74,22 @@ describe("Iris stores no model text", () => {
     }
   });
 
+  it("no 0025 table has such a column either (REQ-44)", () => {
+    const m25 = readFileSync(join(ROOT, "..", "..", "supabase", "migrations", "0025_iris_drafts.sql"), "utf8");
+    const tables = [...m25.matchAll(/create table (iris\.\w+) \(([\s\S]*?)\n\);/g)];
+    expect(tables.map((t) => t[1])).toEqual(["iris.drafts", "iris.reply_types", "iris.eval_labels", "iris.eval_runs", "iris.pushes", "iris.push_days"]);
+    for (const [, table, body] of tables) {
+      const columns = body.split("\n").map((l) => l.trim()).filter((l) => /^[a-z_]+ /.test(l) && !/^(check|unique|primary|foreign|constraint)\b/.test(l)).map((l) => l.split(" ")[0]);
+      for (const c of columns) expect(c, `${table}.${c}`).not.toMatch(/prompt|answer|summary|completion|response|reason_text/);
+    }
+  });
+
+  it("the draft step never writes the model's reason or the prompt", () => {
+    const src = readFileSync(join(ROOT, "lib", "iris", "draft-step.ts"), "utf8");
+    expect(src).not.toMatch(/output\.reason/);
+    expect(src).not.toMatch(/\b(system|user)\s*:/);
+  });
+
   it("covers the classify files", () => {
     expect(IRIS.map(rel)).toEqual(expect.arrayContaining(["lib/iris/classify.ts", "lib/iris/classify-prompt.ts", "lib/iris/classify-step.ts", "lib/iris/route.ts", "lib/iris/quote.ts"]));
   });

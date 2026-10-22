@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendTeacher, createLogEntry, createTaskPage, fetchWorkItems, findTaskByTitle, listChildren, updateIntro, updateLogDecisions, updateTeacher, WORK_PROPS, type TeacherRender,
+  appendTeacher, appendToDo, createComment, createLogEntry, createTaskPage, deleteBlock, fetchWorkItems, findTaskByTitle, listChildren, listToDoTexts, updateIntro, updateLogDecisions, updateTeacher, WORK_PROPS, type TeacherRender,
 } from "./work";
 import { filterIds, notionFake, onlyReads, v } from "./console-reader.fake";
 import { NotionError } from "./staff";
@@ -128,6 +128,50 @@ describe("failures (AC10)", () => {
     const err = await findTaskByTitle(CONFIG, "x", boom).catch((e) => e);
     expect(err).toBeInstanceOf(NotionError);
     expect(err.message).toBe("Notion request failed");
+  });
+});
+
+// REQ-44 AC17 to AC19: the generic to-do, comment and delete used by the Iris phone backup.
+describe("Iris phone backup writes", () => {
+  it("appendToDo appends one unchecked to-do with bullets, links and a code block", async () => {
+    const { calls, fetcher } = fake(() => ({ json: { results: [{ id: BLOCK }] } }));
+    const id = await appendToDo(CONFIG, PAGE, { text: "Pat re Sam: Cancellation (Draft waiting) ref abcd1234", bullets: ["Intent: Cancellation"], links: [{ label: "Open in the tracker", url: "https://x/y" }], code: "Hi\n\nCharlie\nAP Academy" }, fetcher);
+    expect(id).toBe(BLOCK);
+    expect(calls[0]).toMatchObject({ method: "PATCH", url: expect.stringContaining(`/blocks/${PAGE}/children`) });
+    const todo = (calls[0].body as { children: { type: string; to_do: { checked: boolean; children: { type: string }[] } }[] }).children[0];
+    expect(todo.type).toBe("to_do");
+    expect(todo.to_do.checked).toBe(false);
+    expect(todo.to_do.children.map((c) => c.type)).toEqual(["bulleted_list_item", "paragraph", "code"]);
+  });
+
+  it("appendToDo without code sends no code block", async () => {
+    const { calls, fetcher } = fake(() => ({ json: { results: [{ id: BLOCK }] } }));
+    await appendToDo(CONFIG, PAGE, { text: "t", bullets: [], links: [] }, fetcher);
+    expect(JSON.stringify(calls[0].body)).not.toContain('"code"');
+  });
+
+  it("createComment mentions the user first, then the text", async () => {
+    const { calls, fetcher } = fake(() => ({ json: {} }));
+    await createComment(CONFIG, PAGE, { mentionUserId: "c0ffee00-0000-4000-8000-000000000001", text: "New Iris item ref abcd1234: Cancellation" }, fetcher);
+    expect(calls[0]).toMatchObject({ method: "POST", url: expect.stringMatching(/\/comments$/) });
+    expect(calls[0].body).toEqual({
+      parent: { page_id: PAGE },
+      rich_text: [{ type: "mention", mention: { type: "user", user: { object: "user", id: "c0ffee00-0000-4000-8000-000000000001" } } }, { type: "text", text: { content: " New Iris item ref abcd1234: Cancellation" } }],
+    });
+  });
+
+  it("deleteBlock sends one DELETE; listToDoTexts reads the to-dos' text", async () => {
+    const { calls, fetcher } = fake((c) => ({ json: c.method === "GET" ? { results: [{ id: BLOCK, type: "to_do", to_do: { checked: false, rich_text: [{ plain_text: "x ref abcd1234" }] } }, { id: "p", type: "paragraph" }], has_more: false } : {} }));
+    await deleteBlock(CONFIG, BLOCK, fetcher);
+    expect(calls[0]).toMatchObject({ method: "DELETE", url: expect.stringContaining(`/blocks/${BLOCK}`) });
+    expect(await listToDoTexts(CONFIG, PAGE, fetcher)).toEqual([{ id: BLOCK, text: "x ref abcd1234" }]);
+  });
+
+  it("errors carry the status only, never the body", async () => {
+    const { fetcher } = fake(() => ({ status: 500, json: { message: "pat@y.com Sam Park" } }));
+    const err = await createComment(CONFIG, PAGE, { mentionUserId: "u", text: "t" }, fetcher).catch((e) => e);
+    expect(err).toBeInstanceOf(NotionError);
+    expect(err.message).toBe("Notion returned 500");
   });
 });
 

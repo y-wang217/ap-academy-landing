@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClassifyPort } from "./classify";
+import type { DraftPort } from "./draft";
 import { handleIrisRun, type IrisRunDeps } from "./handlers";
 import { GmailError, type GmailMessage } from "./gmail";
 import type { GmailPort } from "./intake";
@@ -16,7 +17,7 @@ const message = (id: string, from: string): GmailMessage => ({
   payload: { mimeType: "text/plain", headers: [{ name: "From", value: from }, { name: "Subject", value: "Hi" }], body: { data: Buffer.from("hello").toString("base64url") } },
 });
 
-function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null } = {}) {
+function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null; draft?: DraftPort | null; push?: IrisRunDeps["push"] } = {}) {
   const db = fakeIrisStore({ paused: opts.paused ?? false });
   const gmailCalls: string[] = [];
   const gmail: GmailPort = {
@@ -29,7 +30,7 @@ function world(opts: { paused?: boolean; listFails?: boolean; classify?: Classif
     get: async (_t, id) => (gmailCalls.push(`get:${id}`), message(id, "who@z.com")),
   };
   const directoryCalls: number[] = [];
-  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null };
+  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null };
   const build = vi.fn((org: string) => (org ? deps : null));
   const run = (authorization: string | null = AUTH, env = { secret: SECRET as string | undefined, orgId: ORG as string | undefined }) =>
     handleIrisRun({ authorization, env, build, now: () => new Date(T0) });
@@ -183,5 +184,56 @@ describe("handleIrisRun: classification", () => {
     const body = await (await w.run()).json();
     expect(body).toMatchObject({ matched: 1, classified: 0 });
     expect(w.db.aiCalls).toHaveLength(0);
+  });
+});
+
+// REQ-44 AC24: intake, supersede, classify, draft, push, purge, with drafted counted and the directory read once.
+describe("handleIrisRun: drafting and the phone backup", () => {
+  const SAM = "11111111-1111-4111-8111-111111111111";
+  const family = [{ studentId: SAM, studentName: "Sam Lee", stage: "Active", parentEmail: "ann@x.com", parentName: "Ann Lee" }];
+
+  function drafting() {
+    const order: string[] = [];
+    const classify: ClassifyPort = async () => (order.push("classify"), {
+      ok: true, model: "m", inputTokens: 1, outputTokens: 1,
+      output: { intents: ["cancellation"], primary: "cancellation", confidence: 0.95, flags: [], childName: "", summary: "" },
+    });
+    const draft: DraftPort = async () => (order.push("draft"), { ok: true, model: "m", inputTokens: 1, outputTokens: 1, output: { body: "Hi Ann,\n\nThanks.", needsCharlie: false, reason: "" } });
+    const push: IrisRunDeps["push"] = async () => (order.push("push"), { pushed: 1, failed: 0, removed: 0, error: null });
+    const w = world({ classify, draft, push });
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.directory = async () => (w.directoryCalls.push(1), family);
+    deps.gmail.get = async (_t, id) => message(id, "ann@x.com");
+    deps.gmail.list = async (_t, q) => (order.push(`list:${q.split(" ")[0]}`), ["m1"]);
+    const purge = w.db.store.purge;
+    w.db.store.purge = async () => (order.push("purge"), purge());
+    return { w, order };
+  }
+
+  it("runs in order and carries drafted in the response and the run row", async () => {
+    const { w, order } = drafting();
+    const body = await (await w.run()).json();
+    expect(order).toEqual(["list:in:inbox", "list:in:sent", "classify", "draft", "push", "purge"]);
+    expect(body).toMatchObject({ result: "ok", classified: 1, drafted: 1 });
+    expect(w.db.runs[0]).toMatchObject({ drafted: 1, classified: 1 });
+    expect(w.directoryCalls).toHaveLength(1);
+    expect(w.db.aiCalls.map((c) => c.purpose)).toEqual(["classify", "draft"]);
+  });
+
+  it("no push after the push budget", async () => {
+    const { w, order } = drafting();
+    let t = T0;
+    const res = await handleIrisRun({ authorization: AUTH, env: { secret: SECRET, orgId: ORG }, build: w.build, now: () => new Date((t += 40_000)) });
+    expect(res.status).toBe(200);
+    expect(order).not.toContain("push");
+  });
+
+  it("a push error is kept as the run's last error, and the run stays ok", async () => {
+    const { w } = drafting();
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.push = async () => ({ pushed: 0, failed: 1, removed: 0, error: "Notion returned 500" });
+    const body = await (await w.run()).json();
+    expect(body.result).toBe("ok");
+    expect(w.db.settings.lastError).toBe("Notion returned 500");
   });
 });

@@ -1,6 +1,7 @@
 // Mock of the Gmail calls Iris makes (REQ-42), on 127.0.0.1:54334. The tracker
 // reaches it through IRIS_GMAIL_API_BASE: POST /token for the service account
-// JWT, GET /gmail/v1/users/me/messages (list, newest first) and
+// JWT, GET /gmail/v1/users/me/messages (list, newest first; REQ-44: q "in:sent ..." lists only messages
+// labelled SENT, and any other q leaves them out) and
 // GET /gmail/v1/users/me/messages/:id (format=full). Test helpers:
 //   POST /__gmail/add        body: a Gmail message; adds it to the inbox
 //   POST /__gmail/fail-list  toggles a 500 on the list call
@@ -89,7 +90,11 @@ http.createServer(async (req, res) => {
   if (url.pathname === "/gmail/v1/users/me/messages" && req.method === "GET") {
     if (slowList) await new Promise((r) => setTimeout(r, 1500));
     if (failList) return send(res, 500, { error: { code: 500, message: `backend error for ${MAILBOX}` } });
-    const ids = [...inbox.values()].sort((a, b) => Number(b.internalDate) - Number(a.internalDate)).map((m) => ({ id: m.id, threadId: m.threadId }));
+    const sentOnly = (url.searchParams.get("q") ?? "").startsWith("in:sent");
+    const ids = [...inbox.values()]
+      .filter((m) => (m.labelIds ?? []).includes("SENT") === sentOnly)
+      .sort((a, b) => Number(b.internalDate) - Number(a.internalDate))
+      .map((m) => ({ id: m.id, threadId: m.threadId }));
     return send(res, 200, { messages: ids, resultSizeEstimate: ids.length });
   }
   const id = /^\/gmail\/v1\/users\/me\/messages\/([^/]+)$/.exec(url.pathname)?.[1];

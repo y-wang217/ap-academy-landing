@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AiCallRecord, IrisSettings, IrisStore, MessageInsert, MessagePatch, RunRecord, StoredThread, ThreadPatch } from "./store";
+import type { AiCallRecord, IrisSettings, IrisStore, MessageInsert, MessagePatch, PushDay, PushRecord, RunRecord, StoredThread, ThreadPatch } from "./store";
 
 /** An in-memory IrisStore for the intake and handler tests. `fail` makes the named method throw. */
 export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
@@ -10,7 +10,11 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
   const threads = new Map<string, StoredThread & ThreadPatch & { lastOutboundAt: string | null }>();
   const messages = new Map<string, MessageInsert & Partial<MessagePatch> & { id: string }>();
   const aiCalls: AiCallRecord[] = [];
-  const events: { kind: string; messageId: string | null; detail: Record<string, unknown> }[] = [];
+  const events: { kind: string; messageId: string | null; draftId?: string | null; detail: Record<string, unknown> }[] = [];
+  type FakeDraft = { id: string; messageId: string; version: number; replyType: string; bodyText: string; policyVersion: number; state: string; createdBy: "iris" | "owner"; edited: boolean };
+  const drafts = new Map<string, FakeDraft>();
+  const pushes = new Map<string, PushRecord & { id: string }>();
+  const pushDays = new Map<string, PushDay>();
   const runs: (RunRecord & { id: string })[] = [];
   const calls: string[] = [];
   const fail = new Set<string>();
@@ -100,6 +104,85 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
       check("insertAiCall");
       aiCalls.push(c);
     },
+    async listDraftable(maxRetries, limit) {
+      check("listDraftable");
+      const hasDraft = new Set([...drafts.values()].map((d) => d.messageId));
+      return [...messages.values()]
+        .filter((m) => m.direction === "inbound" && m.retryCount < maxRetries && !hasDraft.has(m.id))
+        .filter((m) => m.state === "classified" || (m.state === "escalated" && m.escalationReason === "escalate_only" && m.intent === "no_show" && !m.handledAt))
+        .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+        .slice(0, limit)
+        .map((m) => ({ id: m.id, threadId: m.threadId, receivedAt: m.receivedAt, bodyText: m.bodyText, retryCount: m.retryCount, state: m.state as "classified" | "escalated", intent: m.intent ?? null, notionStudentId: m.notionStudentId ?? null }));
+    },
+    async insertDraft(d) {
+      check("insertDraft");
+      const id = randomUUID();
+      drafts.set(id, { id, messageId: d.messageId, version: 1, replyType: d.replyType, bodyText: d.bodyText, policyVersion: d.policyVersion, state: "proposed", createdBy: "iris", edited: false });
+      return id;
+    },
+    async supersedeThread(threadId, sentAt) {
+      check("supersedeThread");
+      const hit = [...messages.values()].filter(
+        (m) => m.threadId === threadId && m.direction === "inbound" && m.receivedAt < sentAt && (m.state === "drafted" || (m.state === "escalated" && !m.handledAt)),
+      );
+      for (const m of hit) {
+        Object.assign(m, { escalationReason: "answered_by_charlie", state: "escalated", handledAt: sentAt });
+        for (const d of drafts.values()) if (d.messageId === m.id && d.state === "proposed") d.state = "superseded";
+        events.push({ kind: "superseded", messageId: m.id, detail: { reason: "answered_by_charlie" } });
+      }
+      return hit.map((m) => m.id);
+    },
+    async listPushable(maxAttempts, limit) {
+      check("listPushable");
+      const pushOf = (id: string) => [...pushes.values()].find((p) => p.messageId === id) ?? null;
+      return [...messages.values()]
+        .filter((m) => m.direction === "inbound" && (m.state === "drafted" || (m.state === "escalated" && !m.handledAt && m.escalationReason !== "automated")))
+        .filter((m) => {
+          const p = pushOf(m.id);
+          return !p || (p.state !== "pushed" && p.attempts < maxAttempts);
+        })
+        .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+        .slice(0, limit)
+        .map((m) => {
+          const t = [...threads.values()].find((x) => x.id === m.threadId);
+          const d = [...drafts.values()].filter((x) => x.messageId === m.id && (x.state === "proposed" || x.state === "approved")).sort((a, b) => b.version - a.version)[0];
+          return {
+            messageId: m.id, gmailThreadId: t?.gmailThreadId ?? "", receivedAt: m.receivedAt, state: m.state!, escalationReason: m.escalationReason, intent: m.intent ?? null,
+            notionStudentIds: t?.notionStudentIds ?? [], notionStudentId: m.notionStudentId ?? null, purgeAt: m.purgeAt,
+            draft: d ? { id: d.id, bodyText: d.bodyText } : null, push: pushOf(m.id),
+          };
+        });
+    },
+    async savePush(p) {
+      check("savePush");
+      const old = [...pushes.values()].find((x) => x.messageId === p.messageId);
+      const id = old?.id ?? p.id ?? randomUUID();
+      pushes.set(id, { ...p, id });
+      return id;
+    },
+    async getPushDay(day) {
+      check("getPushDay");
+      return pushDays.get(day) ?? null;
+    },
+    async savePushDay(d) {
+      check("savePushDay");
+      pushDays.set(d.day, { ...d });
+    },
+    async listExpiringPushes(cutoff) {
+      check("listExpiringPushes");
+      return [...pushes.values()]
+        .filter((p) => !messages.has(p.messageId) || p.purgeAt < cutoff)
+        .map((p) => ({ id: p.id, notionBlockId: p.notionBlockId }));
+    },
+    async deletePush(id) {
+      check("deletePush");
+      pushes.delete(id);
+    },
+    async pushDayCounts(day) {
+      check("pushDayCounts");
+      const rows = [...pushes.values()].filter((p) => p.day === day);
+      return { drafts: rows.filter((p) => p.draftId).length, escalations: rows.filter((p) => !p.draftId).length, failed: rows.filter((p) => p.state === "failed").length };
+    },
     async updateMessage(id, patch) {
       check("updateMessage");
       const m = messages.get(id);
@@ -129,6 +212,9 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
     aiCalls,
     events,
     runs,
+    drafts,
+    pushes,
+    pushDays,
     calls,
     fail,
     setNow: (fn: () => number) => (now = fn),

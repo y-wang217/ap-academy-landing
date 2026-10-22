@@ -244,7 +244,11 @@ describe("AC9, AC13: source scans of the new files", () => {
     "app/api/scheduler/daily-task/route.ts", "app/api/scheduler/daily-task/run/route.ts", "components/scheduler/daily-task-status.tsx",
   ];
   it("never calls a messaging service or Notion comments", () => {
-    for (const f of NEW) expect(read(f), f).not.toMatch(/whatsapp|twilio|wa\.me|api\.notion\.com\/v1\/comments|\/comments/i);
+    // work.ts holds createComment for the Iris phone backup (REQ-44, ADR 0064); the daily task never calls it.
+    for (const f of NEW) {
+      const src = f === "lib/notion/work.ts" ? read(f).replace(/export async function createComment[\s\S]*?\n}\n/, "") : read(f);
+      expect(src, f).not.toMatch(/whatsapp|twilio|wa\.me|api\.notion\.com\/v1\/comments|\/comments|createComment/i);
+    }
   });
   it("writes only to Work and Work Log, never lessons, payouts, students or class tables", () => {
     for (const f of NEW) {

@@ -6,9 +6,14 @@ import { requireScheduler, type Denial } from "../scheduler/guard";
 import type { SchedulerIdentity } from "../scheduler/identity";
 import type { ClassifyPort } from "./classify";
 import { runClassify } from "./classify-step";
+import type { DraftPort } from "./draft";
+import { runDraft } from "./draft-step";
 import { runIntake, type GmailPort } from "./intake";
-import { IrisRunResponse, type InboxMessage, type MessageDetail, type OwnerSettings, type RunSummary } from "./schemas";
+import type { PushOutcome } from "./notion-push";
+import { POLICY_VERSION } from "./policy";
+import { IrisRunResponse, type InboxMessage, type MessageDetail, type OwnerSettings, type RunSummary, type ThreadView } from "./schemas";
 import type { IrisStore } from "./store";
+import { runSupersede } from "./supersede";
 
 const HEADERS = { "Cache-Control": "no-store" };
 const send = (status: number, body: unknown) => Response.json(body, { status, headers: HEADERS });
@@ -27,6 +32,10 @@ export type IrisRunDeps = {
   mailbox: string;
   /** Null when AI is not set up: messages stay at matched (REQ-43). */
   classify: ClassifyPort | null;
+  /** Null when AI is not set up: classified messages wait for a draft (REQ-44). */
+  draft: DraftPort | null;
+  /** The Notion phone backup, or null when Notion Work is not set up (REQ-44). */
+  push: ((d: { store: IrisStore; directory: () => Promise<FamilyEntry[]>; now: () => Date }) => Promise<PushOutcome>) | null;
 };
 
 /**
@@ -35,8 +44,9 @@ export type IrisRunDeps = {
  * is 503, a missing or wrong bearer is 401. Paused touches nothing; a held
  * lease is "busy". Every run that took the lease purges, records a run row,
  * writes the last-run columns and releases the lease. Only a Gmail list or
- * token failure is 502. It never throws. After a good intake it classifies
- * (REQ-43); Students & Parents is read at most once per run for both.
+ * token failure is 502. It never throws. After a good intake it reads
+ * Charlie's sent replies, classifies (REQ-43), drafts and pushes the phone
+ * copies (REQ-44), then purges; Students & Parents is read at most once per run.
  */
 export async function handleIrisRun(input: {
   authorization: string | null;
@@ -82,11 +92,20 @@ export async function handleIrisRun(input: {
   let once: Promise<FamilyEntry[]> | undefined;
   const directory = () => (once ??= deps.directory());
   const intake = await runIntake({ store, gmail: deps.gmail, directory, now, mailbox: deps.mailbox, settings: claimed });
-  const classified = intake.result === "ok"
+  const ok = intake.result === "ok";
+  const superseded = ok ? await runSupersede({ store, gmail: deps.gmail, settings: claimed }) : { stored: 0, superseded: 0, error: null };
+  const classified = ok
     ? await runClassify({ store, classify: deps.classify, directory, settings: claimed, now, startedAtMs: startedMs })
     : { result: "ok" as const, classified: 0, escalated: 0, failed: 0, error: null };
-  const outcome = { ...intake, result: classified.result === "failed" ? ("failed" as const) : intake.result };
-  let error = intake.error ?? classified.error;
+  const drafted = ok && classified.result === "ok"
+    ? await runDraft({ store, draft: deps.draft, directory, now, startedAtMs: startedMs })
+    : { result: "ok" as const, drafted: 0, escalated: 0, failed: 0, error: null };
+  const failedStep = classified.result === "failed" || drafted.result === "failed";
+  const pushed = ok && !failedStep && deps.push && now().getTime() - startedMs < TUNING.irisPushBudgetMs
+    ? await deps.push({ store, directory, now })
+    : null;
+  const outcome = { ...intake, result: failedStep ? ("failed" as const) : intake.result };
+  let error = intake.error ?? classified.error ?? drafted.error ?? superseded.error ?? pushed?.error ?? null;
   let purged = 0;
   try {
     purged = await store.purge();
@@ -95,8 +114,8 @@ export async function handleIrisRun(input: {
   }
   const finishedAt = now().toISOString();
   const counts = {
-    seen: intake.seen, stored: intake.stored, matched: intake.matched, classified: classified.classified,
-    escalated: intake.escalated + classified.escalated, skipped: intake.skipped, failed: intake.failed + classified.failed, purged,
+    seen: intake.seen, stored: intake.stored + superseded.stored, matched: intake.matched, classified: classified.classified, drafted: drafted.drafted,
+    escalated: intake.escalated + classified.escalated + drafted.escalated, skipped: intake.skipped, failed: intake.failed + classified.failed + drafted.failed, purged,
   };
   let runId: string | null = null;
   try {
@@ -124,7 +143,19 @@ export type IrisReader = {
   getMessage(id: string): Promise<MessageDetail | null>;
   /** Sets handled_at and handled_by on an unhandled escalated message and logs one event (REQ-43). */
   markHandled(id: string): Promise<"ok" | "conflict" | "not_found">;
+  /** REQ-44 queue sections. */
+  listDraftsWaiting(limit: number): Promise<InboxMessage[]>;
+  /** Approved or sent since `since` (Toronto midnight). */
+  listSentToday(since: string, limit: number): Promise<InboxMessage[]>;
+  listFailed(limit: number): Promise<InboxMessage[]>;
+  /** The message's thread and its drafts, newest version first; null when not in the org. */
+  getThreadView(id: string): Promise<ThreadView | null>;
+  /** iris.approve_draft, save_draft_edit and reject_draft (REQ-44): atomic, owner checked inside. */
+  approveDraft(id: string, version: number): Promise<ReviewOutcome>;
+  saveDraftEdit(id: string, version: number, body: string): Promise<{ result: ReviewOutcome; draftId: string | null }>;
+  rejectDraft(id: string, reason: string): Promise<ReviewOutcome>;
 };
+export type ReviewOutcome = "ok" | "conflict" | "not_found";
 
 export type IrisAdminDeps = {
   identity: () => Promise<SchedulerIdentity>;
@@ -168,7 +199,7 @@ export async function handleRunNow(input: {
       method: "POST",
       headers: { Authorization: `Bearer ${input.secret}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(70_000),
+      signal: AbortSignal.timeout(130_000),
     });
     const parsed = IrisRunResponse.safeParse(await res.json().catch(() => null));
     if (!parsed.success) return unavailable();
@@ -198,8 +229,61 @@ export async function handleMarkHandled(deps: IrisAdminDeps, id: string): Promis
   return send(200, { handled: true });
 }
 
-export type InboxRow = InboxMessage & { family: string };
-export type InboxResult = { kind: "denied" } | { kind: "error" } | { kind: "ok"; paused: boolean; needsYou: InboxRow[]; recent: InboxRow[]; nowMs: number };
+const ApproveBody = z.strictObject({ version: z.number().int().positive() });
+const EditBody = z.strictObject({ version: z.number().int().positive(), body: z.string().trim().min(1).max(5000) });
+const RejectBody = z.strictObject({ reason: z.string().trim().min(1).max(300) });
+
+/**
+ * The three draft reviews (REQ-44 AC8 to AC10, AC15). Owner only; the guard
+ * runs before the id or the body is read. ok 200, conflict 409, an unknown or
+ * other-org draft 404, a bad body 400, a failed save 500.
+ */
+async function review<T extends z.ZodType>(
+  deps: IrisAdminDeps,
+  id: string,
+  body: unknown,
+  schema: T,
+  act: (reader: IrisReader, input: z.infer<T>) => Promise<{ result: ReviewOutcome; draftId?: string | null }>,
+): Promise<Response> {
+  const gate = requireScheduler(await deps.identity(), ["admin"]);
+  if (!gate.ok) return deny(gate);
+  if (!z.guid().safeParse(id).success) return send(404, { error: "not_found" });
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return send(400, { error: "invalid_request" });
+  let out: { result: ReviewOutcome; draftId?: string | null };
+  try {
+    out = await act(deps.reader(gate.identity.orgId), parsed.data);
+  } catch {
+    return send(500, { error: "save_failed" });
+  }
+  if (out.result === "conflict") return send(409, { error: "conflict" });
+  if (out.result === "not_found") return send(404, { error: "not_found" });
+  return send(200, { ok: true, ...(out.draftId ? { draftId: out.draftId } : {}) });
+}
+
+export const handleApproveDraft = (deps: IrisAdminDeps, id: string, body: unknown) =>
+  review(deps, id, body, ApproveBody, async (r, b) => ({ result: await r.approveDraft(id, b.version) }));
+export const handleEditDraft = (deps: IrisAdminDeps, id: string, body: unknown) =>
+  review(deps, id, body, EditBody, (r, b) => r.saveDraftEdit(id, b.version, b.body));
+export const handleRejectDraft = (deps: IrisAdminDeps, id: string, body: unknown) =>
+  review(deps, id, body, RejectBody, async (r, b) => ({ result: await r.rejectDraft(id, b.reason) }));
+
+export type InboxRow = InboxMessage & { family: string; child: string | null };
+export type InboxResult =
+  | { kind: "denied" }
+  | { kind: "error" }
+  | { kind: "ok"; paused: boolean; needsYou: InboxRow[]; drafts: InboxRow[]; sentToday: InboxRow[]; failed: InboxRow[]; recent: InboxRow[]; nowMs: number };
+
+/** Toronto midnight today, as an instant. */
+export function torontoMidnight(now: Date): string {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(now);
+  // Toronto is UTC-4 or UTC-5: of the two candidate instants, the later one at or before now is midnight.
+  for (const offset of ["-04:00", "-05:00"]) {
+    const t = new Date(`${day}T00:00:00${offset}`);
+    if (t.getTime() <= now.getTime() && new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(t) === day) return t.toISOString();
+  }
+  return new Date(`${day}T00:00:00-05:00`).toISOString();
+}
 
 /** A page's first check. Anything but the owner is sent away; an unreachable identity is an error notice. */
 function pageGate(who: SchedulerIdentity): { kind: "denied" } | { kind: "error" } | { kind: "ok"; orgId: string } {
@@ -217,21 +301,36 @@ export async function loadInbox(deps: IrisAdminDeps & { studentNames: (orgId: st
   if (gate.kind !== "ok") return gate;
   try {
     const reader = deps.reader(gate.orgId);
-    const [settings, needs, recent, names] = await Promise.all([
+    const nowMs = Date.now();
+    const [settings, needs, drafts, sentToday, failed, recent, names] = await Promise.all([
       reader.getSettings(),
       reader.listNeedsYou(50),
+      reader.listDraftsWaiting(50),
+      reader.listSentToday(torontoMidnight(new Date(nowMs)), 50),
+      reader.listFailed(50),
       reader.listRecent(50),
       deps.studentNames(gate.orgId).catch(() => new Map<string, string>()),
     ]);
     if (!settings) return { kind: "error" };
-    const label = (m: InboxMessage): InboxRow => ({ ...m, family: familyLabel(m.notionStudentIds, m.fromEmail, names) });
-    return { kind: "ok", paused: settings.paused, needsYou: needs.map(label), recent: recent.map(label), nowMs: Date.now() };
+    const label = (m: InboxMessage): InboxRow => ({
+      ...m,
+      family: familyLabel(m.notionStudentIds, m.fromEmail, names),
+      child: m.notionStudentId ? (names.get(m.notionStudentId) ?? null) : null,
+    });
+    return {
+      kind: "ok", paused: settings.paused, needsYou: needs.map(label), drafts: drafts.map(label), sentToday: sentToday.map(label),
+      failed: failed.map(label), recent: recent.map(label), nowMs,
+    };
   } catch {
     return { kind: "error" };
   }
 }
 
-export type MessageResult = { kind: "denied" } | { kind: "error" } | { kind: "not_found" } | { kind: "ok"; message: MessageDetail & { family: string } };
+export type MessageResult =
+  | { kind: "denied" }
+  | { kind: "error" }
+  | { kind: "not_found" }
+  | { kind: "ok"; message: MessageDetail & { family: string }; view: ThreadView; currentPolicyVersion: number };
 
 /** The /iris/messages/[id] page (REQ-43 AC14): owner only, checked before any Iris read. */
 export async function loadMessage(deps: IrisAdminDeps & { studentNames: (orgId: string) => Promise<Map<string, string>> }, id: string): Promise<MessageResult> {
@@ -239,9 +338,10 @@ export async function loadMessage(deps: IrisAdminDeps & { studentNames: (orgId: 
   if (gate.kind !== "ok") return gate;
   if (!z.guid().safeParse(id).success) return { kind: "not_found" };
   try {
-    const [message, names] = await Promise.all([deps.reader(gate.orgId).getMessage(id), deps.studentNames(gate.orgId).catch(() => new Map<string, string>())]);
-    if (!message) return { kind: "not_found" };
-    return { kind: "ok", message: { ...message, family: familyLabel(message.notionStudentIds, message.fromEmail, names) } };
+    const reader = deps.reader(gate.orgId);
+    const [message, view, names] = await Promise.all([reader.getMessage(id), reader.getThreadView(id), deps.studentNames(gate.orgId).catch(() => new Map<string, string>())]);
+    if (!message || !view) return { kind: "not_found" };
+    return { kind: "ok", message: { ...message, family: familyLabel(message.notionStudentIds, message.fromEmail, names) }, view, currentPolicyVersion: POLICY_VERSION };
   } catch {
     return { kind: "error" };
   }
@@ -250,17 +350,20 @@ export async function loadMessage(deps: IrisAdminDeps & { studentNames: (orgId: 
 export type IrisSettingsResult =
   | { kind: "denied" }
   | { kind: "error" }
-  | { kind: "ok"; paused: boolean; lastRun: RunSummary | null; lastError: string | null; missing: string[]; aiConfigured: boolean; confidenceThreshold: number };
+  | { kind: "ok"; paused: boolean; lastRun: RunSummary | null; lastError: string | null; missing: string[]; aiConfigured: boolean; confidenceThreshold: number; phoneAlertsOff: boolean };
 
-/** The /iris/settings page: state, the last run, its error, the unset env names, and whether AI is set up. */
-export async function loadIrisSettings(deps: IrisAdminDeps, missing: string[], aiConfigured = true): Promise<IrisSettingsResult> {
+/**
+ * The /iris/settings page: state, the last run, its error, the unset env
+ * names, whether AI is set up, and whether phone alerts are off (REQ-44 AC18).
+ */
+export async function loadIrisSettings(deps: IrisAdminDeps, missing: string[], aiConfigured = true, phoneAlertsOff = false): Promise<IrisSettingsResult> {
   const gate = pageGate(await deps.identity());
   if (gate.kind !== "ok") return gate;
   try {
     const reader = deps.reader(gate.orgId);
     const [settings, lastRun] = await Promise.all([reader.getSettings(), reader.lastRun()]);
     if (!settings) return { kind: "error" };
-    return { kind: "ok", paused: settings.paused, lastRun, lastError: settings.lastError, missing, aiConfigured, confidenceThreshold: settings.confidenceThreshold };
+    return { kind: "ok", paused: settings.paused, lastRun, lastError: settings.lastError, missing, aiConfigured, confidenceThreshold: settings.confidenceThreshold, phoneAlertsOff };
   } catch {
     return { kind: "error" };
   }

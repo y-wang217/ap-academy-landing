@@ -1,12 +1,12 @@
 import { z } from "zod";
-import type { ClassifiableMessage, IrisSettings, MessageState, PollResult, RetryableMessage, StoredThread, ThreadHistoryRow } from "./store";
+import type { ClassifiableMessage, DraftableMessage, IrisSettings, MessageState, PollResult, PushDay, PushRecord, RetryableMessage, StoredThread, ThreadHistoryRow } from "./store";
 
 /** Zod for every Iris row read and every Iris response (ADR 0017). */
 const Result = z.enum(["ok", "busy", "failed", "paused"]);
 const ts = z.string().min(1);
 /** numeric columns: PostgREST sends a JSON number, but a string is accepted too. */
 const numeric = z.union([z.number(), z.string()]).transform(Number).pipe(z.number().finite());
-const States = z.enum(["received", "matched", "classified", "escalated", "failed"]);
+const States = z.enum(["received", "matched", "classified", "escalated", "drafted", "approved", "sent", "failed"]);
 
 export const SettingsRow = z.object({
   id: z.guid(), org_id: z.guid(), paused: z.boolean(), retention_days: z.number().int(), confidence_threshold: numeric,
@@ -36,6 +36,56 @@ export const HistoryRow = z.object({
 
 export const PurgeCounts = z.record(z.string(), z.number());
 
+/** REQ-44: rows for drafting, the phone backup and the owner's review. */
+export const DraftableRow = z.object({
+  id: z.guid(), thread_id: z.guid(), received_at: ts, body_text: z.string().nullable(), retry_count: z.number().int(),
+  state: z.enum(["classified", "escalated"]), intent: z.string().nullable(), notion_student_id: z.guid().nullable(),
+}).transform((r): DraftableMessage => ({
+  id: r.id, threadId: r.thread_id, receivedAt: r.received_at, bodyText: r.body_text, retryCount: r.retry_count, state: r.state, intent: r.intent, notionStudentId: r.notion_student_id,
+}));
+
+export const PushRow = z.object({
+  id: z.guid(), message_id: z.guid(), draft_id: z.guid().nullable(), day: z.string(), notion_block_id: z.string().nullable(), comment_done: z.boolean(),
+  state: z.enum(["pending", "pushed", "failed"]), attempts: z.number().int(), last_error: z.string().nullable(), purge_at: ts,
+}).transform((r): PushRecord => ({
+  id: r.id, messageId: r.message_id, draftId: r.draft_id, day: r.day, notionBlockId: r.notion_block_id, commentDone: r.comment_done,
+  state: r.state, attempts: r.attempts, lastError: r.last_error, purgeAt: r.purge_at,
+}));
+
+export const PushCandidateRow = z.object({
+  id: z.guid(), thread_id: z.guid(), received_at: ts, state: States, escalation_reason: z.string().nullable(), intent: z.string().nullable(),
+  notion_student_id: z.guid().nullable(), purge_at: ts,
+});
+
+export const PushDayRow = z.object({ day: z.string(), work_page_id: z.string().nullable(), log_entry_id: z.string().nullable() })
+  .transform((r): PushDay => ({ day: r.day, workPageId: r.work_page_id, logEntryId: r.log_entry_id }));
+
+/** What iris.approve_draft, save_draft_edit and reject_draft return. */
+export const ReviewResult = z.object({ result: z.enum(["ok", "conflict", "not_found"]), draft_id: z.guid().optional() })
+  .transform((r) => ({ result: r.result, draftId: r.draft_id ?? null }));
+
+export type DraftView = {
+  id: string; version: number; replyType: string; bodyText: string; policyVersion: number;
+  state: "proposed" | "approved" | "rejected" | "superseded" | "sent" | "failed"; createdBy: "iris" | "owner"; edited: boolean;
+  approvedAt: string | null; rejectedReason: string | null; createdAt: string;
+};
+export const DraftRow = z.object({
+  id: z.guid(), version: z.number().int(), reply_type: z.string(), body_text: z.string(), policy_version: z.number().int(),
+  state: z.enum(["proposed", "approved", "rejected", "superseded", "sent", "failed"]), created_by: z.enum(["iris", "owner"]), edited: z.boolean(),
+  approved_at: ts.nullable(), rejected_reason: z.string().nullable(), created_at: ts,
+}).transform((r): DraftView => ({
+  id: r.id, version: r.version, replyType: r.reply_type, bodyText: r.body_text, policyVersion: r.policy_version, state: r.state, createdBy: r.created_by,
+  edited: r.edited, approvedAt: r.approved_at, rejectedReason: r.rejected_reason, createdAt: r.created_at,
+}));
+
+/** Another message of the same thread, for the message page. */
+export type ThreadMessage = { id: string; receivedAt: string; direction: "inbound" | "outbound"; source: string; text: string | null };
+export const ThreadMessageRow = z.object({
+  id: z.guid(), received_at: ts, direction: z.enum(["inbound", "outbound"]), source: z.string(), body_text: z.string().nullable(), snippet: z.string().nullable(),
+}).transform((r): ThreadMessage => ({ id: r.id, receivedAt: r.received_at, direction: r.direction, source: r.source, text: r.body_text ?? r.snippet }));
+
+export type ThreadView = { thread: ThreadMessage[]; drafts: DraftView[] };
+
 /** What the owner sees: settings without the lease. */
 export type OwnerSettings = { paused: boolean; mailbox: string | null; lastPollAt: string | null; lastPollResult: PollResult | null; lastError: string | null; confidenceThreshold: number };
 export const OwnerSettingsRow = z.object({
@@ -57,12 +107,18 @@ export type InboxMessage = {
   state: MessageState;
   escalationReason: string | null;
   intent: string | null;
+  confidence: number | null;
   flags: string[];
   notionStudentIds: string[];
+  /** The chosen child (REQ-44). */
+  notionStudentId: string | null;
+  /** Its Notion phone copy failed (REQ-44 AC13). */
+  pushFailed: boolean;
 };
 export const InboxMessageRow = z.object({
   id: z.guid(), thread_id: z.guid(), from_email: z.string(), snippet: z.string().nullable(), received_at: ts,
-  state: States, escalation_reason: z.string().nullable(), intent: z.string().nullable(), flags: z.array(z.string()),
+  state: States, escalation_reason: z.string().nullable(), intent: z.string().nullable(), confidence: numeric.nullable(), flags: z.array(z.string()),
+  notion_student_id: z.guid().nullable(),
 });
 export const InboxThreadRow = z.object({ id: z.guid(), gmail_thread_id: z.string(), subject: z.string().nullable(), notion_student_ids: z.array(z.guid()) });
 
@@ -104,6 +160,7 @@ export const IrisRunResponse = z.strictObject({
   stored: count.optional(),
   matched: count.optional(),
   classified: count.optional(),
+  drafted: count.optional(),
   escalated: count.optional(),
   skipped: count.optional(),
   failed: count.optional(),

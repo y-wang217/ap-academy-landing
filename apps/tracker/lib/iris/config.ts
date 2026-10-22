@@ -7,6 +7,14 @@ export type GmailConfig = { clientEmail: string; privateKey: string; mailbox: st
 
 export const IRIS_ENV = ["IRIS_CRON_SECRET", "IRIS_ORG_ID", "IRIS_GMAIL_CLIENT_EMAIL", "IRIS_GMAIL_PRIVATE_KEY", "IRIS_GMAIL_MAILBOX"] as const;
 
+/** Set by a human (REQ-44): without it the phone backup writes to-dos but no mention comments. */
+export const IRIS_OPTIONAL_ENV = ["NOTION_CHARLIE_USER_ID"] as const;
+
+/** Charlie's Notion user id, mentioned on each new to-do so Notion pushes it to his phone; null when unset. */
+export function readCharlieUserId(): string | null {
+  return process.env.NOTION_CHARLIE_USER_ID?.trim() || null;
+}
+
 export function readIrisRunEnv(): { secret: string | undefined; orgId: string | undefined } {
   return { secret: process.env.IRIS_CRON_SECRET || undefined, orgId: process.env.IRIS_ORG_ID || undefined };
 }

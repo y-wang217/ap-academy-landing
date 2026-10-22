@@ -50,3 +50,31 @@ describe("ADR 0061", () => {
     expect(read(join(ROOT, "apps/tracker/docs/iris-operations.md"))).toMatch(/^## Classification/m);
   });
 });
+
+// REQ-44 AC24: the drafting and phone backup ADRs.
+describe("ADRs 0063 and 0064", () => {
+  for (const file of ["0063-iris-policy-versions-and-drafts.md", "0064-iris-phone-backup.md"]) {
+    it(`${file} has every section, is indexed and has no em dash`, () => {
+      const src = read(join(DECISIONS, file));
+      expect(src, file).toMatch(/^Status: accepted/m);
+      for (const h of ["## Context", "## Decision", "## Alternatives considered", "## Consequences"]) expect(src, `${file} ${h}`).toContain(h);
+      expect(read(join(DECISIONS, "README.md"))).toContain(`(${file})`);
+      expect(src).not.toMatch(/[—]/);
+    });
+  }
+
+  it("0063 states the rule check, the signature, the functions and the streak rules", () => {
+    const src = read(join(DECISIONS, "0063-iris-policy-versions-and-drafts.md"));
+    for (const s of ["draft_rule", "SIGNATURE", "iris.approve_draft", "iris.save_draft_edit", "iris.reject_draft", "unedited_streak", "answered_by_charlie"]) expect(src, s).toContain(s);
+  });
+
+  it("0064 states what never goes to Notion and the retention sweep", () => {
+    const src = read(join(DECISIONS, "0064-iris-phone-backup.md"));
+    for (const s of ["NOTION_CHARLIE_USER_ID", "never", "purge date", "No edits after creation"]) expect(src, s).toContain(s);
+  });
+
+  it("the operator guide has Drafting, Review and Phone backup sections", () => {
+    const src = read(join(ROOT, "apps/tracker/docs/iris-operations.md"));
+    for (const h of ["## Drafting", "## Review", "## Phone backup"]) expect(src, h).toMatch(new RegExp(`^${h}$`, "m"));
+  });
+});

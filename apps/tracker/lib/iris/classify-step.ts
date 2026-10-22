@@ -109,6 +109,9 @@ export async function runClassify(deps: ClassifyStepDeps): Promise<ClassifyOutco
       flags: routed.flags,
       escalationReason: routed.reason,
       policyVersion: POLICY_VERSION,
+      notionStudentId: routed.studentId,
+      // The classifier's tries are spent: drafting gets its own (REQ-44 AC7).
+      retryCount: 0,
       lastError: null,
       ...(routed.handled ? { handledAt: now } : {}),
     });

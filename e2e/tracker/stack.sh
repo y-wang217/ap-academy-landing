@@ -89,5 +89,6 @@ IRIS_GMAIL_CLIENT_EMAIL=iris-mail@e2e.iam.example
 IRIS_GMAIL_PRIVATE_KEY="$irisKey"
 IRIS_GMAIL_MAILBOX=charlie@apacademy.ca
 IRIS_GMAIL_API_BASE=http://127.0.0.1:54334
+NOTION_CHARLIE_USER_ID=6d3ca702-9281-4f05-860f-182f06b841c2
 ENV
 cat "$state/env"

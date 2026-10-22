@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IRIS_TEXT, ageText, confidenceText, gmailThreadUrl, intentLabel, notSetUpText, runSummaryText, stateLabel } from "./iris-text";
+import { IRIS_TEXT, ageText, confidenceText, gmailThreadUrl, intentLabel, notSetUpText, reasonLabel, runSummaryText, stateLabel } from "./iris-text";
 
 // REQ-42 AC26, AC27: the Iris page copy.
 describe("iris-text", () => {
@@ -76,5 +76,30 @@ describe("iris-text: classification labels", () => {
       stateLabel("classified", null),
     ].join("\n");
     expect(all).not.toMatch(/[–—]/);
+  });
+});
+
+// REQ-44 AC13: every new state and reason has a label, and every section an empty line.
+describe("iris-text, drafting", () => {
+  it("labels the new states and reasons", () => {
+    expect(stateLabel("drafted", null)).toBe("Draft waiting");
+    expect(stateLabel("approved", null)).toBe("Approved, send by hand");
+    expect(stateLabel("sent", null)).toBe("Sent");
+    expect(stateLabel("escalated", "needs_charlie")).toBe("Iris wants you to check");
+    expect(stateLabel("escalated", "draft_rule")).toBe("Draft held back");
+    expect(stateLabel("escalated", "draft_rejected")).toBe("You rejected the draft");
+    expect(stateLabel("escalated", "answered_by_charlie")).toBe("You replied in Gmail");
+    expect(stateLabel("escalated", "escalate_only", { intent: "no_show" })).toBe("No-show, for you");
+    expect(reasonLabel("unknown_sender")).toBe("Unknown sender");
+  });
+
+  it("has the section, empty, editor and copy strings, with no em dash", () => {
+    expect(IRIS_TEXT).toMatchObject({
+      draftsWaiting: "Drafts waiting", sentToday: "Sent today", failedSection: "Failed",
+      noDraftsWaiting: "No drafts waiting.", nothingSentToday: "Nothing approved or sent today.", nothingFailed: "Nothing failed.",
+      phoneCopyFailed: "Phone copy failed", saveFailed: "Could not save. Try again.", approvedCopy: "Approved. Paste it into Gmail and send it yourself.",
+      phoneAlertsOff: "Phone alerts are off (NOTION_CHARLIE_USER_ID is not set).",
+    });
+    for (const v of Object.values(IRIS_TEXT)) if (typeof v === "string") expect(v).not.toMatch(/[—]/);
   });
 });

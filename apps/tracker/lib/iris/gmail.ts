@@ -101,6 +101,8 @@ export const GmailMessage = z.object({
   threadId: z.string().min(1),
   internalDate: z.string().regex(/^\d+$/),
   snippet: z.string().default(""),
+  /** SENT marks mail the mailbox itself sent (REQ-44): only that supersedes a draft. */
+  labelIds: z.array(z.string()).optional(),
   payload: Part,
 });
 export type GmailMessage = z.infer<typeof GmailMessage>;

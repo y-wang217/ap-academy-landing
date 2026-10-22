@@ -58,8 +58,20 @@ export const TUNING = {
   irisPollLeaseSeconds: 300,
   /** Messages Iris classifies in one run, oldest first (REQ-43). */
   irisMaxClassifyPerRun: 10,
-  /** No new classify call starts this long after the run started, so the run ends inside its 60 s. */
+  /** No new classify call starts this long after the run started, so the run ends inside its 120 s (REQ-44). */
   irisClassifyBudgetMs: 35_000,
+  /** Draft calls Iris starts in one run, oldest first (REQ-44). */
+  irisMaxDraftPerRun: 6,
+  /** No new draft call starts this long after the run started. */
+  irisDraftBudgetMs: 70_000,
+  /** The phone backup starts only before this long after the run started. */
+  irisPushBudgetMs: 95_000,
+  /** Messages the phone backup writes to Notion in one run. */
+  irisMaxPushPerRun: 20,
+  /** Tries per message before its phone copy stays failed. */
+  irisMaxPushAttempts: 5,
+  /** Unedited approvals in a row that make a reply type auto-send eligible. Mirrored as a constant in migration 0025. */
+  irisAutoSendStreak: 20,
   /** Founder Console (REQ-54): each provider read is abandoned after this long. */
   consoleProviderTimeoutMs: 8_000,
   /** Notion pages of 100 rows one console panel reads before it reports stale. */
