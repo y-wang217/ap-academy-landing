@@ -11,6 +11,9 @@
 // "Ryan Renamed") and /__people/inactive (toggles Ryan's Status between Active and Inactive).
 // REQ-35 adds POST /__schedule/commit-then-fail (the next student-page PATCH is applied, then answered 504)
 // and GET /__schedule/writes (applied Weekly Schedule PATCHes per page).
+// REQ-34: student pages also carry Schedule Source. A PATCH sets only the properties it names, and
+// /__schedule/writes counts only PATCHes that carry Weekly Schedule. GET /__schedule/page/<id> returns
+// both texts; POST /__schedule/set {id, text} types a hand edit into Weekly Schedule.
 // REQ-33: a Students query whose filter holds a Weekly Schedule is_not_empty clause gets only students with schedule text.
 // REQ-39: Lessons (schema with Class occurrence, query, create, read, patch) plus GET /__lessons. One form-logged row
 // cccc…0002 (Ryan, Sam, 21 days ago, empty ref). The seeded paid lesson cccc…0001 stays outside it and is never served to a query.
@@ -63,6 +66,7 @@ let familiesFail = false;
 
 // Weekly Schedule text per student, empty to start (so a first booking can adopt the student).
 const schedule = new Map(STUDENTS.map((s) => [s.id, ""]));
+const scheduleSource = new Map(STUDENTS.map((s) => [s.id, ""]));
 let scheduleFails = false;
 let peopleFails = false;
 const RYAN_PAGE = STAFF[0];
@@ -77,6 +81,7 @@ const studentPage = (id) => {
       ...base.properties,
       Stage: { select: { name: "Active" } },
       "Weekly Schedule": { rich_text: schedule.get(id) ? [{ plain_text: schedule.get(id) }] : [] },
+      "Schedule Source": { rich_text: scheduleSource.get(id) ? [{ plain_text: scheduleSource.get(id) }] : [] },
     },
   };
 };
@@ -386,6 +391,14 @@ http.createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/__students/fail") { familiesFail = !familiesFail; return res.end(JSON.stringify({ familiesFail })); }
   if (req.method === "POST" && req.url === "/__schedule/commit-then-fail") { commitThenFail = true; return res.end(JSON.stringify({ commitThenFail })); }
   if (req.method === "GET" && req.url === "/__schedule/writes") return res.end(JSON.stringify(Object.fromEntries(scheduleWrites)));
+  const probed = /^\/__schedule\/page\/([0-9a-f-]{36})$/.exec(req.url ?? "")?.[1];
+  if (req.method === "GET" && probed) return res.end(JSON.stringify({ weeklySchedule: schedule.get(probed) ?? null, scheduleSource: scheduleSource.get(probed) ?? null }));
+  if (req.method === "POST" && req.url === "/__schedule/set") {
+    await bufferBody(req);
+    const { id, text } = await readBody(req);
+    schedule.set(id, text);
+    return res.end("{}");
+  }
   await bufferBody(req);
   if (!req.headers["x-e2e-probe"]) journal.push({ method: req.method, path: req.url, body: req.rawBody ? JSON.parse(req.rawBody) : null });
   // Read-only: the seeded lesson answers a GET and nothing else.
@@ -405,9 +418,13 @@ http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ object: "error", status: 500 }));
     }
     if (req.method === "PATCH") {
-      const text = (await readBody(req)).properties?.["Weekly Schedule"]?.rich_text?.[0]?.text?.content ?? "";
-      schedule.set(pageId, text);
-      scheduleWrites.set(pageId, (scheduleWrites.get(pageId) ?? 0) + 1);
+      const props = (await readBody(req)).properties ?? {};
+      const textOfProp = (p) => p?.rich_text?.[0]?.text?.content ?? "";
+      if ("Weekly Schedule" in props) {
+        schedule.set(pageId, textOfProp(props["Weekly Schedule"]));
+        scheduleWrites.set(pageId, (scheduleWrites.get(pageId) ?? 0) + 1);
+      }
+      if ("Schedule Source" in props) scheduleSource.set(pageId, textOfProp(props["Schedule Source"]));
       if (commitThenFail) {
         // Notion saved it, but the caller sees a gateway timeout.
         commitThenFail = false;
@@ -425,7 +442,7 @@ http.createServer(async (req, res) => {
   }
   if (req.method === "GET" && req.url === `/v1/data_sources/${STUDENTS_DS}`) {
     res.end(JSON.stringify({ properties: {
-      "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" },
+      "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" }, "Schedule Source": { id: "src" },
       "Hourly Rate (CAD)": { id: "hr" }, "Lesson Cadence": { id: "lc" }, "Billing Family": { id: "bf" }, "Parent Phone": { id: "pp" }, Notes: { id: "nts" },
       "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" },
     } }));

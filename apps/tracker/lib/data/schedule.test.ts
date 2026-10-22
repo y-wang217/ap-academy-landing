@@ -139,3 +139,79 @@ describe("REQ-30: the locked write over RPC", () => {
     await expect(s.readWriteContext(REQ, [])).rejects.toThrow("unavailable");
   });
 });
+
+// REQ-34: Mark as seen (migration 0026). ---------------------------------------------------------
+
+/** A from() chain that records every call and answers each awaited update in order. */
+function recordingStore(answers: { data: unknown; error: unknown }[]) {
+  const updates: [string, unknown[]][][] = [];
+  const s = createScheduleStore(async () => ({
+    db: {
+      tracker: {
+        from: (table: string) => {
+          const calls: [string, unknown[]][] = [["from", [table]]];
+          updates.push(calls);
+          const handler: ProxyHandler<object> = {
+            get(_t, prop) {
+              if (prop === "then") return (resolve: (v: unknown) => void) => resolve(answers.shift() ?? { data: [], error: null });
+              return (...args: unknown[]) => { calls.push([String(prop), args]); return new Proxy({}, handler); };
+            },
+          };
+          return new Proxy({}, handler);
+        },
+      },
+    } as unknown as Db,
+    orgId: "10000000-0000-4000-8000-000000000001",
+    userId: "20000000-0000-4000-8000-000000000001",
+  }));
+  return { s, updates };
+}
+
+describe("REQ-34 AC10: markDriftSeen", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const B = "22222222-2222-4222-8222-222222222222";
+  const C = "33333333-3333-4333-8333-333333333333";
+  // Exactly what Postgres returned, microseconds and offset included.
+  const AT = "2026-10-21T14:03:07.123456+00:00";
+
+  it("one update for null items, one per timestamped item, with the posted string unchanged; returns the summed rows", async () => {
+    const { s, updates } = recordingStore([{ data: [{ id: "1" }, { id: "2" }], error: null }, { data: [{ id: "3" }], error: null }]);
+    expect(await s.markDriftSeen([{ studentId: A, lastDriftAt: null }, { studentId: B, lastDriftAt: null }, { studentId: C, lastDriftAt: AT }])).toBe(3);
+    expect(updates).toHaveLength(2);
+    const [nulls, stamped] = updates;
+    expect(nulls[0]).toEqual(["from", ["schedule_summaries"]]);
+    expect(nulls.find(([m]) => m === "update")![1][0]).toEqual({ drift_seen_at: expect.any(String) });
+    expect(nulls).toContainEqual(["in", ["notion_student_id", [A, B]]]);
+    expect(nulls).toContainEqual(["is", ["last_drift_at", null]]);
+    expect(nulls).toContainEqual(["not", ["last_drift_text", "is", null]]);
+    expect(nulls).toContainEqual(["select", ["id"]]);
+    expect(stamped).toContainEqual(["eq", ["notion_student_id", C]]);
+    expect(stamped).toContainEqual(["eq", ["last_drift_at", AT]]);
+    expect(stamped.some(([m]) => m === "is" || m === "in")).toBe(false);
+  });
+
+  it("sends no null update when every item has a time", async () => {
+    const { s, updates } = recordingStore([{ data: [], error: null }]);
+    expect(await s.markDriftSeen([{ studentId: C, lastDriftAt: AT }])).toBe(0);
+    expect(updates).toHaveLength(1);
+  });
+
+  it("throws on a query error, never a false success", async () => {
+    const { s } = recordingStore([{ data: null, error: { message: "boom" } }]);
+    await expect(s.markDriftSeen([{ studentId: C, lastDriftAt: AT }])).rejects.toThrow("unavailable");
+  });
+
+  it("reads last_drift_at and drift_seen_at into the summary", async () => {
+    const row = {
+      id: "50000000-0000-4000-8000-000000000001", notion_student_id: A, adopted_at: "t", adopted_from_text: "", last_written_text: null, last_written_at: null,
+      sync_state: "synced", last_error: null, last_drift_text: "typed", last_drift_at: AT, drift_seen_at: null,
+    };
+    expect(await store({ data: row, error: null }).getSummary(A)).toMatchObject({ lastDriftText: "typed", lastDriftAt: AT, driftSeenAt: null });
+  });
+
+  it("markSummary writes last_drift_at when given", async () => {
+    const { s, updates } = recordingStore([{ data: [{ id: "1" }], error: null }]);
+    await s.markSummary(A, { syncState: "synced", lastDriftText: "typed", lastDriftAt: AT });
+    expect(updates[0].find(([m]) => m === "update")![1][0]).toMatchObject({ last_drift_text: "typed", last_drift_at: AT });
+  });
+});

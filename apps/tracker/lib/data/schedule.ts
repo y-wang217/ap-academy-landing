@@ -51,9 +51,12 @@ const SummaryRow = z.object({
   id: uuid, notion_student_id: uuid, adopted_at: ts, adopted_from_text: z.string(), last_written_text: z.string().nullable(),
   last_written_at: ts.nullable(), sync_state: z.enum(["pending", "synced", "failed"]), last_error: z.string().nullable(),
   last_drift_text: z.string().nullable(),
+  // Migration 0026 (REQ-34).
+  last_drift_at: ts.nullish(), drift_seen_at: ts.nullish(),
 }).transform((r): SummaryRecord => ({
   id: r.id, studentId: r.notion_student_id, adoptedAt: r.adopted_at, adoptedFromText: r.adopted_from_text, lastWrittenText: r.last_written_text,
   lastWrittenAt: r.last_written_at, syncState: r.sync_state, lastError: r.last_error, lastDriftText: r.last_drift_text,
+  lastDriftAt: r.last_drift_at ?? null, driftSeenAt: r.drift_seen_at ?? null,
 }));
 
 const UNAVAILABLE: StoreError = { ok: false, status: 503, error: "unavailable" };
@@ -305,11 +308,31 @@ export function createScheduleStore(context: () => Promise<ScheduleContext | nul
         }
         if (patch.lastError !== undefined) fields.last_error = patch.lastError;
         if (patch.lastDriftText !== undefined) fields.last_drift_text = patch.lastDriftText;
+        if (patch.lastDriftAt !== undefined) fields.last_drift_at = patch.lastDriftAt;
         const { data } = await db.tracker.from("schedule_summaries").update(fields).eq("notion_student_id", studentId).select("id");
         return (data?.length ?? 0) > 0;
       } catch {
         return false;
       }
+    },
+    // The posted drift time goes back as the exact string Postgres returned, never re-parsed,
+    // so "not distinct from" holds to the microsecond (REQ-34 AC10).
+    async markDriftSeen(items) {
+      const { db } = await ctx();
+      const seenAt = new Date().toISOString();
+      const rows = (r: { data: unknown; error: unknown }) => {
+        if (r.error) throw new Error("unavailable");
+        return Array.isArray(r.data) ? r.data.length : 0;
+      };
+      const legacy = items.filter((i) => i.lastDriftAt === null).map((i) => i.studentId);
+      const updates = [
+        ...(legacy.length > 0
+          ? [db.tracker.from("schedule_summaries").update({ drift_seen_at: seenAt }).in("notion_student_id", legacy).is("last_drift_at", null).not("last_drift_text", "is", null).select("id")]
+          : []),
+        ...items.filter((i) => i.lastDriftAt !== null).map((i) =>
+          db.tracker.from("schedule_summaries").update({ drift_seen_at: seenAt }).eq("notion_student_id", i.studentId).eq("last_drift_at", i.lastDriftAt!).select("id")),
+      ];
+      return (await Promise.all(updates)).reduce((n, r) => n + rows(r), 0);
     },
   };
   return store;

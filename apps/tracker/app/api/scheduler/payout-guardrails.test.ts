@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StudentRecord } from "../../../lib/notion/students";
-import { writeWeeklySchedule } from "../../../lib/notion/students";
+import { writeStudentSchedule } from "../../../lib/notion/students";
 import type { DailyNotion, DailyTaskDeps } from "../../../lib/scheduler/daily-task";
 import type { DailyTaskStore } from "../../../lib/scheduler/daily-task-store";
 import { handleCancelOccurrence, handleCreateClass, handleEditOccurrence, type ScheduleDeps } from "../../../lib/scheduler/schedule-handlers";
@@ -33,11 +33,11 @@ function recorders() {
     return new Response("{}", { status: 200 });
   }) as unknown as typeof fetch;
   const cfg = { token: "secret_x", dataSourceId: "ds-students" };
-  const notion = new Map<string, StudentRecord>([S1, S2].map((id) => [id, { id, name: id.slice(0, 2), stage: "Active", weeklySchedule: "" }]));
+  const notion = new Map<string, StudentRecord>([S1, S2].map((id) => [id, { id, name: id.slice(0, 2), stage: "Active", weeklySchedule: "", scheduleSource: "" }]));
   const students: NonNullable<ScheduleDeps["students"]> = {
     list: async () => [...notion.values()],
     get: async (id) => notion.get(id) ?? null,
-    write: (id, text) => writeWeeklySchedule(cfg, id, text, fetcher),
+    write: (id, patch) => writeStudentSchedule(cfg, id, patch, fetcher),
   };
   const record = (name: string) => async (...args: unknown[]) => { workWrites.push({ name, args }); return name === "create" ? { pageId: "a0000000-0000-4000-8000-000000000001", pageUrl: "https://notion.so/p" } : name === "list" ? { introId: "i", todos: [] } : name === "createLog" ? "a0000000-0000-4000-8000-000000000002" : name === "find" ? null : name === "update" ? "t" : name === "append" ? { blockId: "b", lastEditedTime: "t" } : undefined; };
   const work = { find: record("find"), create: record("create"), list: record("list"), update: record("update"), append: record("append"), updateIntro: record("updateIntro"), createLog: record("createLog"), updateLog: record("updateLog") } as unknown as DailyNotion;
@@ -84,12 +84,14 @@ describe("AC5: handler guardrail", () => {
     expect(run.requests.length).toBeGreaterThan(0);
   });
 
-  it("Notion writes are only Weekly Schedule patches to student pages", async () => {
+  it("Notion writes are only Weekly Schedule and Schedule Source patches to student pages (REQ-34)", async () => {
     const { requests } = await driveEverything();
     for (const r of requests) {
       expect(r.method).toBe("PATCH");
       expect(r.url).toMatch(/\/pages\/[0-9a-f-]{36}$/);
-      expect(Object.keys((r.body as { properties: object }).properties)).toEqual(["Weekly Schedule"]);
+      const keys = Object.keys((r.body as { properties: object }).properties);
+      expect(keys.length).toBeGreaterThan(0);
+      for (const k of keys) expect(["Weekly Schedule", "Schedule Source"]).toContain(k);
     }
   });
 

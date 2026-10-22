@@ -71,3 +71,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0064](0064-iris-phone-backup.md) | Iris reaches Charlie's phone through a Notion Work page and a mention comment | accepted |
 | [0065](0065-console-read-facade.md) | The Founder Console reads Notion through one facade that returns a status for every panel | accepted |
 | [0066](0066-console-shell-and-instrument-kit.md) | The console shell renders a `PanelView` kit, keeps the mode in the URL and builds its preview only with a flag | accepted |
+| [0067](0067-schedule-source-and-drift-notice.md) | Schedule Source says the Weekly Schedule is generated, and the owner sees replaced Notion edits | accepted |

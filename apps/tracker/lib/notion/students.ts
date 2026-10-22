@@ -7,17 +7,19 @@ import { NotionError, notionHttpError } from "./staff";
  * Students & Parents from Notion, read and written with plain fetch (no SDK).
  * That database holds parent contact and billing fields, so this file asks
  * Notion for three properties only (Student Name, Stage, Weekly Schedule),
- * drops everything else at the parse step, and writes one property only: the
- * generated Weekly Schedule summary (REQ-4, tracker ADR 0035). It never reads
- * or names any relation property.
+ * plus Schedule Source for one page at a time, drops everything else at the
+ * parse step, and writes two properties only: the generated Weekly Schedule
+ * summary (REQ-4, tracker ADR 0035) and the Schedule Source line (REQ-34,
+ * tracker ADR 0067). It never reads or names any relation property.
  */
-export type StudentRecord = { id: string; name: string; stage: string; weeklySchedule: string };
+export type StudentRecord = { id: string; name: string; stage: string; weeklySchedule: string; scheduleSource: string };
 
 // The e2e stack points this at a local mock; production leaves the override unset.
 const BASE = `${notionApiBaseOverride() ?? "https://api.notion.com"}/v1`;
 const NAME = "Student Name";
 const STAGE = "Stage";
 const SCHEDULE = "Weekly Schedule";
+const SOURCE = "Schedule Source";
 export const MAX_SUMMARY_CHARS = 2000;
 
 /** The stages that count as a current student (tracker ADR 0037). */
@@ -31,6 +33,7 @@ const Page = z.object({
     [NAME]: z.object({ title: z.array(z.object({ plain_text: z.string() })) }),
     [STAGE]: z.object({ select: z.object({ name: z.string() }).nullable() }).optional(),
     [SCHEDULE]: z.object({ rich_text: z.array(z.object({ plain_text: z.string() })) }).optional(),
+    [SOURCE]: z.object({ rich_text: z.array(z.object({ plain_text: z.string() })) }).optional(),
   }),
 });
 
@@ -41,6 +44,8 @@ export function parseStudentPage(page: unknown): StudentRecord {
     name: plain(p.properties[NAME].title).trim(),
     stage: p.properties[STAGE]?.select?.name ?? "",
     weeklySchedule: plain(p.properties[SCHEDULE]?.rich_text ?? []),
+    // Only fetchStudentSchedule asks for it; the list paths leave it empty.
+    scheduleSource: plain(p.properties[SOURCE]?.rich_text ?? []),
   };
 }
 
@@ -60,7 +65,7 @@ async function call(fetcher: typeof fetch, url: string, init: RequestInit): Prom
 
 const Schema = z.object({ properties: z.record(z.string(), z.object({ id: z.string() })) });
 
-/** filter_properties takes property IDs, so look the three IDs up from the schema. */
+/** filter_properties takes property IDs, so look the IDs up from the schema. */
 async function propertyIds(config: NotionConfig, fetcher: typeof fetch, names: string[] = [NAME, STAGE, SCHEDULE]): Promise<string[]> {
   const res = await call(fetcher, `${BASE}/data_sources/${config.dataSourceId}`, { method: "GET", headers: headers(config) });
   if (!res.ok) throw notionHttpError(res);
@@ -213,7 +218,7 @@ export async function fetchScheduledStudentNames(config: NotionConfig, fetcher: 
 /** One student, fresh. Null when Notion says the page does not exist. */
 export async function fetchStudentSchedule(config: NotionConfig, pageId: string, fetcher: typeof fetch = fetch): Promise<StudentRecord | null> {
   if (!z.guid().safeParse(pageId).success) throw new NotionError("Invalid page ID");
-  const ids = await propertyIds(config, fetcher);
+  const ids = await propertyIds(config, fetcher, [NAME, STAGE, SCHEDULE, SOURCE]);
   const res = await call(fetcher, `${BASE}/pages/${pageId}?${filterQuery(ids)}`, { method: "GET", headers: headers(config) });
   if (res.status === 404) return null;
   if (!res.ok) throw notionHttpError(res);
@@ -223,15 +228,32 @@ export async function fetchStudentSchedule(config: NotionConfig, pageId: string,
   return parseStudentPage(body);
 }
 
-/** The only Notion write in the scheduler: the Weekly Schedule property of one page. */
-export async function writeWeeklySchedule(config: NotionConfig, pageId: string, text: string, fetcher: typeof fetch = fetch): Promise<void> {
+/** The only Notion write in the scheduler: Weekly Schedule, Schedule Source, or both, of one page. */
+export async function writeStudentSchedule(
+  config: NotionConfig,
+  pageId: string,
+  patch: { weeklySchedule?: string; scheduleSource?: string },
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
   if (!z.guid().safeParse(pageId).success) throw new NotionError("Invalid page ID");
-  if (text.length > MAX_SUMMARY_CHARS) throw new NotionError("Summary is too long for one Notion text segment");
-  const rich_text = text === "" ? [] : [{ type: "text", text: { content: text } }];
+  if (patch.weeklySchedule === undefined && patch.scheduleSource === undefined) throw new NotionError("Nothing to write");
+  const richText = (text: string) => {
+    if (text.length > MAX_SUMMARY_CHARS) throw new NotionError("Summary is too long for one Notion text segment");
+    return { rich_text: text === "" ? [] : [{ type: "text", text: { content: text } }] };
+  };
+  const properties = {
+    ...(patch.weeklySchedule !== undefined ? { [SCHEDULE]: richText(patch.weeklySchedule) } : {}),
+    ...(patch.scheduleSource !== undefined ? { [SOURCE]: richText(patch.scheduleSource) } : {}),
+  };
   const res = await call(fetcher, `${BASE}/pages/${pageId}`, {
     method: "PATCH",
     headers: headers(config, true),
-    body: JSON.stringify({ properties: { [SCHEDULE]: { rich_text } } }),
+    body: JSON.stringify({ properties }),
   });
   if (!res.ok) throw notionHttpError(res);
+}
+
+/** Weekly Schedule only, through the one PATCH above. */
+export async function writeWeeklySchedule(config: NotionConfig, pageId: string, text: string, fetcher: typeof fetch = fetch): Promise<void> {
+  return writeStudentSchedule(config, pageId, { weeklySchedule: text }, fetcher);
 }

@@ -3,14 +3,18 @@
 
 \set ON_ERROR_STOP on
 
--- Cast: OWN owner of Org One; TCH a scheduler teacher; OUT outsider.
+-- Cast: OWN owner of Org One; OW2 owner of Org Two; TCH a scheduler teacher; OUT outsider.
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'owner@example.com'),
   ('00000000-0000-0000-0000-0000000000d1', 't@example.com'),
-  ('00000000-0000-0000-0000-0000000000c1', 'out@example.com');
-insert into tracker.orgs (id, name) values ('10000000-0000-0000-0000-000000000001', 'Org One');
+  ('00000000-0000-0000-0000-0000000000c1', 'out@example.com'),
+  ('00000000-0000-0000-0000-0000000000b1', 'owner2@example.com');
+insert into tracker.orgs (id, name) values
+  ('10000000-0000-0000-0000-000000000001', 'Org One'),
+  ('10000000-0000-0000-0000-000000000002', 'Org Two');
 insert into tracker.memberships (user_id, org_id, role) values
-  ('00000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'owner');
+  ('00000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'owner'),
+  ('00000000-0000-0000-0000-0000000000b1', '10000000-0000-0000-0000-000000000002', 'owner');
 insert into tracker.staff_links (org_id, notion_staff_id, email, approved_by, user_id, revoked_at) values
   ('10000000-0000-0000-0000-000000000001', 'e0000000-0000-4000-8000-000000000001', 't@example.com', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000d1', null);
 
@@ -81,6 +85,34 @@ begin
   end;
 end $$;
 
+-- Drift seen markers (0026, REQ-34 AC12) --------------------------------------------------
+do $$
+declare
+  sid uuid := 'f0000000-0000-4000-8000-000000000001';
+  n integer;
+begin
+  -- null on a new adoption
+  assert (select last_drift_at is null and drift_seen_at is null from tracker.schedule_summaries where notion_student_id = sid), 'drift: columns not null on adoption';
+
+  -- the owner can set both columns on its own rows
+  update tracker.schedule_summaries set last_drift_text = 'typed', last_drift_at = '2030-01-01 10:00+00' where notion_student_id = sid;
+  get diagnostics n = row_count;
+  assert n = 1, 'drift: owner could not set last_drift_at';
+  update tracker.schedule_summaries set drift_seen_at = now()
+    where notion_student_id = sid and last_drift_at is not distinct from '2030-01-01 10:00+00'::timestamptz;
+  get diagnostics n = row_count;
+  assert n = 1, 'drift: owner could not mark seen';
+  update tracker.schedule_summaries set drift_seen_at = null where notion_student_id = sid;
+
+  -- a stale marker matches nothing: drift moved later after the page loaded
+  update tracker.schedule_summaries set last_drift_at = '2030-01-02 10:00+00' where notion_student_id = sid;
+  update tracker.schedule_summaries set drift_seen_at = now()
+    where notion_student_id = sid and last_drift_at is not distinct from '2030-01-01 10:00+00'::timestamptz;
+  get diagnostics n = row_count;
+  assert n = 0, 'drift: stale last_drift_at still matched';
+  assert (select drift_seen_at is null from tracker.schedule_summaries where notion_student_id = sid), 'drift: stale mark changed drift_seen_at';
+end $$;
+
 -- Teacher TCH: no summaries, no writes, no adopt (AC19) -----------------------------------
 set request.jwt.claims = '{"sub": "00000000-0000-0000-0000-0000000000d1", "email": "t@example.com"}';
 do $$
@@ -95,11 +127,23 @@ begin
   end;
   update tracker.schedule_summaries set sync_state = 'failed'; get diagnostics n = row_count;
   assert n = 0, 'teacher updated a summary';
+  update tracker.schedule_summaries set drift_seen_at = now(), last_drift_at = now(); get diagnostics n = row_count;
+  assert n = 0, 'teacher updated drift markers';
   begin
     perform tracker.adopt_student_schedule('f0000000-0000-4000-8000-000000000009', 'x', '[]');
     raise exception 'teacher adopted a student';
   exception when insufficient_privilege then null;
   end;
+end $$;
+
+-- Owner of another org: cannot read or update Org One's drift markers -------------------
+set request.jwt.claims = '{"sub": "00000000-0000-0000-0000-0000000000b1", "email": "owner2@example.com"}';
+do $$
+declare n integer;
+begin
+  assert (select count(*) from tracker.schedule_summaries) = 0, 'other owner reads summaries';
+  update tracker.schedule_summaries set drift_seen_at = now(), last_drift_at = now(); get diagnostics n = row_count;
+  assert n = 0, 'other owner updated drift markers';
 end $$;
 
 -- Outsider sees nothing and cannot adopt -------------------------------------------------

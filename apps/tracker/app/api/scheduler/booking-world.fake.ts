@@ -24,7 +24,7 @@ export const admin: SchedulerIdentity = { scope: "admin", orgId: ORG, staff: nul
 export const teacher: SchedulerIdentity = { scope: "teacher", orgId: ORG, staff: staff[0] };
 
 /** Every store method that writes. The locked write is the only class write (ADR 0050). */
-export const WRITES = ["lockedWrite", "adoptStudent", "markSummary"] as const;
+export const WRITES = ["lockedWrite", "adoptStudent", "markSummary", "markDriftSeen"] as const;
 
 export function world() {
   const series = new Map<string, SeriesRecord>();
@@ -40,9 +40,10 @@ export function world() {
     [1, 2, 3, 4, 5].map((weekday) => ({ id: REQ(++n), staffId, weekday, startTime: "15:00", endTime: "21:00", effectiveFrom: "2026-01-01", effectiveUntil: null, updatedAt: "x" })));
   const avEx: AvailabilityExceptionRecord[] = [{ id: REQ(++n), staffId: RYAN, onDate: "2026-11-02", kind: "time_off", startTime: null, endTime: null, updatedAt: "x" }];
   const summaries = new Map<string, SummaryRecord>(
-    [S1, S2].map((studentId) => [studentId, { id: REQ(++n), studentId, adoptedAt: TODAY, adoptedFromText: "", lastWrittenText: "", lastWrittenAt: null, syncState: "synced", lastError: null, lastDriftText: null }]),
+    [S1, S2].map((studentId) => [studentId, { id: REQ(++n), studentId, adoptedAt: TODAY, adoptedFromText: "", lastWrittenText: "", lastWrittenAt: null, syncState: "synced", lastError: null, lastDriftText: null, lastDriftAt: null, driftSeenAt: null }]),
   );
-  const notion = new Map<string, StudentRecord>([S1, S2].map((id) => [id, { id, name: id.slice(0, 2), stage: "Active", weeklySchedule: "" }]));
+  const notion = new Map<string, StudentRecord>([S1, S2].map((id) => [id, { id, name: id.slice(0, 2), stage: "Active", weeklySchedule: "", scheduleSource: "" }]));
+  /** Weekly Schedule writes by student; Schedule Source writes are not counted here. */
   const notionWrites: string[] = [];
   // The outbox, with the 0021 trigger played by the store proxy below: a class write enqueues its exports.
   const outbox = fakeOutbox(ORG);
@@ -67,6 +68,7 @@ export function world() {
     listSummaries: async () => [...summaries.values()],
     adoptStudent: async () => ({ ok: false, status: 503, error: "unavailable" }),
     markSummary: async () => true,
+    markDriftSeen: async () => 0,
   };
   // Every method is spied: `calls` logs each call, `writes` only the writes; an attempt that is refused must leave `writes` empty.
   const store = new Proxy(base, {
@@ -104,7 +106,10 @@ export function world() {
     identity: async () => identity, fetchStaff: async () => staff, store, today: () => TODAY, outbox: outbox.store, sleep: async () => {},
     students: {
       list: async () => [...notion.values()], get: async (id) => notion.get(id) ?? null,
-      write: async (id, text) => { notionWrites.push(id); notion.set(id, { ...notion.get(id)!, weeklySchedule: text }); },
+      write: async (id, patch) => {
+        if (patch.weeklySchedule !== undefined) notionWrites.push(id);
+        notion.set(id, { ...notion.get(id)!, ...patch });
+      },
     },
   });
   /** A class written outside the handlers (setup, or a concurrent writer): it moves its people's stamps. */
