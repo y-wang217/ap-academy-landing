@@ -72,6 +72,24 @@ export const TUNING = {
   irisMaxPushAttempts: 5,
   /** Unedited approvals in a row that make a reply type auto-send eligible. Mirrored as a constant in migration 0025. */
   irisAutoSendStreak: 20,
+  /** How far back the eval history import reads (REQ-45). It reads only mail older than irisPollWindowDays. */
+  irisHistoryDays: 365,
+  /** Gmail messages.get calls the history import makes in one run. */
+  irisMaxImportPerRun: 50,
+  /** The history import starts only before this long after the run started. */
+  irisImportBudgetMs: 100_000,
+  /** Labelled messages one run classifies and drafts for an eval request. */
+  irisMaxEvalPerRun: 4,
+  /** No new eval call starts this long after the run started; each call is aborted then. */
+  irisEvalBudgetMs: 105_000,
+  /** The auto-send gate (spec decision 21): labelled examples of the type in the latest run. */
+  irisGateMinLabelled: 20,
+  /** The gate's per-type precision floor. */
+  irisGateMinPrecision: 0.95,
+  /** The gate's sensitive recall floor, across the whole labelled set. */
+  irisGateMinSensitiveRecall: 1,
+  /** The gate's mean draft rating floor, per type. */
+  irisGateMinMeanRating: 4,
   /** Founder Console (REQ-54): each provider read is abandoned after this long. */
   consoleProviderTimeoutMs: 8_000,
   /** Notion pages of 100 rows one console panel reads before it reports stale. */
