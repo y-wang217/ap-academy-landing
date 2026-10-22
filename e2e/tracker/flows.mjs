@@ -6,6 +6,7 @@
 // Run through ./run.sh, or directly with TRACKER_BASE set to a running tracker.
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
 
 // Playwright is not a workspace dependency: use a global install.
 const require = createRequire(execSync("npm root -g").toString().trim() + "/");
@@ -26,9 +27,9 @@ function check(name, ok, detail = "") {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`);
 }
 
-async function signedIn(browser, email) {
+async function signedIn(browser, email, options = {}) {
   const { cookieValue } = await (await fetch(`${MOCK}/__session?email=${encodeURIComponent(email)}`)).json();
-  const context = await browser.newContext({ viewport: { width: 375, height: 800 } });
+  const context = await browser.newContext({ viewport: { width: 375, height: 800 }, ...options });
   await context.addCookies([{ name: "sb-127-auth-token", value: cookieValue, url: ORIGIN }]);
   const page = await context.newPage();
   page.on("pageerror", (e) => console.log(`  page error (${email}): ${e.message}`));
@@ -1445,7 +1446,7 @@ try {
     return { status: res.status(), body: await res.text(), headers: res.headers() };
   };
   const ownerConsole = await consolePage(teacher);
-  check("REQ-53: the owner reaches /tracker/console", ownerConsole.status === 200 && ownerConsole.body.includes("data-console") && ownerConsole.body.includes(">Console<"), String(ownerConsole.status));
+  check("REQ-53: the owner reaches /tracker/console", ownerConsole.status === 200 && ownerConsole.body.includes("data-console") && ownerConsole.body.includes("FOUNDER CONSOLE"), String(ownerConsole.status));
   const ownerHealth = await consoleHealth(teacher);
   const ownerHealthBody = ownerHealth.status === 200 ? JSON.parse(ownerHealth.body) : null;
   // REQ-54 AC9: statuses and times per provider, never rows. The mock Notion does not serve the console's data
@@ -1494,6 +1495,212 @@ try {
   check("REQ-53: a cross-site POST to the console is refused by the proxy", crossSite.status === 403 && crossSite.body === '{"error":"forbidden"}', `${crossSite.status} ${crossSite.body}`);
   const sameSite = await consoleHealth(teacher, { method: "POST", headers: { origin: ORIGIN } });
   check("REQ-53: the same POST same-site reaches the route and gets 405", sameSite.status === 405, String(sameSite.status));
+
+  // REQ-55: the command-bridge shell and instrument kit. The tracker runs with CONSOLE_PREVIEW=1 (run.sh), so
+  // /console/preview shows the kit with test data; /console shows the production placeholders.
+  {
+    const SHOTS = new URL("../../docs/spec/founder-console/screenshots/req-55/", import.meta.url);
+    mkdirSync(SHOTS, { recursive: true });
+    const SALES_ORDER = ["next", "northStar", "signals", "followUps", "radar", "conversion", "capacity", "cashflow", "dispatch"];
+    const bridgeAt = async (width, height, path, options = {}) => {
+      const page = await signedIn(browser, "teacher@example.com", { viewport: { width, height }, ...options });
+      await page.goto(`${BASE}${path}`);
+      await page.locator("[data-console]").waitFor({ timeout: 15000 });
+      return page;
+    };
+    const selectedTab = (p) => p.locator('[role="tab"][aria-selected="true"]').textContent();
+    const modeParam = (p) => new URL(p.url()).searchParams.get("mode");
+    const noSideScroll = (p) => p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+    const syncSettled = async (p) => {
+      const line = p.locator("[data-sync-line]");
+      await line.filter({ hasText: /Sources checked|Some sources failing|Sync unavailable/ }).waitFor({ timeout: 15000 }).catch(() => {});
+      return (await line.textContent()) ?? "";
+    };
+    const insideWidth = async (p, locator, width) => {
+      await locator.scrollIntoViewIfNeeded();
+      const box = await locator.boundingBox();
+      return box !== null && box.x >= 0 && box.x + box.width <= width + 0.5;
+    };
+    const boxOf = (p, mode, id) => p.locator(`#console-panel-${mode} [data-panel="${id}"]`).boundingBox();
+
+    // AC9, AC10: the sync line is real, and the preview is owner-gated like the console.
+    {
+      const p = await bridgeAt(1440, 900, "/console");
+      const sync = await syncSettled(p);
+      check("REQ-55: the sync line reports the health check and never says online", /^(Sources checked|Some sources failing)/.test(sync) && !/online/i.test(await p.locator("[data-console]").innerText()), sync);
+      check("REQ-55: the bottom rail has five indicators and the shortcuts help",
+        (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
+      check("REQ-55: production panels are all Not connected yet", (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 9 && (await p.locator("[data-panel-value]").count()) === 0);
+
+      // AC2: the mode switch by keyboard, in the URL and across a reload.
+      await p.getByRole("tab", { name: "Sales", exact: true }).focus();
+      await p.keyboard.press("ArrowRight");
+      check("REQ-55: ArrowRight selects Creation, focuses it and writes mode=creation",
+        (await selectedTab(p)) === "Creation" && modeParam(p) === "creation" && (await p.evaluate(() => document.activeElement?.textContent)) === "Creation");
+      await p.reload();
+      await p.locator("[data-console]").waitFor();
+      check("REQ-55: a reload keeps Creation", (await selectedTab(p)) === "Creation" && (await p.locator("#console-panel-creation").isVisible()) && !(await p.locator("#console-panel-sales").isVisible()));
+      await p.getByRole("tab", { name: "Creation", exact: true }).focus();
+      await p.keyboard.press("End");
+      const afterEnd = await selectedTab(p);
+      await p.keyboard.press("Home");
+      const afterHome = await selectedTab(p);
+      await p.keyboard.press("ArrowLeft");
+      const afterLeft = await selectedTab(p);
+      check("REQ-55: End, Home and ArrowLeft with wrap", afterEnd === "Operations" && afterHome === "Sales" && afterLeft === "Operations", `${afterEnd} ${afterHome} ${afterLeft}`);
+      await p.getByRole("tab", { name: "Creation", exact: true }).focus();
+      await p.keyboard.press("Enter");
+      const afterEnter = await selectedTab(p);
+      await p.getByRole("tab", { name: "Sales", exact: true }).focus();
+      await p.keyboard.press("Space");
+      const afterSpace = await selectedTab(p);
+      check("REQ-55: Enter and Space select the focused tab", afterEnter === "Creation" && afterSpace === "Sales" && modeParam(p) === "sales", `${afterEnter} ${afterSpace}`);
+      await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      const keyed = [];
+      for (const key of ["3", "2", "1"]) {
+        await p.keyboard.press(key);
+        keyed.push(await selectedTab(p));
+      }
+      await p.keyboard.press("?");
+      check("REQ-55: 1, 2 and 3 switch modes and ? opens the shortcuts", keyed.join() === "Operations,Creation,Sales" && (await p.locator("details[data-shortcuts]").evaluate((d) => d.open)), keyed.join());
+      await p.goto(`${BASE}/console?mode=bogus`);
+      check("REQ-55: an unknown mode shows Sales", (await selectedTab(p)) === "Sales");
+      await p.context().close();
+    }
+    {
+      const res = await outsider.context().request.get(`${BASE}/console/preview`, { maxRedirects: 0 });
+      const body = await res.text();
+      check("REQ-55: a non-owner gets 404 from /console/preview", res.status() === 404 && !body.includes("data-console"), String(res.status()));
+    }
+
+    // AC4: screenshots for the reviewer, plus the two reachability sizes.
+    for (const [w, h] of [[1440, 900], [1920, 1080], [1280, 720], [390, 844]]) {
+      for (const [name, path] of [["preview-sales", "/console/preview?mode=sales"], ["console-sales", "/console?mode=sales"]]) {
+        const p = await bridgeAt(w, h, path);
+        await syncSettled(p);
+        await p.screenshot({ path: new URL(`${name}-${w}x${h}.png`, SHOTS).pathname });
+        await p.context().close();
+      }
+    }
+    check("REQ-55: screenshots written to docs/spec/founder-console/screenshots/req-55/", true);
+
+    // AC5: no sideways scroll, the mode switch and NEXT reachable, the horizon a strip then gone, one column at 640.
+    for (const [w, h] of [[390, 844], [1280, 720]]) {
+      for (const path of ["/console", "/console/preview?mode=sales"]) {
+        const p = await bridgeAt(w, h, path);
+        const tablist = await insideWidth(p, p.getByRole("tablist"), w);
+        const next = await insideWidth(p, p.locator('#console-panel-sales [data-panel="next"] h2'), w);
+        check(`REQ-55: ${path} at ${w}x${h} has no sideways scroll and keeps the tabs and NEXT in reach`, (await noSideScroll(p)) && tablist && next, `${tablist} ${next}`);
+        if (w === 390) check(`REQ-55: ${path} at 390 hides the horizon`, !(await p.locator("[data-horizon]").isVisible()));
+        await p.context().close();
+      }
+    }
+    {
+      const p = await bridgeAt(900, 900, "/console?mode=sales");
+      const strip = await p.locator("[data-horizon]").boundingBox();
+      check("REQ-55: at 900 the horizon is a strip of at most 48 px", strip !== null && strip.height <= 48 && strip.height > 0, String(strip?.height));
+      await p.context().close();
+    }
+    for (const [w, h] of [[900, 900], [640, 900], [390, 844]]) {
+      const p = await bridgeAt(w, h, "/console?mode=sales");
+      const next = await boxOf(p, "sales", "next");
+      const radar = await boxOf(p, "sales", "radar");
+      check(`REQ-55: at ${w} NEXT sits above the radar`, next !== null && radar !== null && next.y < radar.y, `${next?.y} ${radar?.y}`);
+      await p.context().close();
+    }
+    for (const [w, h] of [[640, 900], [390, 844]]) {
+      for (const mode of ["sales", "creation", "operations"]) {
+        const p = await bridgeAt(w, h, `/console?mode=${mode}`);
+        const xs = await p.locator(`#console-panel-${mode} [data-panel]`).evaluateAll((els) => els.map((e) => e.getBoundingClientRect().x));
+        check(`REQ-55: ${mode} at ${w} is one column with no sideways scroll`, xs.length > 0 && xs.every((x) => Math.abs(x - xs[0]) <= 1) && (await noSideScroll(p)), xs.join());
+        await p.context().close();
+      }
+    }
+
+    // AC6: the radar's text equivalent, a 10 s sweep that stops under reduced motion and pauses while hidden.
+    {
+      const sweepStyle = (p) => p.locator('#console-panel-sales [data-panel="radar"] .console-sweep').evaluate((g) => {
+        const s = getComputedStyle(g);
+        return { name: s.animationName, duration: s.animationDuration, state: s.animationPlayState };
+      });
+      const motionText = (p) => p.locator('[data-indicator="motion"] [data-indicator-value] span').evaluateAll((els) => els.filter((e) => getComputedStyle(e).display !== "none").map((e) => e.textContent).join());
+      const reduced = await bridgeAt(1440, 900, "/console/preview?mode=sales", { reducedMotion: "reduce" });
+      const r = await sweepStyle(reduced);
+      check("REQ-55: reduced motion stops the sweep and the rail says so", r.name === "none" && (await motionText(reduced)) === "Reduced motion", `${r.name} ${await motionText(reduced)}`);
+      await reduced.context().close();
+      const p = await bridgeAt(1440, 900, "/console/preview?mode=sales");
+      const m = await sweepStyle(p);
+      check("REQ-55: the sweep is console-sweep over 10s and the rail says Motion on", m.name === "console-sweep" && m.duration === "10s" && (await motionText(p)) === "Motion on", `${m.name} ${m.duration} ${await motionText(p)}`);
+      await p.evaluate(() => document.querySelector("[data-console]")?.setAttribute("data-hidden", ""));
+      check("REQ-55: the sweep pauses while the console is hidden", (await sweepStyle(p)).state === "paused");
+      const radar = p.locator('#console-panel-sales [data-panel="radar"]');
+      const label = (await radar.locator('svg[role="img"]').getAttribute("aria-label")) ?? "";
+      check("REQ-55: the radar has an aria-label and a stage table", label.startsWith("Lead stages: ") && (await radar.locator("table tbody tr").count()) > 0, label);
+      await p.context().close();
+    }
+
+    // AC12: keyboard traversal in slot order, links inside their panel, nothing in a hidden tabpanel.
+    {
+      const p = await bridgeAt(1440, 900, "/console/preview?mode=sales");
+      const where = () => p.evaluate(() => {
+        const a = document.activeElement;
+        return {
+          panel: a?.closest("[data-panel]")?.getAttribute("data-panel") ?? null,
+          self: a?.hasAttribute("data-panel") ?? false,
+          tag: a?.tagName ?? "",
+          text: (a?.textContent ?? "").trim().slice(0, 30),
+          hidden: Boolean(a?.closest("[hidden]")),
+        };
+      });
+      await p.getByRole("tab", { name: "Sales", exact: true }).focus();
+      const stops = [];
+      for (let i = 0; i < 80; i++) {
+        await p.keyboard.press("Tab");
+        const s = await where();
+        stops.push(s);
+        if (s.tag === "SUMMARY") break;
+      }
+      const order = stops.filter((s) => s.panel).map((s) => s.panel).filter((id, i, a) => i === 0 || a[i - 1] !== id);
+      const firstNorth = stops.findIndex((s) => s.panel === "northStar");
+      const nextLinks = stops.map((s, i) => [s, i]).filter(([s]) => s.panel === "next" && s.tag === "A");
+      check("REQ-55: Tab goes home link, sign out, then the panels in slot order, ending at the shortcuts",
+        stops[0]?.tag === "A" && stops[1]?.text === "Sign out" && order.join() === SALES_ORDER.join() && stops.at(-1)?.text === "Keyboard shortcuts",
+        `${stops.slice(0, 2).map((s) => s.text).join("|")} ${order.join()} ${stops.at(-1)?.text}`);
+      check("REQ-55: NEXT's row links come after NEXT and before the next panel", nextLinks.length > 0 && nextLinks.every(([, i]) => i < firstNorth) && stops.findIndex((s) => s.panel === "next" && s.self) < nextLinks[0][1]);
+      check("REQ-55: nothing in a hidden tabpanel takes focus", stops.every((s) => !s.hidden));
+      await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      await p.keyboard.press("2");
+      await p.getByRole("tab", { name: "Creation", exact: true }).focus();
+      let first = null;
+      for (let i = 0; i < 6 && !first; i++) {
+        await p.keyboard.press("Tab");
+        first = (await where()).panel;
+      }
+      check("REQ-55: after 2 the first panel reached is nextAsset", first === "nextAsset", String(first));
+
+      // AC13: focus is stronger than hover.
+      await p.keyboard.press("1");
+      await p.getByRole("tab", { name: "Sales", exact: true }).focus();
+      for (let i = 0; i < 6; i++) {
+        await p.keyboard.press("Tab");
+        if ((await where()).self) break;
+      }
+      const focused = await p.evaluate(() => {
+        const s = getComputedStyle(document.activeElement);
+        return { id: document.activeElement?.getAttribute("data-panel"), width: s.outlineWidth, color: s.outlineColor };
+      });
+      check("REQ-55: a focused panel has a 2px amber outline", focused.id === "next" && focused.width === "2px" && focused.color === "rgb(255, 192, 120)", JSON.stringify(focused));
+      await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      const radar = p.locator('#console-panel-sales [data-panel="radar"]');
+      await radar.hover();
+      const hovered = await radar.evaluate((e) => {
+        const s = getComputedStyle(e);
+        return { outline: s.outlineStyle, border: s.borderTopWidth };
+      });
+      check("REQ-55: a hovered panel has no outline and a 1px border", hovered.outline === "none" && hovered.border === "1px", JSON.stringify(hovered));
+      await p.context().close();
+    }
+  }
 
   // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.
   const timing = teacher;

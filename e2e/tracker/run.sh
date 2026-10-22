@@ -21,10 +21,11 @@ trap cleanup EXIT
 "$here/stack.sh" > "$logs/env"
 set -a; source "$logs/env"; set +a
 
-echo "build tracker"; (cd "$root/apps/tracker" && pnpm build >"$logs/tracker-build.log" 2>&1) || { tail -30 "$logs/tracker-build.log"; exit 1; }
+# CONSOLE_PREVIEW=1 builds and serves /tracker/console/preview (REQ-55, tracker ADR 0066); never set in a deploy.
+echo "build tracker"; (cd "$root/apps/tracker" && CONSOLE_PREVIEW=1 pnpm build >"$logs/tracker-build.log" 2>&1) || { tail -30 "$logs/tracker-build.log"; exit 1; }
 echo "build landing"; (cd "$root/apps/landing" && TRACKER_URL=http://localhost:3001 pnpm build >"$logs/landing-build.log" 2>&1) || { tail -30 "$logs/landing-build.log"; exit 1; }
 
-(cd "$root/apps/tracker" && exec pnpm exec next start -p 3001) >"$logs/tracker.log" 2>&1 & pids+=($!)
+(cd "$root/apps/tracker" && CONSOLE_PREVIEW=1 exec pnpm exec next start -p 3001) >"$logs/tracker.log" 2>&1 & pids+=($!)
 (cd "$root/apps/landing" && exec pnpm exec next start -p 3000) >"$logs/landing.log" 2>&1 & pids+=($!)
 for _ in $(seq 1 60); do
   curl -sf -o /dev/null http://localhost:3000/ && curl -s -o /dev/null http://localhost:3001/tracker && break
