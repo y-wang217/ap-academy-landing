@@ -84,6 +84,7 @@ function fakeStore(opts: { open?: boolean } = {}) {
     listSummaries: async () => [],
     adoptStudent: async () => ({ ok: false, status: 503, error: "unavailable" }),
     markSummary: async () => false,
+    markDriftSeen: async () => 0,
   };
   return { store, series, exceptions, seed };
 }

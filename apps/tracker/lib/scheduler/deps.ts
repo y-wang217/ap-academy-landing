@@ -8,7 +8,8 @@ import { todayIso } from "../time";
 import { notionConfigured, readLessonsConfig, readStudentsConfig, readWorkConfig } from "../notion/config";
 import { createLessonsPort } from "../notion/lessons";
 import { createOutcomeStore } from "../data/outcomes";
-import { fetchScheduledStudents, fetchStudentSchedule, writeWeeklySchedule } from "../notion/students";
+import { SITE_URL } from "../config";
+import { fetchScheduledStudents, fetchStudentSchedule, writeStudentSchedule } from "../notion/students";
 import type { HandlerDeps } from "./handlers";
 import { resolveSchedulerIdentity, type SchedulerIdentity } from "./identity";
 import { buildDailyTaskDeps, lazyDailyTaskStore } from "./daily-task-wiring";
@@ -95,7 +96,8 @@ const studentsPort = () => {
     ? {
         list: () => fetchScheduledStudents(config),
         get: (pageId: string) => fetchStudentSchedule(config, pageId),
-        write: (pageId: string, text: string) => writeWeeklySchedule(config, pageId, text),
+        // Weekly Schedule and Schedule Source (REQ-34), in one PATCH.
+        write: (pageId: string, patch: { weeklySchedule?: string; scheduleSource?: string }) => writeStudentSchedule(config, pageId, patch),
       }
     : undefined;
 };
@@ -108,7 +110,7 @@ function drainDepsFor(db: Db, orgId: string, userId: string): DrainDeps {
   const people = createPeopleStore(db.tracker, orgId);
   return {
     outbox: createOutboxStore(db.tracker, orgId),
-    summary: students ? { store, students, fetchStaff: people.listStaff, today: () => todayIso() } : undefined,
+    summary: students ? { store, students, fetchStaff: people.listStaff, today: () => todayIso(), siteUrl: SITE_URL } : undefined,
     dailyTask: work
       ? buildDailyTaskDeps({ store: lazyDailyTaskStore(async () => ({ tracker: db.tracker, orgId })), schedule: store, config: work, fetchStaff: people.listStaff, studentNames: people.studentNames })
       : undefined,
@@ -175,5 +177,5 @@ export function realScheduleDeps(): ScheduleDeps {
     const [db, who] = await Promise.all([getDb(), identity()]);
     return db && who.scope === "admin" ? { tracker: db.tracker, orgId: who.orgId } : null;
   });
-  return { ...base, identity, store, today: () => todayIso(), students, studentNames, activeStudents, peopleSyncedAt, dailyTask, peopleStore, outbox, lessons, outcomes };
+  return { ...base, identity, store, today: () => todayIso(), students, siteUrl: SITE_URL, studentNames, activeStudents, peopleSyncedAt, dailyTask, peopleStore, outbox, lessons, outcomes };
 }

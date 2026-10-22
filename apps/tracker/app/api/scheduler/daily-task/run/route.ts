@@ -4,7 +4,8 @@ import { createOutboxStore } from "@/lib/data/outbox";
 import { createPeopleStore } from "@/lib/data/people";
 import { createScheduleStore } from "@/lib/data/schedule";
 import { readStudentsConfig, readWorkConfig } from "@/lib/notion/config";
-import { fetchScheduledStudents, fetchStudentSchedule, writeWeeklySchedule } from "@/lib/notion/students";
+import { SITE_URL } from "@/lib/config";
+import { fetchScheduledStudents, fetchStudentSchedule, writeStudentSchedule } from "@/lib/notion/students";
 import { sleep } from "@/lib/scheduler/outbox";
 import { todayIso } from "@/lib/time";
 import { buildDailyTaskDeps } from "@/lib/scheduler/daily-task-wiring";
@@ -59,10 +60,11 @@ export async function POST(request: Request) {
               students: {
                 list: () => fetchScheduledStudents(students),
                 get: (pageId) => fetchStudentSchedule(students, pageId),
-                write: (pageId, text) => writeWeeklySchedule(students, pageId, text),
+                write: (pageId, patch) => writeStudentSchedule(students, pageId, patch),
               },
               fetchStaff: people.listStaff,
               today: () => todayIso(),
+              siteUrl: SITE_URL,
             }
           : undefined,
         dailyTask: build(orgId) ?? undefined,
