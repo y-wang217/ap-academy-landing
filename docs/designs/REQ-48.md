@@ -2,7 +2,7 @@
 
 Copied from the approved card (Notion, REQ-48) so the reviewer can read it next to the diff.
 
-**Renumbered at build (REQ-51 number reservation):** migration `0028_iris_sends.sql` became `0027_iris_sends.sql`, because REQ-45's open PR #121 adds `0028_iris_eval_results.sql`; 0027 is used by nothing on `main`, no open `req/` PR and no active design. Tracker ADR `0069-iris-send-at-most-once.md` became `0074-iris-send-at-most-once.md`, because 0069 (REQ-45), 0070 (REQ-60), 0071 (REQ-57), 0072 (REQ-46) and 0073 (REQ-59) are taken. Every number below is the built one.
+**Numbers (REQ-51):** the build briefly moved to `0027_iris_sends.sql` and ADR 0074 while REQ-45 held 0028 and 0069. REQ-45 then moved to 0027 (#121) and ADR 0074 (#123), both lower-numbered PRs, so this card is back on the numbers its approved design names: migration `0028_iris_sends.sql` and tracker ADR `0069-iris-send-at-most-once.md`.
 
 **Summary:** when Charlie presses Approve on a draft, the tracker sends that reply from charlie@apacademy.ca into the parent's Gmail thread, exactly once, records it, and shows any send that fails, with a Retry button. Before this card he had to copy the text and send it by hand.
 
@@ -26,11 +26,11 @@ Charlie (the org owner, the only Iris user) approves drafts on `/tracker/iris/me
 - AC10: `runSupersede` never records a message whose `Message-ID` is `<iris-<uuid>@apacademy.ca>` as `charlie_manual`. If such a row is written anyway, recording the send converts it to source `iris`.
 - AC11: `pnpm test:rls` runs `supabase/tests/iris_sends.sql` as owner, teacher, student, parent, anon, another org's owner and `service_role`; every assertion passes: owner reads own org only; others read nothing; `authenticated` cannot write `iris.sends` directly; `approve_draft` is not executable by `authenticated`; double approve leaves one row, paused approve none; `claim_send` busy, claimed, exhausted, paused; `finish_send` idempotent and converts `charlie_manual`; `retry_send` only on failed, only owner; `service_role` claims, finishes and fails; purge removes sends.
 - AC12: With the Gmail service account not configured, Approve returns 503 `iris_not_configured` before any write.
-- AC13: Tracker ADR `0074-iris-send-at-most-once.md` exists with every section and a README row, no em dash, and records: one send row per draft, our own Message-ID plus `X-Iris-Send-Id`, verify before every attempt but the first, two tokens with one scope each, the 3-attempt limit. `docs/iris-operations.md` gains the `gmail.send` Workspace step, Failed and Retry, and the first-send check.
+- AC13: Tracker ADR `0069-iris-send-at-most-once.md` exists with every section and a README row, no em dash, and records: one send row per draft, our own Message-ID plus `X-Iris-Send-Id`, verify before every attempt but the first, two tokens with one scope each, the 3-attempt limit. `docs/iris-operations.md` gains the `gmail.send` Workspace step, Failed and Retry, and the first-send check.
 
 ## Approach
 
-1. Migration `supabase/migrations/0027_iris_sends.sql` (own PR first): table `iris.sends`, owner-read RLS, security definer functions `approve_draft_for_send`, `claim_send`, `finish_send`, `fail_send_attempt`, `retry_send`; revoke `approve_draft` from `authenticated`.
+1. Migration `supabase/migrations/0028_iris_sends.sql` (own PR first): table `iris.sends`, owner-read RLS, security definer functions `approve_draft_for_send`, `claim_send`, `finish_send`, `fail_send_attempt`, `retry_send`; revoke `approve_draft` from `authenticated`.
 2. `lib/iris/gmail.ts`: `GMAIL_SEND_SCOPE`; `signJwt` and `getAccessToken` take a scope that defaults to read-only; `sendMessage`; `findSent` (`rfc822msgid:` search, then thread metadata `Message-ID` / `X-Iris-Send-Id`); `gmailSendPort` with `readToken`, `sendToken`, `send`, `findSent`.
 3. `lib/iris/compose.ts` (pure): `rfcMessageIdFor`, `isIrisMessageId`, `replySubject`, `encodeWord`, `buildReply`, `ComposeError`.
 4. `lib/iris/send.ts`: `SendStore`, `attemptSend` (verify unless Approve's first attempt; never throws), `runSends` (stuck sends, capped at 3, 30 s budget, claimed first).
@@ -40,8 +40,8 @@ Charlie (the org owner, the only Iris user) approves drafts on `/tracker/iris/me
 8. Supersede skips Iris Message-IDs.
 9. UI: send block after Approve (Sent, Not sent yet, Send failed plus Retry); `send-status.tsx` Retry; "Approve and send"; Retry on Failed rows; copy in `lib/view/iris-text.ts`.
 10. Tuning: `irisSendMaxAttempts` 3, `irisSendLeaseSeconds` 60, `irisMaxSendsPerRun` 3, `irisSendBudgetMs` 30,000.
-11. Scans: Gmail scopes in `lib/iris/` are exactly `gmail.readonly` and `gmail.send`, the send scope and the send call only in `gmail.ts`; `/drafts`, `/modify`, `batchModify` and `trash` still forbidden; no 0027 column named like prompt, answer, summary, completion or response.
-12. Docs: ADR 0074 and README row; ADR 0059 status "accepted, scope widened by 0074"; ops guide; PLAN.md.
+11. Scans: Gmail scopes in `lib/iris/` are exactly `gmail.readonly` and `gmail.send`, the send scope and the send call only in `gmail.ts`; `/drafts`, `/modify`, `batchModify` and `trash` still forbidden; no 0028 column named like prompt, answer, summary, completion or response.
+12. Docs: ADR 0069 and README row; ADR 0059 status "accepted, scope widened by 0069"; ops guide; PLAN.md.
 
 ## Test plan
 

@@ -1,5 +1,5 @@
 # 0059: Gmail through a service account, read-only, with no SDK
-Status: accepted, scope widened by 0074
+Status: accepted, scope widened by 0069
 Date: 2026-10-20
 
 ## Context

@@ -80,8 +80,8 @@ describe("ADRs 0063 and 0064", () => {
 });
 
 // REQ-48 AC13: the send ADR and the operator guide.
-describe("ADR 0074", () => {
-  const file = "0074-iris-send-at-most-once.md";
+describe("ADR 0069", () => {
+  const file = "0069-iris-send-at-most-once.md";
   it("has every section, is indexed, has no em dash, and records the five send rules", () => {
     const src = read(join(DECISIONS, file));
     expect(src, file).toMatch(/^Status: accepted/m);
@@ -91,8 +91,8 @@ describe("ADR 0074", () => {
     for (const rule of [/One send row per draft/i, /X-Iris-Send-Id/, /Verify before every attempt but the first/i, /Two tokens with one scope each/i, /3-attempt limit/i]) expect(src).toMatch(rule);
   });
 
-  it("ADR 0059 says its scope is widened by 0074", () => {
-    expect(read(join(DECISIONS, "0059-iris-gmail-read-only.md"))).toMatch(/^Status: accepted, scope widened by 0074/m);
+  it("ADR 0059 says its scope is widened by 0069", () => {
+    expect(read(join(DECISIONS, "0059-iris-gmail-read-only.md"))).toMatch(/^Status: accepted, scope widened by 0069/m);
   });
 
   it("the operator guide names gmail.send, Failed and Retry, and the first-send check", () => {

@@ -6,7 +6,7 @@ import type { GmailPort } from "./intake";
 import type { GmailPart } from "./mime";
 
 /**
- * Gmail (REQ-42, tracker ADR 0059; widened by ADR 0074 for REQ-48). A service
+ * Gmail (REQ-42, tracker ADR 0059; widened by ADR 0069 for REQ-48). A service
  * account with domain-wide delegation acts as the mailbox. The JWT is signed
  * with node:crypto and every call is plain fetch with a 10 second timeout,
  * parsed with Zod. Each token carries one scope. The read-only token makes

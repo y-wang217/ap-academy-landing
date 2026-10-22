@@ -90,8 +90,8 @@ describe("Iris stores no model text", () => {
     }
   });
 
-  it("no 0027 table has such a column either (REQ-48)", () => {
-    const m27 = readFileSync(join(ROOT, "..", "..", "supabase", "migrations", "0027_iris_sends.sql"), "utf8");
+  it("no 0028 table has such a column either (REQ-48)", () => {
+    const m27 = readFileSync(join(ROOT, "..", "..", "supabase", "migrations", "0028_iris_sends.sql"), "utf8");
     const tables = [...m27.matchAll(/create table (iris\.\w+) \(([\s\S]*?)\n\);/g)];
     expect(tables.map((t) => t[1])).toEqual(["iris.sends"]);
     for (const [, table, body] of tables) {

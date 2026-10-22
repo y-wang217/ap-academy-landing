@@ -1,7 +1,7 @@
 # Iris operations (Iris 2/9 to 4/9, and sending in 8/9)
 
 How to set up, run, pause and clean up Iris's inbox (REQ-42,
-classification REQ-43, drafting REQ-44, sending REQ-48, tracker ADRs 0057 to 0059, 0061 and 0074, workspace ADR 0005). Iris starts paused.
+classification REQ-43, drafting REQ-44, sending REQ-48, tracker ADRs 0057 to 0059, 0061 and 0069, workspace ADR 0005). Iris starts paused.
 It sends a reply only when Charlie approves it.
 
 ## One-time setup (Charlie, after migration 0024 is applied)
@@ -16,7 +16,7 @@ It sends a reply only when Charlie approves it.
    Workspace Admin console (Security, Access and data control, API controls,
    Domain-wide delegation), add its client id with exactly
    `https://www.googleapis.com/auth/gmail.readonly`. For sending (Iris 8/9,
-   after migration 0027 is applied) add a second scope on the same line:
+   after migration 0028 is applied) add a second scope on the same line:
    `https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send`.
    Nothing else: no `gmail.modify` or `gmail.compose`. Until `gmail.send` is
    granted, Approve saves the approval and the send shows "Gmail send is not
@@ -111,7 +111,7 @@ draft, with the signature shown below it.
 
 ## Sending
 
-Each approved draft has one send (`iris.sends`, ADR 0074). It is sent at
+Each approved draft has one send (`iris.sends`, ADR 0069). It is sent at
 most once, however many times Approve or Retry is pressed.
 
 - **Sending.** Approve makes the first attempt at once. If it does not finish

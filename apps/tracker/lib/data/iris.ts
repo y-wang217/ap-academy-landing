@@ -80,7 +80,7 @@ const DRAFT_SELECT = "id, version, reply_type, body_text, policy_version, state,
 const SEND_CONTEXT = "id, state, attempts, rfc_message_id, draft:drafts(body_text), message:messages(from_email, rfc_message_id, thread:threads(gmail_thread_id, subject))";
 
 /**
- * The send rows (REQ-48, migration 0027), through whichever client is passed:
+ * The send rows (REQ-48, migration 0028), through whichever client is passed:
  * the owner's for Approve and Retry, the service client for the run. Every
  * change goes through a security definer function that checks the caller.
  */

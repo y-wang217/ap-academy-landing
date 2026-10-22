@@ -4,7 +4,7 @@ import { withSignature } from "./draft-rules";
 import { GmailError, type GmailSendPort } from "./gmail";
 
 /**
- * Sending an approved reply (REQ-48, tracker ADR 0074). One iris.sends row
+ * Sending an approved reply (REQ-48, tracker ADR 0069). One iris.sends row
  * per approved draft; this step makes its Gmail attempts. Every attempt but
  * the first one Approve makes searches Gmail first, so a message Gmail
  * already accepted is recorded, never sent again. Both functions take their

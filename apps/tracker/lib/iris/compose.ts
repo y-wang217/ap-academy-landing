@@ -1,5 +1,5 @@
 /**
- * The reply Iris sends (REQ-48, tracker ADR 0074). Pure: no fetch, no Next,
+ * The reply Iris sends (REQ-48, tracker ADR 0069). Pure: no fetch, no Next,
  * no Supabase. Builds one text/plain RFC 5322 message, base64url-encoded the
  * way Gmail's messages.send takes it. Every header value has CR and LF
  * removed, so text from a parent's subject can never add a header.
@@ -17,7 +17,7 @@ export class ComposeError extends Error {
   }
 }
 
-/** Our own Message-ID for a send. Migration 0027 writes the same shape. */
+/** Our own Message-ID for a send. Migration 0028 writes the same shape. */
 export const rfcMessageIdFor = (sendId: string) => `<iris-${sendId}@${DOMAIN}>`;
 
 /** True for a Message-ID Iris made, so the sent-mail read leaves it to the send step. */
