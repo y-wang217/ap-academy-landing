@@ -22,7 +22,7 @@ insert into tracker.memberships (user_id, org_id, role) values
   ('b0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'teacher'),
   ('c0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'student'),
   ('e0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'parent');
--- Approving sends (REQ-48, 0027), so both orgs run for these checks.
+-- Approving sends (REQ-48, 0028), so both orgs run for these checks.
 insert into iris.settings (org_id, paused) values
   ('10000000-0000-0000-0000-000000000001', false), ('10000000-0000-0000-0000-000000000002', false);
 
@@ -221,7 +221,7 @@ begin
   perform idt.expect_error($q$select iris.approve_draft_for_send('40000000-0000-0000-0000-000000000001', 1, 60)$q$, '42501');
   perform idt.expect_error($q$select iris.count_review('10000000-0000-0000-0000-000000000001', 'x', 'approve', false, 3)$q$, '42501');
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  -- 0027 revokes the old approve: the only way to approve is the one that sends.
+  -- 0028 revokes the old approve: the only way to approve is the one that sends.
   perform idt.expect_error($q$select iris.approve_draft('40000000-0000-0000-0000-000000000001', 1)$q$, '42501');
   perform idt.expect_error($q$select iris.count_review('10000000-0000-0000-0000-000000000001', 'x', 'approve', false, 3)$q$, '42501');
   -- An unknown id reads as not_found too.

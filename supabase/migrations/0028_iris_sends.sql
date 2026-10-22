@@ -1,5 +1,5 @@
 -- Iris sends (REQ-48, Iris 8/9): one row per approved draft that Iris sends
--- from the mailbox, under tracker ADR 0074. A reply goes out at most once.
+-- from the mailbox, under tracker ADR 0069. A reply goes out at most once.
 --
 -- Additive only. A send goes with its draft and its message (on delete
 -- cascade), so it never outlives retention. It holds ids, states and a

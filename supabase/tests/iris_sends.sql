@@ -1,4 +1,4 @@
--- REQ-48: Iris sends (0027). Run by run-rls.sh on a fresh copy of the
+-- REQ-48: Iris sends (0028). Run by run-rls.sh on a fresh copy of the
 -- migrated database. Privilege-sensitive steps switch role because the runner
 -- connects as a superuser. Each check raises on failure.
 
