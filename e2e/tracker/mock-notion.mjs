@@ -19,6 +19,10 @@
 // cccc…0002 (Ryan, Sam, 21 days ago, empty ref). The seeded paid lesson cccc…0001 stays outside it and is never served to a query.
 // REQ-42: a Students query whose filter includes Stage Paused is Iris's family directory: it gets FAMILIES (Parent Email
 // and Parent Name, with Haider and Ada as siblings sharing one address). POST /__students/fail toggles a 500 on it.
+// REQ-57: the console's lead read (a Students query asking for the Next Action Due id) gets CONSOLE_LEADS, the
+// Touches data source answers two touches, and a Lessons Type = Trial query gets CONSOLE_TRIALS. Other Students and
+// Lessons queries are unchanged. POST /__console/leads-fail toggles a 500 on the console lead read; POST
+// /__console/lose makes Gail Overdue Stage Lost.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -63,6 +67,68 @@ const FAMILIES = [
   family("dddddddd-dddd-4ddd-8ddd-dddddddd0001", "Ada Afzal", "Paused", "afzal.family@example.com", "Afzal Parent"),
 ];
 let familiesFail = false;
+
+// REQ-57: console leads. Synthetic; times relative to now. Lou Lost and Dee Optout never enter the queue.
+const atHours = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
+const sel = (name) => ({ select: name ? { name } : null });
+const dt = (start) => ({ date: start ? { start } : null });
+const txt = (t) => ({ rich_text: t ? [{ plain_text: t }] : [] });
+const consoleLead = (n, name, stage, extra = {}) => ({
+  object: "page",
+  id: `eeeeeeee-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+  created_time: atHours(-100 + n),
+  properties: {
+    "Student Name": { title: [{ plain_text: name }] }, Stage: sel(stage), Owner: { relation: [] }, "Next Action": sel("Call"), "Next Action Due": dt(null),
+    Attempts: { number: null }, "Last Contact": dt(null), Source: sel(null), "Lost Reason": sel(null), "Contacted At": dt(null), "Trial Booked At": dt(null),
+    "Trial Attended At": dt(null), "Closed At": dt(null), "Trial Time": dt(null), "Trial Teacher": { relation: [] }, Level: sel(null), "Major Gaps": txt(null),
+    "Recommended Plan": sel(null), "Trial Summary": txt(null), "Parent Name": txt(null), "Lead ID": txt(null), Grade: sel(null), Subjects: { multi_select: [] },
+    "Parent Phone": { phone_number: "555-0177" },
+    ...extra,
+  },
+});
+const CONSOLE_LEADS = [
+  consoleLead(1, "Nova New", "New", {
+    Owner: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] }, "Next Action Due": dt(atHours(1)), Grade: sel("11"),
+    Subjects: { multi_select: [{ name: "MHF4U" }] }, Source: sel("Meta form"), "Lead ID": txt("E2E-LEAD-77"), Attempts: { number: 0 },
+  }),
+  consoleLead(2, "Gail Overdue", "Working", { "Next Action Due": dt(atHours(-1)), "Last Contact": dt(atHours(-48)) }),
+  consoleLead(3, "Ezra Awaiting", "Awaiting Close", {
+    "Next Action": sel("Close call"), "Next Action Due": dt(atHours(48)), "Trial Time": dt(atHours(-72)), Level: sel("Solid (80 to 89)"),
+    "Major Gaps": txt("Factoring"), "Trial Summary": txt("Keen, needs pacing"),
+  }),
+  consoleLead(4, "Lou Lost", "Lost", { "Next Action Due": dt(atHours(-5)) }),
+  consoleLead(5, "Dee Optout", "Working", { "Lost Reason": sel("Do not contact"), "Next Action Due": dt(atHours(-5)) }),
+  consoleLead(6, "Will Later", "Working", { "Next Action": sel("Text"), "Next Action Due": dt(atHours(72)), "Last Contact": dt(atHours(-120)) }),
+  consoleLead(7, "Exa Nodue", "Working", { "Last Contact": dt(atHours(-24)) }),
+];
+const CONSOLE_LEAD_PROPS = [
+  "Owner", "Next Action", "Next Action Due", "Attempts", "Last Contact", "Source", "Lost Reason", "Contacted At", "Trial Booked At", "Trial Attended At",
+  "Closed At", "Trial Time", "Trial Teacher", "Level", "Major Gaps", "Recommended Plan", "Trial Summary", "Lead ID", "Grade", "Subjects",
+];
+const CONSOLE_LEAD_SCHEMA = Object.fromEntries(CONSOLE_LEAD_PROPS.map((n, i) => [n, { id: n === "Next Action Due" ? "cnad" : `cl${i}` }]));
+let consoleLeadsFail = false;
+const TOUCHES_DS = "772939bd-bd88-4272-9f1f-20ce75ef2204";
+const TOUCH_SCHEMA = { properties: { Type: { id: "tty" }, Outcome: { id: "tou" }, Student: { id: "tst" }, Staff: { id: "tsf" }, Note: { id: "tno" }, When: { id: "twh" } } };
+const touch = (n, lead, type, outcome, note, hours) => ({
+  object: "page", id: `eeeeeeee-1111-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+  properties: {
+    Type: sel(type), Outcome: sel(outcome), Student: { relation: [{ id: lead }] }, Staff: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] },
+    Note: txt(note), When: { created_time: atHours(hours) },
+  },
+});
+const CONSOLE_TOUCHES = [
+  touch(1, CONSOLE_LEADS[1].id, "Call", "No answer", "Left a voicemail", -48),
+  touch(2, CONSOLE_LEADS[2].id, "Call", "Interested", "Wants Tuesday slots", -24),
+];
+const CONSOLE_TRIALS = [{
+  object: "page", id: "eeeeeeee-2222-4000-8000-000000000001",
+  properties: {
+    Type: sel("Trial"), Date: dt(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() - 3 * 86400000))),
+    Teacher: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] }, "Related to Students & Parents (Lessons 1)": { relation: [{ id: CONSOLE_LEADS[2].id }] },
+    "Duration (hrs)": { number: 1 }, "Topic Covered": txt("Quadratics"), "Trial: Diagnosis": txt("Needs factoring practice"),
+    "Trial: Preferred Lesson Day": { multi_select: [{ name: "Tue" }] },
+  },
+}];
 
 // Weekly Schedule text per student, empty to start (so a first booking can adopt the student).
 const schedule = new Map(STUDENTS.map((s) => [s.id, ""]));
@@ -145,6 +211,7 @@ const LESSON = {
 const LESSONS_SCHEMA = { properties: {
   Lesson: { id: "title" }, Date: { id: "ldt" }, Teacher: { id: "lte" }, "Related to Students & Parents (Lessons 1)": { id: "lst" },
   "Duration (hrs)": { id: "ldu" }, "Paid to Teacher": { id: "lpd" }, "Pay Period": { id: "lpp" }, Type: { id: "lty" }, "Class occurrence": { id: "lco" },
+  "Topic Covered": { id: "ltc" }, "Trial: Diagnosis": { id: "ldg" }, "Trial: Preferred Lesson Day": { id: "lpdy" },
 } };
 const lessons = new Map(); // id -> { id, props }
 const lessonDay = (offset) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + offset * 86400000));
@@ -174,6 +241,9 @@ async function lessonsApi(req, res) {
   if (req.method === "GET" && path === `/v1/data_sources/${LESSONS_DS}`) return res.end(JSON.stringify(LESSONS_SCHEMA)), true;
   if (req.method === "POST" && path === `/v1/data_sources/${LESSONS_DS}/query`) {
     const body = await readBody(req);
+    if (body.filter?.property === "Type" && body.filter?.select?.equals === "Trial") {
+      return res.end(JSON.stringify({ results: CONSOLE_TRIALS, has_more: false, next_cursor: null })), true;
+    }
     const hits = [...lessons.values()].filter((l) => lessonMatches(l, body.filter ?? {}));
     return res.end(JSON.stringify({ results: hits.slice(0, body.page_size ?? 100).map(lessonJson), has_more: false, next_cursor: null })), true;
   }
@@ -388,6 +458,11 @@ http.createServer(async (req, res) => {
     RYAN_PAGE.properties.Status = { select: { name: now } };
     return res.end(JSON.stringify({ status: now }));
   }
+  if (req.method === "POST" && req.url === "/__console/leads-fail") { consoleLeadsFail = !consoleLeadsFail; return res.end(JSON.stringify({ consoleLeadsFail })); }
+  if (req.method === "POST" && req.url === "/__console/lose") {
+    CONSOLE_LEADS[1].properties.Stage = sel("Lost");
+    return res.end("{}");
+  }
   if (req.method === "POST" && req.url === "/__students/fail") { familiesFail = !familiesFail; return res.end(JSON.stringify({ familiesFail })); }
   if (req.method === "POST" && req.url === "/__schedule/commit-then-fail") { commitThenFail = true; return res.end(JSON.stringify({ commitThenFail })); }
   if (req.method === "GET" && req.url === "/__schedule/writes") return res.end(JSON.stringify(Object.fromEntries(scheduleWrites)));
@@ -444,9 +519,17 @@ http.createServer(async (req, res) => {
     res.end(JSON.stringify({ properties: {
       "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" }, "Schedule Source": { id: "src" },
       "Hourly Rate (CAD)": { id: "hr" }, "Lesson Cadence": { id: "lc" }, "Billing Family": { id: "bf" }, "Parent Phone": { id: "pp" }, Notes: { id: "nts" },
-      "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" },
+      "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" }, ...CONSOLE_LEAD_SCHEMA,
     } }));
     return;
+  }
+  if (req.method === "GET" && req.url === `/v1/data_sources/${TOUCHES_DS}`) return res.end(JSON.stringify(TOUCH_SCHEMA));
+  if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${TOUCHES_DS}/query`)) {
+    return res.end(JSON.stringify({ results: CONSOLE_TOUCHES, has_more: false, next_cursor: null }));
+  }
+  if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`) && (req.url ?? "").includes("filter_properties[]=cnad")) {
+    if (consoleLeadsFail) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })); }
+    return res.end(JSON.stringify({ results: CONSOLE_LEADS, has_more: false, next_cursor: null }));
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`)) {
     const filter = JSON.stringify((await readBody(req)).filter ?? {});

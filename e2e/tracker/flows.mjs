@@ -1576,7 +1576,9 @@ try {
       check("REQ-55: the sync line reports the health check and never says online", /^(Sources checked|Some sources failing)/.test(sync) && !/online/i.test(await p.locator("[data-console]").innerText()), sync);
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
-      check("REQ-55: production panels are all Not connected yet", (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 9 && (await p.locator("[data-panel-value]").count()) === 0);
+      // REQ-57 fills the Sales next and radar slots; every other production panel is still a placeholder.
+      const liveValues = await p.locator('#console-panel-sales [data-panel="next"] [data-panel-value], #console-panel-sales [data-panel="radar"] [data-panel-value]').count();
+      check("REQ-55: production panels no card has wired are Not connected yet", (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 7 && (await p.locator("[data-panel-value]").count()) === liveValues);
 
       // AC2: the mode switch by keyboard, in the URL and across a reload.
       await p.getByRole("tab", { name: "Sales", exact: true }).focus();
@@ -1704,7 +1706,7 @@ try {
         await p.keyboard.press("Tab");
         const s = await where();
         stops.push(s);
-        if (s.tag === "SUMMARY") break;
+        if (s.tag === "SUMMARY" && s.text === "Keyboard shortcuts") break;
       }
       const order = stops.filter((s) => s.panel).map((s) => s.panel).filter((id, i, a) => i === 0 || a[i - 1] !== id);
       const firstNorth = stops.findIndex((s) => s.panel === "northStar");
@@ -1745,6 +1747,101 @@ try {
       });
       check("REQ-55: a hovered panel has no outline and a 1px border", hovered.outline === "none" && hovered.border === "1px", JSON.stringify(hovered));
       await p.context().close();
+    }
+
+    // REQ-57: the Sales queue, Rolodex and radar against the mock Notion's console leads.
+    {
+      const SHOTS57 = new URL("../../docs/spec/founder-console/screenshots/req-57/", import.meta.url);
+      mkdirSync(SHOTS57, { recursive: true });
+      const mock = (path) => fetch(`${MOCK_NOTION}${path}`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+      const next = (p) => p.locator('#console-panel-sales [data-panel="next"]');
+      const selectedName = (p) => next(p).locator('[role="option"][aria-selected="true"] .console-row-title').textContent();
+      // The health poller polls at once when the tab shows again, and each new check after the first refreshes the queue.
+      const kick = (p) => p.evaluate(async () => {
+        const set = (state) => {
+          Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+          document.dispatchEvent(new Event("visibilitychange"));
+        };
+        set("hidden");
+        await new Promise((r) => setTimeout(r, 50));
+        set("visible");
+      });
+      const NOVA = "https://www.notion.so/eeeeeeee000040008000000000000001";
+
+      const p = await bridgeAt(1440, 900, "/console?mode=sales");
+      await syncSettled(p);
+      check("REQ-57: NEXT is the New lead, with exactly one selected", (await selectedName(p)) === "Nova New" && (await next(p).locator('[aria-selected="true"]').count()) === 1, await selectedName(p));
+      await next(p).getByRole("listbox").focus();
+      await p.keyboard.press("ArrowDown");
+      check("REQ-57: ArrowDown moves the selection to the overdue callback", (await selectedName(p)) === "Gail Overdue", await selectedName(p));
+      await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      await p.keyboard.press("/");
+      check("REQ-57: / focuses the checked filter", await p.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.type === "radio" && document.activeElement.checked));
+      const exceptionEverywhere = [];
+      for (const label of ["New", "Due", "Post-trial", "Later", "All"]) {
+        await next(p).locator("label", { hasText: new RegExp(`^${label} \\d+$`) }).click();
+        exceptionEverywhere.push((await next(p).getByText("1 exception", { exact: true }).count()) === 1);
+        if (label === "Post-trial") {
+          const names = await next(p).locator('[role="option"] .console-row-title').allTextContents();
+          const rolodex = (await next(p).locator("[data-rolodex]").textContent()) ?? "";
+          check("REQ-57: the Post-trial filter shows only the Awaiting Close lead, with its diagnosis", names.join() === "Ezra Awaiting" && rolodex.includes("Needs factoring practice") && rolodex.includes("Tue"), `${names.join()} ${rolodex.slice(0, 120)}`);
+        }
+      }
+      check("REQ-57: the exception line is under every filter", exceptionEverywhere.every(Boolean), exceptionEverywhere.join());
+      await p.context().route("https://www.notion.so/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<p>notion stub</p>" }));
+      await next(p).getByRole("listbox").focus();
+      await p.keyboard.press("Home");
+      const [popup] = await Promise.all([p.context().waitForEvent("page"), p.keyboard.press("Enter")]);
+      await popup.waitForLoadState().catch(() => {});
+      check("REQ-57: Enter opens the selected lead's Notion page", popup.url() === NOVA, popup.url());
+      await popup.close();
+      const html = await p.content();
+      const salesRes = await p.context().request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+      const salesBody = await salesRes.text();
+      const hidden = ["Lou Lost", "Dee Optout", "E2E-LEAD-77", "e2e-lead-77", "tel:", "555-0177"];
+      check("REQ-57: excluded leads, the Lead ID and any phone are absent from the page and the sales JSON",
+        salesRes.status() === 200 && salesRes.headers()["cache-control"] === "no-store" && hidden.every((t) => !html.includes(t) && !salesBody.includes(t)),
+        hidden.filter((t) => html.includes(t) || salesBody.includes(t)).join());
+
+      await mock("/__console/leads-fail");
+      await kick(p);
+      await next(p).getByText(/^Refresh failed at \d\d:\d\d: /).waitFor({ timeout: 20000 }).catch(() => {});
+      check("REQ-57: a failed refresh keeps the queue with Refresh failed at",
+        (await next(p).getByText(/^Refresh failed at /).count()) === 1 && (await next(p).locator('[role="option"]').count()) === 5 && (await next(p).getAttribute("data-status")) === "stale");
+      await mock("/__console/leads-fail");
+      await next(p).getByRole("button", { name: "Retry" }).click();
+      await next(p).getByText(/^Refresh failed at /).waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
+      check("REQ-57: Retry after recovery clears the line", (await next(p).getByText(/^Refresh failed at /).count()) === 0 && (await next(p).getAttribute("data-status")) === "ready");
+      await mock("/__console/lose");
+      await kick(p);
+      await next(p).getByText("Gail Overdue", { exact: true }).waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
+      check("REQ-57: a lead turned Lost leaves the queue on the next read", (await next(p).getByText("Gail Overdue", { exact: true }).count()) === 0 && (await next(p).locator('[role="option"]').count()) === 4);
+      await p.context().close();
+
+      for (const [label, who] of [["Ryan", ryan], ["teacher2", teacher2], ["the student", student], ["the parent", parent], ["the role-less user", outsider]]) {
+        const res = await who.context().request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+        const body = await res.text();
+        check(`REQ-57: ${label} gets 403 forbidden from the sales route`, res.status() === 403 && body === '{"error":"forbidden"}', `${res.status()} ${body}`);
+      }
+      {
+        const guestContext = await browser.newContext();
+        const res = await guestContext.request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+        check("REQ-57: a guest's sales request gets the health route's 307", res.status() === 307 && res.headers()["location"] === "/login?next=/tracker/api/console/sales", `${res.status()} ${res.headers()["location"]}`);
+        await guestContext.close();
+      }
+
+      for (const [w, h] of [[390, 844], [1280, 720], [1440, 900], [1920, 1080]]) {
+        const q = await bridgeAt(w, h, "/console?mode=sales");
+        await syncSettled(q);
+        if (w === 390 || w === 1280) check(`REQ-57: ?mode=sales at ${w} has no sideways scroll`, await noSideScroll(q));
+        await q.screenshot({ path: new URL(`console-sales-${w}x${h}.png`, SHOTS57).pathname, fullPage: true });
+        await q.context().close();
+      }
+      check("REQ-57: screenshots written to docs/spec/founder-console/screenshots/req-57/", true);
+      const reduced = await bridgeAt(1440, 900, "/console?mode=sales", { reducedMotion: "reduce" });
+      const transition = await next(reduced).locator('[role="option"][aria-selected="true"]').evaluate((e) => getComputedStyle(e).transitionProperty);
+      check("REQ-57: the selection transition is none under reduced motion", transition === "none", transition);
+      await reduced.context().close();
     }
   }
 
