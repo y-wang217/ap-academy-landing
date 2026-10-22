@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LessonLinkError } from "../domain/schedule/lesson-link";
-import { createLessonsPort, LESSON_TITLE } from "./lessons";
+import { filterIds, notionFake, onlyReads, v } from "./console-reader.fake";
+import { createLessonsPort, fetchTrialLessons, LESSON_TITLE, TRIAL_PROPS } from "./lessons";
 
 const cfg = { token: "secret_x", dataSourceId: "ds-lessons" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -159,5 +160,43 @@ describe("getLesson and listUnlinkedLessons", () => {
     const r = recorder((c) => (isSchema(c) ? json(SCHEMA) : json({ results: [page(L1)], has_more: true, next_cursor: "x" })));
     await expect(createLessonsPort(cfg, r.fetcher).listUnlinkedLessons({ from: "2026-10-05", to: "2026-10-18" })).rejects.toMatchObject({ name: "NotionError" });
     expect(r.calls.filter((c) => c.method === "POST")).toHaveLength(10);
+  });
+});
+
+describe("fetchTrialLessons (REQ-54 AC1, AC6, AC7)", () => {
+  const DS = "6300f58a-8b8c-4789-88c1-e44272079b0f";
+  const TRIAL_SCHEMA = {
+    Lesson: "title", Type: "ty", Date: "dt", Teacher: "te", "Related to Students & Parents (Lessons 1)": "st", "Duration (hrs)": "du",
+    "Topic Covered": "tc", "Trial: Diagnosis": "dg", "Trial: Preferred Lesson Day": "pd", "Paid to Teacher": "pt", "Pay Period": "pp",
+  };
+  const trial = (id: string, topic = "Quadratics", diagnosis = "") => ({
+    object: "page", id, properties: {
+      Type: v.select("Trial"), Date: v.date("2026-10-18"), Teacher: v.rel(STAFF), "Related to Students & Parents (Lessons 1)": v.rel(STUDENT),
+      "Duration (hrs)": v.num(1), "Topic Covered": v.text(topic), "Trial: Diagnosis": v.text(diagnosis), "Trial: Preferred Lesson Day": v.multi(["Tue", "Thu"]),
+      "Paid to Teacher": { type: "checkbox", checkbox: true }, "Pay Period": v.select("Oct 1-15"),
+    },
+  });
+
+  it("TRIAL_PROPS is the design list and names no payout field", () => {
+    expect([...TRIAL_PROPS]).toEqual(["Type", "Date", "Teacher", "Related to Students & Parents (Lessons 1)", "Duration (hrs)", "Topic Covered", "Trial: Diagnosis", "Trial: Preferred Lesson Day"]);
+    expect(TRIAL_PROPS.join("|")).not.toMatch(/Paid to Teacher|Pay Period/);
+  });
+
+  it("asks for Type = Trial, Date descending, the listed ids only, and works with no Class occurrence", async () => {
+    const f = notionFake({ dataSourceId: DS, schema: TRIAL_SCHEMA, pages: [[trial(L1)]] });
+    const r = await fetchTrialLessons({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 10 });
+    expect(filterIds(f.calls[1])).toEqual(["ty", "dt", "te", "st", "du", "tc", "dg", "pd"]);
+    expect(f.calls[1].body).toEqual({ page_size: 100, filter: { property: "Type", select: { equals: "Trial" } }, sorts: [{ property: "Date", direction: "descending" }] });
+    expect(r.rows).toEqual([{ id: L1, date: "2026-10-18", teacherId: STAFF, studentId: STUDENT, durationHours: 1, hasTopic: true, hasDiagnosis: false, preferredDays: ["Tue", "Thu"] }]);
+    expect(JSON.stringify(r)).not.toMatch(/Quadratics|Oct 1-15/);
+  });
+
+  it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
+    for (const [pages, maxPages, complete] of [[[[trial(L1)]], 10, true], [[[trial(L1)], [trial(L2)]], 10, true], [[[trial(L1)], [trial(L2)]], 1, false]] as const) {
+      const f = notionFake({ dataSourceId: DS, schema: TRIAL_SCHEMA, pages: pages as unknown[][] });
+      const r = await fetchTrialLessons({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages });
+      expect(r.complete).toBe(complete);
+      expect(onlyReads(f.calls, DS)).toBe(true);
+    }
   });
 });
