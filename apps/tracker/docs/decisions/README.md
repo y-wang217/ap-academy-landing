@@ -73,4 +73,5 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0066](0066-console-shell-and-instrument-kit.md) | The console shell renders a `PanelView` kit, keeps the mode in the URL and builds its preview only with a flag | accepted |
 | [0067](0067-schedule-source-and-drift-notice.md) | Schedule Source says the Weekly Schedule is generated, and the owner sees replaced Notion edits | accepted |
 | [0068](0068-north-star-net-new-hours.md) | North star: verified net-new weekly teaching hours from adopted series and Paid invoices | accepted |
+| [0072](0072-iris-schedule-aware-cancellations.md) | Iris splits cancellations by the notice the scheduler shows | accepted |
 | [0073](0073-trial-funnel-and-cash-pulse.md) | Trial funnel and cash pulse: separate evidence counts, Paid-only collected, honest failure states | accepted |

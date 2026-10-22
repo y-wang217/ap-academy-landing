@@ -4,8 +4,9 @@
 // POLICY_VERSION, which every stored message records. Version 2 (REQ-43)
 // adds the classifier intents, the flags and the sensitive-trigger phrases.
 // Version 3 (REQ-44) adds the voice rules, the signature and what gets a draft.
+// Version 4 (REQ-46) splits cancellations by notice from the scheduler.
 
-export const POLICY_VERSION = 3;
+export const POLICY_VERSION = 4;
 
 /** A cancellation with at least this many hours of notice is "with notice". */
 export const NOTICE_HOURS = 12;
@@ -127,11 +128,14 @@ export const SIGNATURE = "Charlie\nAP Academy";
 export const DRAFTABLE_INTENTS = ["cancellation", "reschedule_request", "pause_or_stop", "general_question"] as const;
 /** Escalate-only intents that still get a draft for Charlie to edit. */
 export const DRAFTABLE_ESCALATIONS = ["no_show"] as const;
-export type DraftableType = (typeof DRAFTABLE_INTENTS)[number] | (typeof DRAFTABLE_ESCALATIONS)[number];
+/** What a classified cancellation becomes once the scheduler shows its notice (REQ-46). */
+export const SCHEDULE_REPLY_TYPES = ["cancel_with_notice", "late_cancel"] as const;
+export type DraftableType = (typeof DRAFTABLE_INTENTS)[number] | (typeof DRAFTABLE_ESCALATIONS)[number] | (typeof SCHEDULE_REPLY_TYPES)[number];
 
 /**
- * What the classifier may answer (REQ-43). cancel_with_notice, late_cancel
- * (Iris 6/9) and reschedule_offer (Iris 7/9) are reply types it never picks.
+ * What the classifier may answer (REQ-43). cancel_with_notice and late_cancel
+ * come from the scheduler, never the model (REQ-46); reschedule_offer (Iris
+ * 7/9) is a reply type it never picks either.
  */
 export const CLASSIFIER_INTENTS = [
   "cancellation",
@@ -164,6 +168,12 @@ export const CHILD_SCOPED: readonly ClassifierIntent[] = ["cancellation", "resch
 /** Sensitive flags (Iris Policy Rules R-3, plus refund). Any flag escalates. */
 export const FLAGS = ["money_dispute", "legal_threat", "crisis", "hardship", "refund"] as const;
 export type Flag = (typeof FLAGS)[number];
+
+/**
+ * Flags code adds after the schedule read (REQ-46). Kept out of FLAGS, so the
+ * classifier is never asked for them and they never escalate.
+ */
+export const SCHEDULE_FLAGS = ["schedule_unknown"] as const;
 
 export const FLAG_HINTS: Record<Flag, string> = {
   money_dispute: "The family disputes a charge, an amount or a payment.",
