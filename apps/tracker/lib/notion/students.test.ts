@@ -189,9 +189,9 @@ describe("source scan", () => {
     expect(src.match(/method: "PATCH"/g)).toHaveLength(1);
     expect(src).not.toMatch(/lessons|payout/i);
   });
-  it("only billing.ts (read-only, REQ-25), lessons.ts (REQ-39), parents.ts (read-only, REQ-42), staff.ts, students.ts and work.ts call api.notion.com", () => {
+  it("only billing.ts (read-only, REQ-25), lessons.ts (REQ-39), paged.ts (read-only, REQ-54), parents.ts (read-only, REQ-42), staff.ts, students.ts and work.ts call api.notion.com", () => {
     const hits = readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && read(f).includes("api.notion.com")).sort();
-    expect(hits).toEqual(["billing.ts", "lessons.ts", "parents.ts", "staff.ts", "students.ts", "work.ts"]);
+    expect(hits).toEqual(["billing.ts", "lessons.ts", "paged.ts", "parents.ts", "staff.ts", "students.ts", "work.ts"]);
   });
 });
 

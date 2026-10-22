@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { CONSOLE_MODES } from "./console/modes";
 import { slotsFor } from "./console/panel-slots";
 
-// REQ-53 AC7, AC8: the console reads nothing but the owner check, through the owner's own client.
+// REQ-53 AC7, AC8: the console reads through the owner's own client only.
+// REQ-54 AC6, AC12: it never writes, never uses the service client, and only providers.ts reaches lib/notion/.
 const APP = join(__dirname, "..");
 const read = (f: string) => readFileSync(join(APP, f), "utf8");
 const walk = (dir: string): string[] =>
@@ -18,7 +19,11 @@ const FILES = [...walk("app/console"), ...walk("app/api/console"), ...walk("lib/
 
 describe("console source scan (AC7, AC8)", () => {
   it("covers the console files", () => {
-    for (const f of ["app/console/layout.tsx", "app/console/page.tsx", "app/console/loading.tsx", "app/api/console/health/route.ts", "lib/console/guard.ts", "lib/console/handlers.ts", "components/console/session-expired.tsx"]) {
+    for (const f of [
+      "app/console/layout.tsx", "app/console/page.tsx", "app/console/loading.tsx", "app/api/console/health/route.ts", "lib/console/guard.ts",
+      "lib/console/handlers.ts", "components/console/session-expired.tsx", "lib/console/contracts.ts", "lib/console/facade.ts",
+      "lib/console/people-read.ts", "lib/console/providers.ts",
+    ]) {
       expect(FILES).toContain(f);
     }
   });
@@ -36,20 +41,28 @@ describe("console source scan (AC7, AC8)", () => {
     }
   });
 
-  it.each(FILES)("%s uses no service client, scheduler identity, Notion or write", (f) => {
+  it.each(FILES)("%s uses no service client, scheduler identity or write, and reaches Notion only from providers.ts", (f) => {
     const src = read(f);
     expect(src).not.toMatch(/@ap-academy\/db\/service|getServiceClient/);
     expect(src).not.toMatch(/resolveSchedulerIdentity|requireScheduler/);
-    expect(src).not.toMatch(/lib\/notion\//);
+    const notion = [...src.matchAll(/from "([^"]*\/notion\/[^"]*)"/g)].map((m) => m[1]);
+    if (f === "lib/console/providers.ts") {
+      for (const m of notion) expect(["../notion/config", "../notion/leads", "../notion/touches", "../notion/lessons", "../notion/work", "../notion/billing"]).toContain(m);
+    } else {
+      expect(notion).toEqual([]);
+      expect(src).not.toMatch(/lib\/notion\/|\.\.\/notion\//);
+    }
     expect(src).not.toContain("claim_staff_link");
-    expect(src).not.toMatch(/\.(insert|update|upsert|delete)\(/);
-    for (const call of src.matchAll(/rpc\(\s*"([^"]+)"/g)) expect(call[1]).toBe("is_org_owner");
+    expect(src).not.toMatch(/\.(insert|update|upsert|delete|patch)\(/);
+    expect(src).not.toMatch(/pages\.create|"PATCH"|"DELETE"/);
+    for (const call of src.matchAll(/rpc\(\s*"([^"]+)"/g)) expect(["is_org_owner", "people_synced_at"]).toContain(call[1]);
     expect(src).not.toContain("—");
   });
 
-  it("the only rpc is is_org_owner on the viewer's own client", () => {
-    const handlers = read("lib/console/handlers.ts");
-    expect(handlers).toMatch(/viewer\.db\.tracker\.rpc\("is_org_owner"/);
+  it("the rpcs run on the viewer's own client", () => {
+    expect(read("lib/console/handlers.ts")).toMatch(/viewer\.db\.tracker\.rpc\("is_org_owner"/);
+    expect(read("lib/console/providers.ts")).toMatch(/createConsolePeopleReader\(viewer\.db\.tracker, viewer\.orgId\)/);
+    expect(read("lib/console/people-read.ts")).not.toMatch(/createPeopleStore|lib\/data\/people|"\.\.\/data\/people"/);
   });
 
   it("there is no console not-found or error boundary", () => {

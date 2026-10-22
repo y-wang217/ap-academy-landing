@@ -60,4 +60,12 @@ export const TUNING = {
   irisMaxClassifyPerRun: 10,
   /** No new classify call starts this long after the run started, so the run ends inside its 60 s. */
   irisClassifyBudgetMs: 35_000,
+  /** Founder Console (REQ-54): each provider read is abandoned after this long. */
+  consoleProviderTimeoutMs: 8_000,
+  /** Notion pages of 100 rows one console panel reads before it reports stale. */
+  consoleNotionMaxPages: 10,
+  /** Touches kept per student in the console's touch history. */
+  consoleTouchesPerStudent: 5,
+  /** Touches read back this many days. */
+  consoleTouchesWindowDays: 90,
 } as const;

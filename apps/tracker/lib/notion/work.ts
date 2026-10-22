@@ -1,6 +1,8 @@
 import "server-only";
 import { z } from "zod";
-import { NOTION_VERSION, notionApiBaseOverride, type WorkConfig } from "./config";
+import type { ReadResult, WorkSource } from "../console/contracts";
+import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig, type WorkConfig } from "./config";
+import { pagedQuery, parseRows, prop, propertyFilter, type ReaderOptions, val } from "./paged";
 import { NotionError, notionHttpError } from "./staff";
 
 /**
@@ -171,4 +173,45 @@ export async function createLogEntry(config: WorkConfig, input: LogInput, fetche
 
 export async function updateLogDecisions(config: WorkConfig, logId: string, decisions: string, fetcher: typeof fetch = fetch): Promise<void> {
   await call(config, fetcher, `/pages/${logId}`, "PATCH", { properties: { Decisions: { rich_text: text(decisions) } } });
+}
+
+/** The Founder Console's content work read (REQ-54, ADR 0065): open Work rows, read-only. */
+export const WORK_PROPS = ["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type"] as const;
+
+const WorkPage = z.object({
+  id: z.guid(),
+  properties: z.object({
+    Name: prop.title,
+    Area: prop.select,
+    State: prop.select,
+    Type: prop.select,
+    "Due / Review": prop.date,
+    Owner: prop.text,
+    "Task Type": prop.relation,
+  }),
+});
+
+const toWork = (page: z.output<typeof WorkPage>): WorkSource => {
+  const p = page.properties;
+  return {
+    id: page.id,
+    name: p.Name.title.trim(),
+    area: val.select(p.Area),
+    state: val.select(p.State),
+    type: val.select(p.Type),
+    dueReview: val.date(p["Due / Review"]),
+    owner: val.text(p.Owner),
+    taskTypeIds: val.ids(p["Task Type"]),
+  };
+};
+
+/** Every Work row whose State is not Done, Due / Review ascending. */
+export async function fetchWorkItems(config: NotionConfig, opts: ReaderOptions): Promise<ReadResult<WorkSource>> {
+  const fetcher = opts.fetcher ?? fetch;
+  const filterQuery = await propertyFilter(config.token, fetcher, config.dataSourceId, WORK_PROPS, "Work");
+  const read = await pagedQuery({
+    token: config.token, fetcher, dataSourceId: config.dataSourceId, filterQuery, maxPages: opts.maxPages,
+    body: { filter: { property: "State", select: { does_not_equal: "Done" } }, sorts: [{ property: "Due / Review", direction: "ascending" }] },
+  });
+  return { ...parseRows(read.rows, WorkPage, toWork), complete: read.complete, pages: read.pages };
 }

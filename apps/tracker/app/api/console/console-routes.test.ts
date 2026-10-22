@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../../../lib/data/client";
 import type { Viewer } from "../../../lib/data/queries";
 import { handleConsoleHealth } from "../../../lib/console/handlers";
+import type { FacadeDeps, NotionPorts } from "../../../lib/console/facade";
+import type { OwnerViewer } from "../../../lib/console/guard";
+import { consoleFreshness } from "../../../lib/console/providers";
 
 // REQ-53 AC1, AC3, AC5: the console JSON boundary.
 const ORG = "10000000-0000-0000-0000-00000000aaaa";
@@ -15,9 +18,33 @@ function fakeDb(result: { data: unknown; error: unknown }) {
   return { db: { tracker: { rpc } } as unknown as Db, rpc };
 }
 
-async function call(viewer: Viewer) {
-  const res = await handleConsoleHealth({ viewer: async () => viewer, now: () => NOW });
-  return { res, text: await res.text() };
+// REQ-54: the facade behind the owner's health check, over fake ports.
+const SENTINEL = "Sam Sentinel";
+const S1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001";
+const SOURCES = { leads: "fe3d651a", touches: "772939bd", trialLessons: "6300f58a", work: "3031b455", invoices: "be0f91e4" };
+const ok = <T,>(rows: T[]) => ({ rows, complete: true, skipped: 0, pages: 1 });
+function fakePorts(over: Partial<NotionPorts> = {}): NotionPorts {
+  return {
+    leads: async () => ok([{ id: S1, createdAt: null, name: SENTINEL, stage: "New", ownerStaffId: null, nextAction: null, nextActionDue: null, attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: null, trialAttendedAt: null, closedAt: null, trialTime: null, trialTeacherId: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: "Parent Sentinel" }]),
+    touches: async () => ok([]),
+    trialLessons: async () => ok([]),
+    work: async () => ok([{ id: S1, name: "Work Sentinel", area: null, state: "Next", type: null, dueReview: null, owner: null, taskTypeIds: [] }]),
+    invoices: async () => ok([]),
+    ...over,
+  };
+}
+function fakeDeps(over: Partial<FacadeDeps> = {}) {
+  return vi.fn((viewer: OwnerViewer, now: () => Date): FacadeDeps => ({
+    orgId: viewer.orgId, now, sources: SOURCES, notion: fakePorts(), timeoutMs: 8_000, maxPages: 10, touchesPerStudent: 5, touchesWindowDays: 90,
+    people: async () => ({ students: [{ id: S1, name: SENTINEL, stage: "New", active: true }], staff: [], syncedAt: new Date(now().getTime() - 60_000).toISOString() }),
+    freshness: new Map(),
+    ...over,
+  }));
+}
+
+async function call(viewer: Viewer, deps = fakeDeps(), now = NOW) {
+  const res = await handleConsoleHealth({ viewer: async () => viewer, now: () => now, deps });
+  return { res, text: await res.text(), deps };
 }
 
 describe("GET /api/console/health", () => {
@@ -30,11 +57,12 @@ describe("GET /api/console/health", () => {
   for (const [who, make] of denied) {
     it(`a ${who} gets 403 and no database call`, async () => {
       const f = fakeDb({ data: true, error: null });
-      const { res, text } = await call(make(f.db));
+      const { res, text, deps } = await call(make(f.db));
       expect(res.status).toBe(403);
       expect(text).toBe('{"error":"forbidden"}');
       expect(res.headers.get("cache-control")).toBe("no-store");
       expect(f.rpc).not.toHaveBeenCalled();
+      expect(deps).not.toHaveBeenCalled();
     });
   }
 
@@ -52,14 +80,47 @@ describe("GET /api/console/health", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("the owner gets 200 after is_org_owner on their own client", async () => {
+  it("the owner gets 200 after is_org_owner on their own client, with exactly the AC9 shape", async () => {
     const f = fakeDb({ data: true, error: null });
-    const { res, text } = await call({ kind: "staff", ...base, orgId: ORG, role: "owner", db: f.db });
+    const { res, text, deps } = await call({ kind: "staff", ...base, orgId: ORG, role: "owner", db: f.db });
     expect(res.status).toBe(200);
-    expect(JSON.parse(text)).toEqual({ status: "ok", checkedAt: NOW.toISOString() });
+    const body = JSON.parse(text);
+    expect(Object.keys(body).sort()).toEqual(["checkedAt", "providers", "status"]);
+    expect(body.status).toBe("ok");
+    expect(body.checkedAt).toBe(NOW.toISOString());
+    expect(Object.keys(body.providers).sort()).toEqual(["invoices", "leads", "people", "touches", "trialLessons", "work"]);
+    for (const p of Object.values(body.providers)) {
+      expect(Object.keys(p as object).sort()).toEqual(["errorMessage", "lastCheckedAt", "lastSuccessfulFetchAt", "staleReason", "status"]);
+      expect(["ready", "empty"]).toContain((p as { status: string }).status);
+    }
+    expect(text).not.toMatch(/Sentinel|count|"data"/);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(f.rpc).toHaveBeenCalledTimes(1);
     expect(f.rpc).toHaveBeenCalledWith("is_org_owner", { target_org: ORG });
+    expect(deps).toHaveBeenCalledTimes(1);
+  });
+
+  it("one failed provider makes the top status degraded, the rest still report", async () => {
+    const f = fakeDb({ data: true, error: null });
+    const deps = fakeDeps({ notion: fakePorts({ invoices: async () => { throw new Error("x"); } }) });
+    const { res, text } = await call({ kind: "staff", ...base, orgId: ORG, role: "owner", db: f.db }, deps);
+    expect(res.status).toBe(200);
+    const body = JSON.parse(text);
+    expect(body.status).toBe("degraded");
+    expect(body.providers.invoices).toEqual({ status: "error", lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: null, staleReason: null, errorMessage: "Read failed" });
+    expect(body.providers.leads.status).toBe("ready");
+  });
+
+  it("freshness carries over between requests through consoleFreshness", async () => {
+    const f = fakeDb({ data: true, error: null });
+    const owner: Viewer = { kind: "staff", ...base, orgId: "10000000-0000-0000-0000-00000000f00d", role: "owner", db: f.db };
+    let fail = false;
+    const deps = fakeDeps({ freshness: consoleFreshness, notion: fakePorts({ leads: async () => { if (fail) throw new Error("x"); return ok([]); } }) });
+    await call(owner, deps, NOW);
+    fail = true;
+    const T2 = new Date("2026-10-22T12:10:00.000Z");
+    const second = JSON.parse((await call(owner, deps, T2)).text);
+    expect(second.providers.leads).toMatchObject({ status: "error", lastCheckedAt: T2.toISOString(), lastSuccessfulFetchAt: NOW.toISOString() });
   });
 
   it("is_org_owner false is 403", async () => {
@@ -81,7 +142,7 @@ describe("GET /api/console/health", () => {
     const rpc = vi.fn(async () => { throw new Error("network"); });
     const db = { tracker: { rpc } } as unknown as Db;
     expect((await call({ kind: "staff", ...base, orgId: ORG, role: "owner", db })).res.status).toBe(503);
-    const res = await handleConsoleHealth({ viewer: async () => { throw new Error("cookies"); }, now: () => NOW });
+    const res = await handleConsoleHealth({ viewer: async () => { throw new Error("cookies"); }, now: () => NOW, deps: fakeDeps() });
     expect(res.status).toBe(503);
     expect(await res.text()).toBe('{"error":"console_unavailable"}');
   });
@@ -106,8 +167,15 @@ describe("console routes", () => {
     }
   });
 
-  it("the health route answers GET only", () => {
-    const src = readFileSync(join(root, "health", "route.ts"), "utf8");
-    expect([...src.matchAll(/export (?:async )?function (\w+)/g)].map((m) => m[1])).toEqual(["GET"]);
+  it("every console route answers GET only", () => {
+    for (const f of routes(root)) {
+      const src = readFileSync(f, "utf8");
+      expect([...src.matchAll(/export (?:async )?function (\w+)/g)].map((m) => m[1]), f).toEqual(["GET"]);
+      expect(src, f).not.toMatch(/export const (POST|PUT|PATCH|DELETE)\b/);
+    }
+  });
+
+  it("the health route passes createConsoleDeps", () => {
+    expect(readFileSync(join(root, "health", "route.ts"), "utf8")).toMatch(/deps: createConsoleDeps/);
   });
 });

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendTeacher, createLogEntry, createTaskPage, findTaskByTitle, listChildren, updateIntro, updateLogDecisions, updateTeacher, type TeacherRender,
+  appendTeacher, createLogEntry, createTaskPage, fetchWorkItems, findTaskByTitle, listChildren, updateIntro, updateLogDecisions, updateTeacher, WORK_PROPS, type TeacherRender,
 } from "./work";
+import { filterIds, notionFake, onlyReads, v } from "./console-reader.fake";
 import { NotionError } from "./staff";
 
 const CONFIG = { token: "secret", workId: "3031b455-9be0-4f8d-b200-70fcfcf1a0b8", logId: "03257601-dfe2-42dd-affb-49dcfe1d2dcf" };
@@ -127,5 +128,35 @@ describe("failures (AC10)", () => {
     const err = await findTaskByTitle(CONFIG, "x", boom).catch((e) => e);
     expect(err).toBeInstanceOf(NotionError);
     expect(err.message).toBe("Notion request failed");
+  });
+});
+
+describe("fetchWorkItems (REQ-54 AC1, AC6, AC7)", () => {
+  const DS = CONFIG.workId;
+  const SCHEMA = { Name: "title", Area: "ar", State: "sa", Type: "ty", "Due / Review": "du", Owner: "ow", "Task Type": "tt", Alignment: "al", "Expected result": "er", "Build hours": "bh" };
+  const item = (id: string) => ({
+    object: "page", id, properties: {
+      Name: v.title("Write SAT post"), Area: v.select("Marketing"), State: v.select("Next"), Type: v.select("Task"),
+      "Due / Review": v.date("2026-10-24"), Owner: v.text("Charlie"), "Task Type": v.rel(BLOCK), "Expected result": v.text("secret plan"),
+    },
+  });
+
+  it("WORK_PROPS is the design list; State not Done, Due / Review ascending, listed ids only", async () => {
+    expect([...WORK_PROPS]).toEqual(["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type"]);
+    const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages: [[item(PAGE)]] });
+    const r = await fetchWorkItems({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 10 });
+    expect(filterIds(f.calls[1])).toEqual(["title", "ar", "sa", "ty", "du", "ow", "tt"]);
+    expect(f.calls[1].body).toEqual({ page_size: 100, filter: { property: "State", select: { does_not_equal: "Done" } }, sorts: [{ property: "Due / Review", direction: "ascending" }] });
+    expect(r.rows).toEqual([{ id: PAGE, name: "Write SAT post", area: "Marketing", state: "Next", type: "Task", dueReview: "2026-10-24", owner: "Charlie", taskTypeIds: [BLOCK] }]);
+    expect(JSON.stringify(r)).not.toContain("secret plan");
+  });
+
+  it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {
+    for (const [pages, maxPages, complete] of [[[[item(PAGE)]], 10, true], [[[item(PAGE)], [item(BLOCK)]], 10, true], [[[item(PAGE)], [item(BLOCK)]], 1, false]] as const) {
+      const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages });
+      const r = await fetchWorkItems({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages });
+      expect(r.complete).toBe(complete);
+      expect(onlyReads(f.calls, DS)).toBe(true);
+    }
   });
 });

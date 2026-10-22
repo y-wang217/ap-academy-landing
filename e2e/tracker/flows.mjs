@@ -1449,8 +1449,19 @@ try {
   check("REQ-53: the owner reaches /tracker/console", ownerConsole.status === 200 && ownerConsole.body.includes("data-console") && ownerConsole.body.includes("FOUNDER CONSOLE"), String(ownerConsole.status));
   const ownerHealth = await consoleHealth(teacher);
   const ownerHealthBody = ownerHealth.status === 200 ? JSON.parse(ownerHealth.body) : null;
-  check("REQ-53: the owner's health check is 200 ok, no-store",
-    ownerHealth.status === 200 && ownerHealthBody?.status === "ok" && !Number.isNaN(Date.parse(ownerHealthBody?.checkedAt)) && Object.keys(ownerHealthBody).length === 2 && ownerHealth.headers["cache-control"] === "no-store",
+  // REQ-54 AC9: statuses and times per provider, never rows. The mock Notion does not serve the console's data
+  // sources, so those providers report error and the top status is degraded; both top statuses are accepted.
+  const PROVIDERS = ["invoices", "leads", "people", "touches", "trialLessons", "work"];
+  const PROVIDER_KEYS = ["errorMessage", "lastCheckedAt", "lastSuccessfulFetchAt", "staleReason", "status"];
+  const STATUSES = ["ready", "empty", "loading", "stale", "error", "unverifiable"];
+  const providers = ownerHealthBody?.providers ?? {};
+  check("REQ-53/REQ-54: the owner's health check is 200, no-store, with six providers of statuses and times only",
+    ownerHealth.status === 200 && ["ok", "degraded"].includes(ownerHealthBody?.status) && !Number.isNaN(Date.parse(ownerHealthBody?.checkedAt))
+      && JSON.stringify(Object.keys(ownerHealthBody).sort()) === JSON.stringify(["checkedAt", "providers", "status"])
+      && JSON.stringify(Object.keys(providers).sort()) === JSON.stringify(PROVIDERS)
+      && Object.values(providers).every((p) => JSON.stringify(Object.keys(p).sort()) === JSON.stringify(PROVIDER_KEYS) && STATUSES.includes(p.status))
+      && ["Sam", "parent@example.com", "teacher@example.com"].every((s) => !ownerHealth.body.includes(s))
+      && ownerHealth.headers["cache-control"] === "no-store",
     `${ownerHealth.status} ${ownerHealth.body}`);
   await teacher.goto(`${BASE}`);
   check("REQ-53: the owner's home links Console", (await teacher.getByRole("link", { name: "Console", exact: true }).count()) === 1);

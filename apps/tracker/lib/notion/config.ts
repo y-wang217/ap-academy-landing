@@ -87,3 +87,28 @@ export function readLessonsConfig(): NotionConfig | null {
   if (!token) return null;
   return { token, dataSourceId: process.env.NOTION_LESSONS_DATA_SOURCE_ID || DEFAULT_LESSONS_DATA_SOURCE_ID };
 }
+
+export const DEFAULT_TOUCHES_DATA_SOURCE_ID = "772939bd-bd88-4272-9f1f-20ce75ef2204";
+export type ConsoleNotionConfig = { token: string; studentsId: string; touchesId: string; lessonsId: string; workId: string; invoicesId: string };
+
+/**
+ * Same token, pointed at the five data sources the Founder Console reads
+ * (REQ-54, ADR 0065). Read access only; Touches needs the integration shared
+ * with it before its panel reads anything.
+ */
+export function readConsoleNotionConfig(): ConsoleNotionConfig | null {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) return null;
+  return { token, ...consoleDataSourceIds() };
+}
+
+/** The console's data source ids, token or not, for source evidence. */
+export function consoleDataSourceIds(): Omit<ConsoleNotionConfig, "token"> {
+  return {
+    studentsId: process.env.NOTION_STUDENTS_DATA_SOURCE_ID || DEFAULT_STUDENTS_DATA_SOURCE_ID,
+    touchesId: process.env.NOTION_TOUCHES_DATA_SOURCE_ID || DEFAULT_TOUCHES_DATA_SOURCE_ID,
+    lessonsId: process.env.NOTION_LESSONS_DATA_SOURCE_ID || DEFAULT_LESSONS_DATA_SOURCE_ID,
+    workId: process.env.NOTION_WORK_DATA_SOURCE_ID || DEFAULT_WORK_DATA_SOURCE_ID,
+    invoicesId: process.env.NOTION_INVOICES_DATA_SOURCE_ID || DEFAULT_INVOICES_DATA_SOURCE_ID,
+  };
+}
