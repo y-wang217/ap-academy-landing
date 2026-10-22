@@ -101,6 +101,8 @@ export default async function IrisMessagePage({ params }: { params: Promise<{ id
                 <span data-state={r.message.state}>{stateLabel(r.message.state, r.message.escalationReason, { flags: r.message.flags, intent: r.message.intent })}</span>
               </Field>
               {r.message.state === "escalated" && r.message.handledAt === null && <MarkHandled id={r.message.id} />}
+              {/* After a refresh the handled state comes from the row, so it never flickers away. */}
+              {r.message.state === "escalated" && r.message.handledAt !== null && <p className="text-sm font-medium" data-handled>{IRIS_TEXT.handled}</p>}
             </Card>
             <Card title={IRIS_TEXT.whatIrisRead}>
               <Field label={IRIS_TEXT.intent}><span data-intent>{intentLabel(r.message.intent)}</span></Field>
