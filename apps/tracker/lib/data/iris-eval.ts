@@ -135,6 +135,8 @@ export function createEvalReader(iris: IrisClient, orgId: string, uid: () => Pro
           }
         : null,
       ratedRequestId: rated?.id ?? null,
+      /** What the rated request was stamped with: the run is recorded under these, not the response model. */
+      ratedStamp: rated ? { policyVersion: typeof rated.detail.policy_version === "number" ? rated.detail.policy_version : null, model: str(rated.detail.model) } : null,
     };
   }
 
@@ -196,7 +198,9 @@ export function createEvalReader(iris: IrisClient, orgId: string, uid: () => Pro
       const current = req.runRequest && !req.runRequest.finished ? await resultsOf(req.runRequest.id) : rated;
       const unratedDrafts = rated.filter((r) => r.draft_body !== null && labels.get(r.message_id)?.ratedResultId !== r.id).length;
       return {
-        ...req,
+        importRequest: req.importRequest,
+        runRequest: req.runRequest,
+        ratedRequestId: req.ratedRequestId,
         latestRun: run,
         confusion: rated.length > 0 ? scoreEval(scoreRows(rated, labels)).confusion : null,
         counts: { imported: imported.size, labelled, evalTotal: labelled, evalDone: current.length, unratedDrafts },
@@ -256,11 +260,11 @@ export function createEvalReader(iris: IrisClient, orgId: string, uid: () => Pro
       if (req.ratedRequestId !== requestId) return "not_found";
       const [results, labels] = await Promise.all([resultsOf(requestId), allLabels()]);
       if (results.some((r) => r.outcome === "error")) return "has_errors";
-      const policyVersion = results[0]?.policy_version ?? req.runRequest?.policyVersion;
+      const policyVersion = req.ratedStamp?.policyVersion;
       if (policyVersion === undefined || policyVersion === null) return "not_found";
       const s = scoreEval(scoreRows(results, labels));
       const { error } = await iris.from("eval_runs").insert({
-        org_id: orgId, policy_version: policyVersion, model: results[0]?.model ?? null, labelled_count: s.labelledCount, per_type: s.perType,
+        org_id: orgId, policy_version: policyVersion, model: req.ratedStamp?.model ?? null, labelled_count: s.labelledCount, per_type: s.perType,
         sensitive_recall: s.sensitiveRecall === null ? null : Math.round(s.sensitiveRecall * 1000) / 1000, mean_rating_per_type: s.meanRatingPerType,
       });
       if (error) fail();
