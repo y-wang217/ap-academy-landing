@@ -119,3 +119,26 @@ describe("the north-star slot", () => {
     expect(count(tabpanel(out, "sales"), "Not connected yet")).toBe(8);
   });
 });
+
+// REQ-59 AC8: the four funnel and cash slots render the new panels, full in Operations and headline in Sales.
+describe("the funnel and cash slots", () => {
+  const unverifiable = (panel: string) => ({
+    panel, status: "unverifiable" as const, data: null, count: null, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: null,
+    staleReason: "Payment records unavailable: Notion returned 500", errorMessage: null,
+    sourceEvidence: [{ source: "notion", sourceId: "ds", sourceUrl: "https://www.notion.so/ds", observedAt: NOW.toISOString() }],
+  });
+  it("render the funnel and cash panels with their Notion links and leave the other slots unchanged", () => {
+    const panels = placeholderPanels(NOW);
+    panels.sales.conversion = unverifiable("trialFunnel");
+    panels.sales.cashflow = unverifiable("cashPulse");
+    panels.operations.trials = unverifiable("trialFunnel");
+    panels.operations.finance = unverifiable("cashPulse");
+    const sales = tabpanel(renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels, now: NOW })), "sales");
+    expect(sales).toContain("Open Students &amp; Parents in Notion");
+    expect(sales).toContain("Open Invoices in Notion");
+    expect(count(sales, "Not connected yet")).toBe(7);
+    const ops = tabpanel(renderToStaticMarkup(h(ConsoleBridge, { mode: "operations", panels, now: NOW })), "operations");
+    expect(count(ops, "data-notion-link")).toBe(2);
+    expect(count(ops, "Not connected yet")).toBe(3);
+  });
+});
