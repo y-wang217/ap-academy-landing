@@ -166,7 +166,8 @@ begin
   perform idt.as_super();
 end $$;
 
--- Owner writes: drafts only through the functions; reply_types.auto_send_enabled only.
+-- Owner writes: drafts only through the functions; reply_types not at all (0031
+-- revoked the auto_send_enabled grant: iris.set_auto_send is the only switch).
 do $$
 declare stmt text;
 begin
@@ -190,7 +191,7 @@ begin
     perform idt.expect_error(stmt, '42501');
   end loop;
   if (select count(*) from iris.reply_types) <> 1 then raise exception 'owner should see one reply type'; end if;
-  update iris.reply_types set auto_send_enabled = false where org_id = '10000000-0000-0000-0000-000000000001';
+  perform idt.expect_error($q$update iris.reply_types set auto_send_enabled = false where org_id = '10000000-0000-0000-0000-000000000001'$q$, '42501');
   -- Eval labels: own org and own name only.
   perform idt.expect_error($q$insert into iris.eval_labels (org_id, message_id, labelled_by)
     values ('10000000-0000-0000-0000-000000000002', '31000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001')$q$, '42501');
@@ -426,9 +427,12 @@ begin
   if exists (select 1 from tracker.audit_log where table_name in ('drafts', 'pushes', 'push_days', 'eval_labels', 'eval_runs')) then
     raise exception 'only reply_types is audited';
   end if;
+  update iris.reply_types set auto_send_enabled = true where type = 'general_question';
   before_n := (select count(*) from tracker.audit_log where table_name = 'reply_types');
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  update iris.reply_types set auto_send_enabled = true where type = 'general_question';
+  if iris.set_auto_send('10000000-0000-0000-0000-000000000001', 'general_question', false, 3) ->> 'result' <> 'ok' then
+    raise exception 'the owner switch-off failed';
+  end if;
   perform idt.as_super();
   if (select count(*) from tracker.audit_log where table_name = 'reply_types'
         and actor_id = 'a0000000-0000-0000-0000-000000000001') = 0
