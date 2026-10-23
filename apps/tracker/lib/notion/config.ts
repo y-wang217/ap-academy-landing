@@ -89,12 +89,14 @@ export function readLessonsConfig(): NotionConfig | null {
 }
 
 export const DEFAULT_TOUCHES_DATA_SOURCE_ID = "772939bd-bd88-4272-9f1f-20ce75ef2204";
-export type ConsoleNotionConfig = { token: string; studentsId: string; touchesId: string; lessonsId: string; workId: string; invoicesId: string };
+export const DEFAULT_TASK_TYPES_DATA_SOURCE_ID = "80e411f2-eb5b-4055-b560-55061669d9f7";
+export type ConsoleNotionConfig = { token: string; studentsId: string; touchesId: string; lessonsId: string; workId: string; invoicesId: string; taskTypesId: string };
 
 /**
  * Same token, pointed at the five data sources the Founder Console reads
- * (REQ-54, ADR 0065). Read access only; Touches needs the integration shared
- * with it before its panel reads anything.
+ * (REQ-54, ADR 0065), plus Task Types for the Work rows' type names (REQ-60,
+ * ADR 0070). Read access only; Touches needs the integration shared with it
+ * before its panel reads anything.
  */
 export function readConsoleNotionConfig(): ConsoleNotionConfig | null {
   const token = process.env.NOTION_TOKEN;
@@ -110,5 +112,6 @@ export function consoleDataSourceIds(): Omit<ConsoleNotionConfig, "token"> {
     lessonsId: process.env.NOTION_LESSONS_DATA_SOURCE_ID || DEFAULT_LESSONS_DATA_SOURCE_ID,
     workId: process.env.NOTION_WORK_DATA_SOURCE_ID || DEFAULT_WORK_DATA_SOURCE_ID,
     invoicesId: process.env.NOTION_INVOICES_DATA_SOURCE_ID || DEFAULT_INVOICES_DATA_SOURCE_ID,
+    taskTypesId: process.env.NOTION_TASK_TYPES_DATA_SOURCE_ID || DEFAULT_TASK_TYPES_DATA_SOURCE_ID,
   };
 }

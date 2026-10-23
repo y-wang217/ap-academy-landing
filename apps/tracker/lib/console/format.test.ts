@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bridgeClock, formatCents, formatReadout, hhmm } from "./format";
+import { bridgeClock, dayMonth, formatCents, formatReadout, hhmm } from "./format";
 
 // REQ-55 AC1, AC9: the header clock is Toronto wall time, readouts are en-CA.
 describe("bridgeClock", () => {
@@ -45,4 +45,12 @@ describe("formatReadout", () => {
 // REQ-59 AC3: money in integer cents, two decimals.
 describe("formatCents", () => {
   it.each([[123450, "$1,234.50"], [0, "$0.00"], [9750, "$97.50"], [30, "$0.30"]])("%i is %s", (cents, text) => expect(formatCents(cents)).toBe(text));
+});
+
+// REQ-60: a Work row's Due / Review date, as written.
+describe("dayMonth", () => {
+  it("formats a wall date as day and short month, whatever the server's zone", () => {
+    expect(dayMonth("2026-10-21")).toBe("21 Oct");
+    expect(dayMonth("2026-01-01")).toBe("1 Jan");
+  });
 });

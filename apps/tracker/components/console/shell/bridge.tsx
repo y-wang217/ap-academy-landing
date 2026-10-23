@@ -1,6 +1,9 @@
 import { CONSOLE_MODES, type ConsoleMode } from "../../../lib/console/modes";
 import { connectedByMode, slotsFor, type ConsolePanels, type PanelSlot } from "../../../lib/console/panel-slots";
 import { notConnected, type PanelView } from "../../../lib/console/panel-view";
+import { NextAsset } from "../creation/next-asset";
+import { WeeklyReview } from "../creation/weekly-review";
+import { WorkQueue } from "../creation/work-queue";
 import { Gauge, type GaugeData } from "../kit/gauge";
 import { Metric, type MetricData } from "../kit/metric";
 import { QueueList, type QueueItem } from "../kit/queue-row";
@@ -15,6 +18,7 @@ import { NorthStar } from "../north-star";
 import { TeacherLoad } from "../teacher-load";
 import { TrialFunnelPanel } from "../trial-funnel";
 import type { CashPanelData, FunnelPanelData } from "../../../lib/console/finance-panels";
+import type { CreationView } from "../../../lib/console/creation";
 import type { LessonGapsData, TeacherLoadData } from "../../../lib/console/operations";
 import type { NorthStarData } from "../../../lib/console/north-star";
 import type { SignalsView } from "../../../lib/console/signals";
@@ -54,6 +58,9 @@ function Instrument({ slot, result, live, signals }: { slot: PanelSlot; result: 
   if (slot.id === "cashflow" || slot.id === "finance") {
     return <CashPulsePanel {...frame} variant={slot.id === "finance" ? "full" : "headline"} result={result as PanelView<CashPanelData>} />;
   }
+  if (slot.mode === "creation" && slot.id === "nextAsset") return <NextAsset {...frame} result={result as PanelView<CreationView>} />;
+  if (slot.mode === "creation" && slot.id === "work") return <WorkQueue {...frame} result={result as PanelView<CreationView>} />;
+  if (slot.mode === "creation" && slot.id === "pipeline") return <WeeklyReview {...frame} result={result as PanelView<CreationView>} />;
   switch (slot.kind) {
     case "metric":
       return <Metric {...frame} result={result as PanelView<MetricData>} />;

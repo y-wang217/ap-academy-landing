@@ -1,10 +1,11 @@
+import { normalId } from "../domain/billing";
 import { TUNING } from "../domain/tuning";
 import { fetchOrgInvoices } from "../notion/billing";
 import { consoleDataSourceIds, readConsoleNotionConfig, readLessonsConfig } from "../notion/config";
 import { fetchLeads } from "../notion/leads";
 import { createLessonsPort, fetchTrialLessons } from "../notion/lessons";
 import { fetchRecentTouches, lastTouchesByStudent } from "../notion/touches";
-import { fetchWorkItems } from "../notion/work";
+import { fetchTaskTypeNames, fetchWorkItems } from "../notion/work";
 import type { FacadeDeps, NotionPorts } from "./facade";
 import type { OwnerViewer } from "./guard";
 import type { SignalSources } from "./handlers";
@@ -35,7 +36,13 @@ export function createConsoleDeps(viewer: OwnerViewer, now: () => Date = () => n
       return { ...read, rows: lastTouchesByStudent(read.rows, o.perStudent) };
     },
     trialLessons: (o) => fetchTrialLessons(at(ids.lessonsId), { fetcher: bound(o.signal), maxPages: o.maxPages }),
-    work: (o) => fetchWorkItems(at(ids.workId), { fetcher: bound(o.signal), maxPages: o.maxPages }),
+    work: async (o) => {
+      const read = await fetchWorkItems(at(ids.workId), { fetcher: bound(o.signal), maxPages: o.maxPages });
+      if (!read.rows.some((w) => w.taskTypes.length)) return read;
+      // REQ-60: Task Type names in the same provider. A failed name read leaves them null; the rows stand.
+      const names = await fetchTaskTypeNames(at(ids.taskTypesId), { fetcher: bound(o.signal), maxPages: 1 }).catch(() => new Map<string, string>());
+      return { ...read, rows: read.rows.map((w) => ({ ...w, taskTypes: w.taskTypes.map((t) => ({ id: t.id, name: names.get(normalId(t.id)) ?? null })) })) };
+    },
     invoices: (o) => fetchOrgInvoices(at(ids.invoicesId), { fetcher: bound(o.signal), maxPages: o.maxPages }),
   };
   return {

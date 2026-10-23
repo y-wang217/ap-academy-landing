@@ -771,6 +771,84 @@
   font-size: 13px;
   font-weight: 600;
 }
+/* REQ-60: Creation mode. Links take the console's amber :focus-visible outline like every other control. */
+.console-creation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.console-creation-task {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.console-creation-task > a {
+  align-self: flex-start;
+  color: var(--amber);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.console-creation-head {
+  margin: 0;
+}
+.console-creation-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.console-creation-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+.console-creation-facts dt {
+  color: var(--muted);
+}
+.console-creation-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.console-creation-facts a,
+.console-creation-reason a,
+.console-note[data-weekly-none] a {
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.console-creation-flag {
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 600;
+}
+.console-creation-label {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+}
+.console-creation-interrupt {
+  padding: 8px 10px;
+  border: 1px solid var(--coral);
+  border-radius: 4px;
+}
+.console-creation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.console-creation-item .console-row {
+  flex-wrap: wrap;
+}
+.console-creation-item .console-row-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.console-creation-children {
+  margin-left: 16px;
+}
 
 /* REQ-62: the fresh-lead band, deferred strip, signals list, quiet mode and health rail. */
 .console-polling {

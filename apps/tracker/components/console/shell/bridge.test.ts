@@ -210,3 +210,35 @@ describe("the Operations slots", () => {
     expect(count(ops, "Not connected yet")).toBe(4);
   });
 });
+
+// REQ-60 AC7: the Creation slots render the next asset, work queue and weekly review panels; signals is untouched.
+describe("the Creation slots", () => {
+  it("render the three Creation panels from one view and leave signals Not connected yet", async () => {
+    const { buildCreation } = await import("../../../lib/console/creation");
+    const data = buildCreation({
+      rows: [{
+        id: "aaaaaaaa-0000-4000-8000-000000000001", pageUrl: "https://www.notion.so/a", name: "Script 01", area: "Marketing", state: "Next", type: "Task",
+        dueReview: null, dueReviewDate: null, owner: "Charlie", taskTypes: [], parentProjectIds: [], expectedResult: null,
+      }],
+      today: "2026-10-22", selectedId: null, search: new URLSearchParams("mode=creation"), workSourceId: "3031b455-9be0-4f8d-b200-70fcfcf1a0b8",
+    });
+    const view = (panel: string, status: "ready" | "empty") => ({
+      panel, status, data, count: 1, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: NOW.toISOString(), staleReason: null, errorMessage: null,
+      sourceEvidence: [], canonical: { href: data.workDatabaseUrl, label: "Open Work in Notion" },
+    });
+    const panels = placeholderPanels(NOW);
+    panels.creation.nextAsset = view("nextAsset", "ready");
+    panels.creation.work = view("work", "ready");
+    panels.creation.pipeline = view("pipeline", "empty");
+    const out = renderToStaticMarkup(h(ConsoleBridge, { mode: "creation", panels, now: NOW }));
+    const creation = tabpanel(out, "creation");
+    expect([...creation.matchAll(/data-panel="([^"]+)"/g)].map((m) => m[1])).toEqual(["nextAsset", "work", "pipeline", "signals"]);
+    expect(creation).toContain('data-task-id="aaaaaaaa-0000-4000-8000-000000000001"');
+    expect(creation).toContain('data-task="aaaaaaaa-0000-4000-8000-000000000001"');
+    expect(creation).toContain("Weekly media review");
+    expect(creation).toContain("No weekly media review task found");
+    expect(count(creation, "Open Work in Notion")).toBeGreaterThanOrEqual(3);
+    expect(count(creation, "Not connected yet")).toBe(1);
+    expect(count(tabpanel(out, "sales"), "Not connected yet")).toBe(9);
+  });
+});

@@ -48,7 +48,11 @@ export type TrialLessonSource = {
   id: string; date: string | null; studentId: string | null; teacherId: string | null; durationHours: number | null; hasTopic: boolean;
   hasDiagnosis: boolean; preferredDays: string[]; diagnosis: string | null;
 };
-export type WorkSource = { id: string; name: string; area: string | null; state: string | null; type: string | null; dueReview: string | null; owner: string | null; taskTypeIds: string[] };
+export type TaskTypeRef = { id: string; name: string | null };
+export type WorkSource = {
+  id: string; name: string; area: string | null; state: string | null; type: string | null; dueReview: string | null; owner: string | null;
+  taskTypes: TaskTypeRef[]; parentProjectIds: string[]; expectedResult: string | null;
+};
 export type InvoiceSource = {
   id: string; status: string | null; paidOn: string | null; amount: number | null; creditApplied: number | null; issued: string | null;
   due: string | null; month: string | null; studentIds: string[];
@@ -81,7 +85,7 @@ export const TrialLessonRow = z.object({
 });
 export const WorkRow = z.object({
   id: z.string(), pageUrl: z.string(), name: z.string(), area: str, state: str, type: str, dueReview: str, dueReviewDate: str, owner: str,
-  taskTypeIds: z.array(z.string()),
+  taskTypes: z.array(z.object({ id: z.string(), name: str })), parentProjectIds: z.array(z.string()), expectedResult: z.string().max(500).nullable(),
 });
 export const InvoiceRow = z.object({
   id: z.string(), pageUrl: z.string(), status: str, paidOn: str, amount: num, creditApplied: num, issued: str, due: str, month: str,

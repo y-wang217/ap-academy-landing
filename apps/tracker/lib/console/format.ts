@@ -21,3 +21,8 @@ export function formatReadout(value: number, { unit, currency }: { unit?: string
 export function formatCents(cents: number): string {
   return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", currencyDisplay: "narrowSymbol", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
 }
+
+/** A wall date "2026-10-21" as "21 Oct", read as written so no zone can move the day (REQ-60). */
+export function dayMonth(date: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(`${date}T00:00:00Z`));
+}
