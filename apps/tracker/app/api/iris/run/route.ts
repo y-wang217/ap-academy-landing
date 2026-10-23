@@ -5,7 +5,7 @@ import { createIrisScheduleReader } from "@/lib/data/iris-schedule";
 import { classifyMessage } from "@/lib/iris/classify";
 import { readCharlieUserId, readGmailConfig, readIrisRunEnv } from "@/lib/iris/config";
 import { draftReply } from "@/lib/iris/draft";
-import { gmailPort } from "@/lib/iris/gmail";
+import { gmailPort, gmailSendPort } from "@/lib/iris/gmail";
 import { handleIrisRun } from "@/lib/iris/handlers";
 import { runPush } from "@/lib/iris/notion-push";
 import { readStudentsConfig, readWorkConfig } from "@/lib/notion/config";
@@ -24,8 +24,9 @@ export const maxDuration = 120;
  * Notion once per run. With ANTHROPIC_API_KEY set it then classifies matched
  * mail with Claude (REQ-43) and drafts replies (REQ-44), reading the matched
  * student's classes from the tracker scheduler for cancellations (REQ-46,
- * select only) and the teacher's calendar for make-up offers (REQ-47); with Notion Work set up it pushes the phone copies to
- * Charlie's day page.
+ * select only) and the teacher's calendar for make-up offers (REQ-47); with
+ * Notion Work set up it pushes the phone copies to Charlie's day page. It
+ * also retries approved replies whose send did not finish (REQ-48).
  */
 export async function POST(request: Request) {
   return handleIrisRun({
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
           ? ({ store, directory, now }) =>
               runPush({ store, config: work, charlieUserId: readCharlieUserId(), siteUrl: SITE_URL, mailbox: gmail.mailbox, directory, now })
           : null,
+        sender: gmailSendPort(gmail),
       };
     },
   });

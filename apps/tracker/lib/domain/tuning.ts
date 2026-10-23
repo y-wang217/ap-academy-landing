@@ -72,6 +72,14 @@ export const TUNING = {
   irisMaxPushAttempts: 5,
   /** Unedited approvals in a row that make a reply type auto-send eligible. Mirrored as a constant in migration 0025. */
   irisAutoSendStreak: 20,
+  /** Gmail attempts per send before it is failed and waits for Retry (REQ-48). Each Retry allows this many again. */
+  irisSendMaxAttempts: 3,
+  /** An attempt holds its send this long; a crash frees it, and the next attempt checks Gmail first. */
+  irisSendLeaseSeconds: 60,
+  /** Stuck sends one run tries, oldest first. */
+  irisMaxSendsPerRun: 3,
+  /** No new send starts this long after the run's send step began. */
+  irisSendBudgetMs: 30_000,
   /** Founder Console (REQ-54): each provider read is abandoned after this long. */
   consoleProviderTimeoutMs: 8_000,
   /** Notion pages of 100 rows one console panel reads before it reports stale. */
