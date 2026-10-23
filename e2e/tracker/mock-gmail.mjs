@@ -118,7 +118,8 @@ http.createServer(async (req, res) => {
   if (url.pathname === "/gmail/v1/users/me/messages" && req.method === "GET") {
     if (slowList) await new Promise((r) => setTimeout(r, 1500));
     if (failList) return send(res, 500, { error: { code: 500, message: `backend error for ${MAILBOX}` } });
-    const sentOnly = (url.searchParams.get("q") ?? "").startsWith("in:sent");
+    const q = url.searchParams.get("q") ?? "";
+    const sentOnly = q.startsWith("in:sent");
     const ids = [...inbox.values()]
       .filter((m) => (m.labelIds ?? []).includes("SENT") === sentOnly && matchesQuery(m, q))
       .sort((a, b) => Number(b.internalDate) - Number(a.internalDate))
