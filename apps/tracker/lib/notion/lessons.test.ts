@@ -187,8 +187,14 @@ describe("fetchTrialLessons (REQ-54 AC1, AC6, AC7)", () => {
     const r = await fetchTrialLessons({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 10 });
     expect(filterIds(f.calls[1])).toEqual(["ty", "dt", "te", "st", "du", "tc", "dg", "pd"]);
     expect(f.calls[1].body).toEqual({ page_size: 100, filter: { property: "Type", select: { equals: "Trial" } }, sorts: [{ property: "Date", direction: "descending" }] });
-    expect(r.rows).toEqual([{ id: L1, date: "2026-10-18", teacherId: STAFF, studentId: STUDENT, durationHours: 1, hasTopic: true, hasDiagnosis: false, preferredDays: ["Tue", "Thu"] }]);
+    expect(r.rows).toEqual([{ id: L1, date: "2026-10-18", teacherId: STAFF, studentId: STUDENT, durationHours: 1, hasTopic: true, hasDiagnosis: false, diagnosis: null, preferredDays: ["Tue", "Thu"] }]);
     expect(JSON.stringify(r)).not.toMatch(/Quadratics|Oct 1-15/);
+  });
+
+  it("REQ-57: the diagnosis text comes back, cut to 1000 characters", async () => {
+    const f = notionFake({ dataSourceId: DS, schema: TRIAL_SCHEMA, pages: [[trial(L1, "Quadratics", "y".repeat(1200)), trial(L2, "Quadratics", " Needs factoring ")]] });
+    const r = await fetchTrialLessons({ token: "t", dataSourceId: DS }, { fetcher: f.fetcher, maxPages: 10 });
+    expect(r.rows.map((x) => [x.diagnosis?.length, x.hasDiagnosis])).toEqual([[1000, true], [15, true]]);
   });
 
   it("full, paginated and truncated reads make only schema GETs and data source queries", async () => {

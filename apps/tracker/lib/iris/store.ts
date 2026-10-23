@@ -135,6 +135,9 @@ export type DraftableMessage = {
   state: "classified" | "escalated";
   intent: string | null;
   notionStudentId: string | null;
+  /** escalate_only or schedule_no_show for a no-show; null for a classified message (REQ-46). */
+  escalationReason: string | null;
+  flags: string[];
 };
 
 /** Version 1 of an Iris draft: proposed, created_by iris, edited false. The body has no signature. */

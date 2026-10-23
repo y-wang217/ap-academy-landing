@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONSOLE_MODES, MODE_LABELS, parseGapDays, parseMode, parseWeek, tabKeyTarget } from "./modes";
+import { CONSOLE_MODES, MODE_LABELS, parseGapDays, parseMode, parseWeek, parseWindow, tabKeyTarget, withParam } from "./modes";
 
 // REQ-55 AC2: the mode switch.
 describe("parseMode", () => {
@@ -67,5 +67,15 @@ describe("parseGapDays", () => {
   });
   it.each([["1", 1], ["31", 31], ["7", 7], [["21", "3"], 21]])("%j gives %i", (raw, n) => {
     expect(parseGapDays(raw)).toBe(n);
+  });
+});
+
+// REQ-59 AC6: the trial and cash window, and links that keep every other parameter.
+describe("parseWindow and withParam", () => {
+  it.each([[undefined, 30], ["7", 7], ["90", 90], ["12", 30], ["30", 30], [["90", "7"], 90], [["x"], 30]] as const)("%j gives %i", (raw, days) => {
+    expect(parseWindow(raw)).toBe(days);
+  });
+  it("withParam sets one key and keeps mode and week", () => {
+    expect(withParam(new URLSearchParams({ mode: "operations", week: "2026-10-12", window: "30" }), "window", "90")).toBe("?mode=operations&week=2026-10-12&window=90");
   });
 });

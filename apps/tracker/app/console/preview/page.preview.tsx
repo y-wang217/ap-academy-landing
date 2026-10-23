@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { ConsoleBridge } from "../../../components/console/shell/bridge";
 import { parseMode } from "../../../lib/console/modes";
 import { previewEnabled } from "../../../lib/console/preview-flag";
-import { demoPanels } from "../../../test/console/demo-panels";
+import { demoPanels, demoSales } from "../../../test/console/demo-panels";
 
 export const dynamic = "force-dynamic";
 
@@ -15,5 +15,9 @@ export default async function ConsolePreviewPage({ searchParams }: { searchParam
   if (!previewEnabled(process.env)) notFound();
   const mode = parseMode((await searchParams).mode);
   const now = new Date();
-  return <ConsoleBridge mode={mode} panels={demoPanels(now)} now={now} />;
+  const sales = demoSales(now);
+  const panels = demoPanels(now);
+  panels.sales.next = sales.queue;
+  panels.sales.radar = sales.radar;
+  return <ConsoleBridge mode={mode} panels={panels} sales={sales} now={now} />;
 }

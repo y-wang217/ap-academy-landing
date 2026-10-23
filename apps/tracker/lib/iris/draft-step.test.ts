@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+import type { AvailabilityWindow } from "../domain/schedule/availability";
+import type { ClassException, ClassSeries } from "../domain/schedule/recurrence";
 import { TUNING } from "../domain/tuning";
 import type { FamilyEntry } from "../notion/parents";
 import type { DraftAnswer, DraftPort } from "./draft";
-import { runDraft, type DraftStepDeps } from "./draft-step";
-import { POLICY_VERSION, SIGNATURE } from "./policy";
+import { timesOutsideSlots } from "./draft-rules";
+import { runDraft, type DraftStepDeps, type StudentSchedule } from "./draft-step";
+import type { Slot, TeacherCalendar } from "./makeup";
+import { OPTIONS_TOKEN, POLICY, POLICY_VERSION, SIGNATURE } from "./policy";
 import type { MessageInsert, MessagePatch } from "./store";
 import { fakeIrisStore } from "./store.fake";
 
@@ -24,8 +28,20 @@ const good = (o: Partial<{ body: string; needsCharlie: boolean; reason: string }
 const bad = (error = "The AI is busy.", aborted = false): DraftAnswer => ({ ok: false, outcome: "error", error, model: null, aborted });
 
 type Msg = MessageInsert & Partial<MessagePatch>;
+// REQ-47 AC5: every draft stored anywhere in this file is checked against the slots its message was offered.
+const ALL_WORLDS: { db: ReturnType<typeof fakeIrisStore>; offered: Map<string, Slot[]> }[] = [];
+afterAll(() => {
+  for (const { db, offered } of ALL_WORLDS) {
+    for (const d of db.drafts.values()) {
+      if (d.replyType === "reschedule_offer") expect(offered.has(d.messageId), `offer for ${d.messageId} registered`).toBe(true);
+      expect(timesOutsideSlots(d.bodyText, offered.get(d.messageId) ?? []), d.bodyText).toEqual([]);
+    }
+  }
+});
 function world() {
   const db = fakeIrisStore();
+  const offered = new Map<string, Slot[]>();
+  ALL_WORLDS.push({ db, offered });
   const prompts: { system: string; user: string }[] = [];
   let reply: () => DraftAnswer = () => good();
   const port: DraftPort = async (prompt) => (prompts.push(prompt), reply());
@@ -43,7 +59,7 @@ function world() {
     return r.id!;
   };
   return {
-    db, prompts, deps, add,
+    db, prompts, deps, add, offered,
     setReply: (f: typeof reply) => (reply = f),
     setClock: (ms: number) => (clock = ms),
     msg: (id: string) => db.messages.get(id)!,
@@ -190,5 +206,301 @@ describe("runDraft: failures, caps and budget (AC7)", () => {
     await w.add();
     w.db.fail.add("insertDraft");
     expect(await runDraft(w.deps())).toMatchObject({ result: "failed", error: "Iris run failed" });
+  });
+});
+
+// REQ-46 AC6 to AC10: cancellations split by the notice the scheduler shows.
+describe("runDraft: schedule-aware cancellations (REQ-46)", () => {
+  const weekly = (o: Partial<ClassSeries> = {}): ClassSeries => ({
+    id: "s1", staffId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009", studentId: SAM, subject: "MPM2D", kind: "weekly",
+    startDate: "2026-10-06", startTime: "17:00", durationMinutes: 60, effectiveUntil: null, ...o,
+  });
+  // T0 is Wed 2026-10-21 08:00 Toronto; each message arrives about 07:00.
+  const scheduleOf = (series: ClassSeries[], exceptions: ClassException[] = []) => {
+    const calls: string[] = [];
+    const port = async (id: string): Promise<StudentSchedule> => (calls.push(id), { series, exceptions });
+    return { calls, port };
+  };
+
+  it("with notice: the draft is cancel_with_notice, the prompt names the two dates and no time", async () => {
+    const w = world();
+    const id = await w.add();
+    const s = scheduleOf([weekly()]);
+    const out = await runDraft(w.deps({ schedule: s.port }));
+    expect(out).toMatchObject({ drafted: 1, escalated: 0, error: null });
+    expect(s.calls).toEqual([SAM]);
+    expect(w.draftsOf(id)[0].replyType).toBe("cancel_with_notice");
+    expect(w.msg(id).state).toBe("drafted");
+    expect(w.prompts[0].system).toContain(POLICY.cancel_with_notice.text);
+    expect(w.prompts[0].system).not.toContain(POLICY.cancellation.text);
+    expect(w.prompts[0].user).toContain("Missed class: Tuesday 27 October");
+    expect(w.prompts[0].user).toContain("Next scheduled class: Tuesday 3 November");
+    expect(w.prompts[0].user).not.toMatch(/\d{1,2}:\d{2}/);
+    const [e] = w.eventsOf(id);
+    expect(e.detail).toMatchObject({ state: "drafted", reply_type: "cancel_with_notice", class_date: "2026-10-27" });
+    expect(e.detail.notice_minutes).toBeGreaterThan(24 * 60);
+  });
+
+  it("late: the draft is late_cancel", async () => {
+    const w = world();
+    const id = await w.add();
+    await runDraft(w.deps({ schedule: scheduleOf([weekly({ kind: "one_off", startDate: "2026-10-21", startTime: "15:00" })]).port }));
+    expect(w.draftsOf(id)[0].replyType).toBe("late_cancel");
+    expect(w.prompts[0].system).toContain(POLICY.late_cancel.text);
+    expect(w.prompts[0].user).toContain("Missed class: Wednesday 21 October");
+    expect(w.prompts[0].user).toContain("Next scheduled class: none on the schedule");
+  });
+
+  it("no-show: escalated schedule_no_show with intent no_show, one escalated event, then a no_show draft", async () => {
+    const w = world();
+    const id = await w.add();
+    const out = await runDraft(w.deps({ schedule: scheduleOf([weekly({ kind: "one_off", startDate: "2026-10-21", startTime: "07:00" })]).port }));
+    expect(out).toMatchObject({ drafted: 1, escalated: 1 });
+    expect(w.msg(id)).toMatchObject({ state: "escalated", intent: "no_show", escalationReason: "schedule_no_show", handledAt: null });
+    const events = w.eventsOf(id);
+    expect(events.map((e) => e.kind)).toEqual(["escalated", "drafted"]);
+    expect(events[0].detail).toEqual({ state: "escalated", reason: "schedule_no_show", classified_intent: "cancellation", class_date: "2026-10-21", notion_student_id: SAM });
+    expect(events[1].detail).toMatchObject({ state: "escalated", reason: "schedule_no_show", reply_type: "no_show" });
+    expect(w.draftsOf(id)[0].replyType).toBe("no_show");
+    expect(w.prompts[0].system).toContain(POLICY.no_show.text);
+    expect(w.prompts[0].user).not.toContain("Missed class:");
+  });
+
+  it("no-show whose draft call fails is drafted by the next run, still escalated", async () => {
+    const w = world();
+    const id = await w.add();
+    const s = scheduleOf([weekly({ kind: "one_off", startDate: "2026-10-21", startTime: "07:00" })]);
+    w.setReply(() => bad());
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(w.msg(id)).toMatchObject({ state: "escalated", escalationReason: "schedule_no_show", retryCount: 1 });
+    w.setReply(() => good());
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(w.draftsOf(id).map((d) => d.replyType)).toEqual(["no_show"]);
+    expect(w.msg(id)).toMatchObject({ state: "escalated", escalationReason: "schedule_no_show" });
+    expect(w.eventsOf(id).filter((e) => e.kind === "drafted")[0].detail).toMatchObject({ reason: "schedule_no_show" });
+  });
+
+  it("no series: cancellation with the schedule_unknown flag, not escalated", async () => {
+    const w = world();
+    const id = await w.add({ flags: [] });
+    await runDraft(w.deps({ schedule: scheduleOf([]).port }));
+    expect(w.draftsOf(id)[0].replyType).toBe("cancellation");
+    expect(w.msg(id)).toMatchObject({ state: "drafted", flags: ["schedule_unknown"] });
+    expect(w.prompts[0].system).toContain(POLICY.cancellation.text);
+  });
+
+  it("no matched student: cancellation with the flag, and the schedule is never read", async () => {
+    const w = world();
+    const id = await w.add({ notionStudentId: null });
+    const s = scheduleOf([weekly()]);
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(s.calls).toHaveLength(0);
+    expect(w.draftsOf(id)[0].replyType).toBe("cancellation");
+    expect(w.msg(id)).toMatchObject({ state: "drafted", flags: ["schedule_unknown"] });
+  });
+
+  it("a failed schedule read leaves the message classified, spends no retry, and the next message is still drafted", async () => {
+    const w = world();
+    const broken = await w.add();
+    const fine = await w.add({ notionStudentId: LEO, students: [LEO] });
+    const port = async (id: string): Promise<StudentSchedule> => {
+      if (id === SAM) throw new Error("boom");
+      return { series: [weekly({ studentId: LEO })], exceptions: [] };
+    };
+    const out = await runDraft(w.deps({ schedule: port }));
+    expect(out).toMatchObject({ result: "ok", drafted: 1, error: "Could not read the schedule" });
+    expect(w.msg(broken)).toMatchObject({ state: "classified", retryCount: 0 });
+    expect(w.draftsOf(broken)).toEqual([]);
+    expect(w.msg(fine).state).toBe("drafted");
+  });
+
+  it("reads each student's schedule once per run", async () => {
+    const w = world();
+    await w.add();
+    await w.add();
+    const s = scheduleOf([weekly()]);
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(s.calls).toEqual([SAM]);
+  });
+
+  it("other intents never read the schedule", async () => {
+    const w = world();
+    const id = await w.add({ intent: "general_question" });
+    const s = scheduleOf([weekly()]);
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(s.calls).toHaveLength(0);
+    expect(w.draftsOf(id)[0].replyType).toBe("general_question");
+  });
+
+  it("with no schedule port the step behaves as before", async () => {
+    const w = world();
+    const id = await w.add();
+    await runDraft(w.deps({ schedule: null }));
+    expect(w.draftsOf(id)[0].replyType).toBe("cancellation");
+    expect(w.msg(id).flags ?? []).toEqual([]);
+  });
+});
+
+// REQ-47 AC3 to AC5, AC8, AC10: reschedule requests offer real make-up times, written in by code.
+describe("runDraft: make-up offers (REQ-47)", () => {
+  const TEACHER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009";
+  // T0 is Wed 2026-10-21 08:00 Toronto. Sam's class is every Tuesday 17:00, so the class to move is Tue 27 October.
+  const weekly = (o: Partial<ClassSeries> = {}): ClassSeries => ({
+    id: "s1", staffId: TEACHER, studentId: SAM, subject: "MPM2D", kind: "weekly", startDate: "2026-10-06", startTime: "17:00", durationMinutes: 60, effectiveUntil: null, ...o,
+  });
+  const WINDOWS: AvailabilityWindow[] = [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startTime: "15:00", endTime: "19:00", effectiveFrom: "2026-01-01", effectiveUntil: null }));
+  const slot = (date: string, startTime: string, endTime: string, startsAt: string): Slot => ({ date, startTime, endTime, startsAt, endsAt: new Date(Date.parse(startsAt) + 3600_000).toISOString() });
+  const SAM_SLOTS = [slot("2026-10-27", "18:00", "19:00", "2026-10-27T22:00:00.000Z"), slot("2026-10-28", "15:00", "16:00", "2026-10-28T19:00:00.000Z"), slot("2026-10-29", "15:00", "16:00", "2026-10-29T19:00:00.000Z")];
+  const OFFER_BODY = `Hi Pat,\n\nWe can move Sam's class. These times work:\n${OPTIONS_TOKEN}\nLet me know which suits you and I will confirm it.`;
+  const ports = (o: { series?: Record<string, ClassSeries[]>; calendars?: Record<string, Partial<TeacherCalendar> | Error> } = {}) => {
+    const scheduleCalls: string[] = [];
+    const teacherCalls: string[] = [];
+    const series = o.series ?? { [SAM]: [weekly()] };
+    const schedule = async (id: string): Promise<StudentSchedule> => (scheduleCalls.push(id), { series: series[id] ?? [], exceptions: [] });
+    const availability = async (staffId: string): Promise<TeacherCalendar> => {
+      teacherCalls.push(staffId);
+      const c = o.calendars?.[staffId] ?? { windows: WINDOWS };
+      if (c instanceof Error) throw c;
+      return { series: Object.values(series).flat().filter((x) => x.staffId === staffId), exceptions: [], windows: [], availabilityExceptions: [], ...c };
+    };
+    return { schedule, availability, scheduleCalls, teacherCalls };
+  };
+  const reschedule = { intent: "reschedule_request", bodyText: "Could we move Sam's class next week?" };
+
+  it("with free time: a reschedule_offer draft with the options written in, and offered_slots on the event", async () => {
+    const w = world();
+    const id = await w.add(reschedule);
+    w.offered.set(id, SAM_SLOTS);
+    w.setReply(() => good({ body: OFFER_BODY }));
+    const p = ports();
+    const out = await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect(out).toMatchObject({ drafted: 1, escalated: 0, error: null });
+    const [d] = w.draftsOf(id);
+    expect(d.replyType).toBe("reschedule_offer");
+    expect(d.bodyText).toBe(
+      "Hi Pat,\n\nWe can move Sam's class. These times work:\n- Tuesday 27 October, 6:00 pm to 7:00 pm\n- Wednesday 28 October, 3:00 pm to 4:00 pm\n- Thursday 29 October, 3:00 pm to 4:00 pm\nLet me know which suits you and I will confirm it.",
+    );
+    expect(w.msg(id)).toMatchObject({ state: "drafted" });
+    expect(w.msg(id).flags ?? []).toEqual([]);
+    expect(w.eventsOf(id)[0].detail).toEqual({ state: "drafted", reason: null, reply_type: "reschedule_offer", version: 1, class_date: "2026-10-27", offered_slots: SAM_SLOTS.map((s) => s.startsAt) });
+    expect(w.prompts[0].system).toContain(POLICY.reschedule_offer.text);
+    expect(w.prompts[0].user).toContain("Class to move: Tuesday 27 October");
+    expect(w.prompts[0].user).toContain("Next scheduled class: Tuesday 3 November");
+    expect(w.prompts[0].user).toContain("Make-up times offered: 3");
+    expect(`${w.prompts[0].system}\n${w.prompts[0].user}`).not.toMatch(/\d{1,2}:\d{2}|28 October|29 October|aaaaaaaa-/);
+    expect(p.teacherCalls).toEqual([TEACHER]);
+  });
+
+  it("needs_charlie on an offer stores the filled draft and escalates", async () => {
+    const w = world();
+    const id = await w.add(reschedule);
+    w.offered.set(id, SAM_SLOTS);
+    w.setReply(() => good({ body: OFFER_BODY, needsCharlie: true }));
+    const p = ports();
+    await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect(w.draftsOf(id)[0]).toMatchObject({ replyType: "reschedule_offer" });
+    expect(w.msg(id)).toMatchObject({ state: "escalated", escalationReason: "needs_charlie" });
+  });
+
+  it.each([
+    ["availability_not_entered", { [TEACHER]: { windows: [] } }, { [SAM]: [weekly()] }, "some"],
+    ["no_free_slot", { [TEACHER]: { windows: [{ weekday: 2, startTime: "17:00", endTime: "18:00", effectiveFrom: "2026-01-01", effectiveUntil: null }] } }, { [SAM]: [weekly()] }, "some"],
+    ["schedule_unknown", {}, {}, "some"],
+    ["schedule_unknown", {}, { [SAM]: [weekly()] }, "none"],
+  ] as [string, Record<string, Partial<TeacherCalendar>>, Record<string, ClassSeries[]>, "some" | "none"][])("fallback %s: a reschedule_request draft with no time and the flag, not escalated", async (flag, calendars, series, student) => {
+    const w = world();
+    const id = await w.add({ ...reschedule, flags: [], ...(student === "none" && { notionStudentId: null }) });
+    w.setReply(() => good({ body: "Hi Pat,\n\nNo problem. Charlie will send options." }));
+    const p = ports({ calendars, series });
+    await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect(w.draftsOf(id)[0].replyType).toBe("reschedule_request");
+    expect(w.msg(id)).toMatchObject({ state: "drafted", flags: [flag] });
+    expect(w.eventsOf(id)[0].detail).not.toHaveProperty("offered_slots");
+    expect(w.prompts[0].system).toContain(POLICY.reschedule_request.text);
+    if (student === "none") expect(p.scheduleCalls).toEqual([]);
+    if (flag === "schedule_unknown") expect(p.teacherCalls).toEqual([]);
+  });
+
+  it("a model body with a clock time is held back draft_rule, with no draft", async () => {
+    const w = world();
+    const id = await w.add(reschedule);
+    w.setReply(() => good({ body: `How about 4 pm?\n${OPTIONS_TOKEN}` }));
+    const p = ports();
+    await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect(w.draftsOf(id)).toEqual([]);
+    expect(w.msg(id)).toMatchObject({ state: "escalated", escalationReason: "draft_rule" });
+    expect(w.eventsOf(id)[0].detail).toEqual({ state: "escalated", reason: "draft_rule", rules: ["time"] });
+  });
+
+  it("an offer body without exactly one placeholder line is held back with rule options", async () => {
+    for (const body of ["Hi Pat,\n\nSome times work.", `${OPTIONS_TOKEN}\n${OPTIONS_TOKEN}`]) {
+      const w = world();
+      const id = await w.add(reschedule);
+      w.setReply(() => good({ body }));
+      const p = ports();
+      await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+      expect(w.draftsOf(id), body).toEqual([]);
+      expect(w.eventsOf(id)[0].detail, body).toEqual({ state: "escalated", reason: "draft_rule", rules: ["options"] });
+    }
+  });
+
+  it("a failed teacher read leaves the message as it was: no draft, no ai_calls row, no retry spent", async () => {
+    const w = world();
+    const broken = await w.add(reschedule);
+    const p = ports({ calendars: { [TEACHER]: new Error("boom") } });
+    const out = await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect(out).toMatchObject({ result: "ok", drafted: 0, error: "Could not read the schedule" });
+    expect(w.msg(broken)).toMatchObject({ state: "classified", retryCount: 0, lastError: null });
+    expect(w.draftsOf(broken)).toEqual([]);
+    expect(w.db.aiCalls).toEqual([]);
+    expect(w.prompts).toHaveLength(0);
+  });
+
+  it("a teacher read that rejects leaves every message for that teacher untouched, and reads once", async () => {
+    const w = world();
+    const a = await w.add(reschedule);
+    const b = await w.add({ ...reschedule, notionStudentId: LEO, students: [LEO] });
+    const p = ports({ series: { [SAM]: [weekly()], [LEO]: [weekly({ id: "s2", studentId: LEO })] }, calendars: { [TEACHER]: new Error("boom") } });
+    await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect([w.msg(a).state, w.msg(b).state]).toEqual(["classified", "classified"]);
+    expect(p.teacherCalls).toEqual([TEACHER]);
+  });
+
+  it("two messages for one teacher with different target dates: one teacher read, each slot inside its own range", async () => {
+    const w = world();
+    const near = await w.add(reschedule);
+    const far = await w.add({ ...reschedule, notionStudentId: LEO, students: [LEO] });
+    // Leo's class starts three weeks out, on Tuesday 10 November, then weekly.
+    const p = ports({ series: { [SAM]: [weekly()], [LEO]: [weekly({ id: "s2", studentId: LEO, startDate: "2026-11-10", startTime: "15:00" })] } });
+    const leoSlots = [slot("2026-11-10", "16:00", "17:00", "2026-11-10T21:00:00.000Z"), slot("2026-11-11", "15:00", "16:00", "2026-11-11T20:00:00.000Z"), slot("2026-11-12", "15:00", "16:00", "2026-11-12T20:00:00.000Z")];
+    w.offered.set(near, SAM_SLOTS);
+    w.offered.set(far, leoSlots);
+    w.setReply(() => good({ body: OFFER_BODY }));
+    await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect(p.teacherCalls).toEqual([TEACHER]);
+    const offered = (id: string) => w.eventsOf(id)[0].detail.offered_slots;
+    expect(offered(near)).toEqual(SAM_SLOTS.map((s) => s.startsAt));
+    expect(offered(far)).toEqual(leoSlots.map((s) => s.startsAt));
+    expect(w.eventsOf(far)[0].detail.class_date).toBe("2026-11-10");
+  });
+
+  it("a parent's later pick on the thread is a new message classified like any other, and nothing is booked", async () => {
+    // AC10 at the draft step: the pick is drafted from its own intent; no port writes to the scheduler.
+    const w = world();
+    const pick = await w.add({ intent: "general_question", bodyText: "Thursday at 4 works." });
+    const p = ports();
+    await runDraft(w.deps({ schedule: p.schedule, availability: p.availability }));
+    expect(w.draftsOf(pick)[0].replyType).toBe("general_question");
+    expect([p.scheduleCalls, p.teacherCalls]).toEqual([[], []]);
+  });
+
+  it("with no availability port a reschedule request drafts exactly as before", async () => {
+    const w = world();
+    const id = await w.add(reschedule);
+    const p = ports();
+    await runDraft(w.deps({ schedule: p.schedule, availability: null }));
+    expect(w.draftsOf(id)[0].replyType).toBe("reschedule_request");
+    expect(w.msg(id).flags ?? []).toEqual([]);
+    expect(p.scheduleCalls).toEqual([]);
   });
 });

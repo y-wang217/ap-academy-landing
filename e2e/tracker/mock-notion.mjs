@@ -4,6 +4,9 @@
 // written (the scheduler adopts a student and regenerates that one property). REQ-8 adds in-memory Work and
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
 // REQ-44: POST /v1/comments (Iris mention comments), kept in /__work as `comments`.
+// REQ-60: the console's Work read. GET the Work and Task Type schemas, and a Work query carrying filter_properties
+// gets CONSOLE_WORK filtered by its State and Area clauses (the daily task's title query is unchanged). POST
+// /__work/fail-console and /__work/heal-console toggle a 500 on that query. Seeded rows are never written.
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
 // REQ-38 adds the Staff schema (the people sync asks for property IDs), a Stage on every student, and
@@ -19,6 +22,11 @@
 // cccc…0002 (Ryan, Sam, 21 days ago, empty ref). The seeded paid lesson cccc…0001 stays outside it and is never served to a query.
 // REQ-42: a Students query whose filter includes Stage Paused is Iris's family directory: it gets FAMILIES (Parent Email
 // and Parent Name, with Haider and Ada as siblings sharing one address). POST /__students/fail toggles a 500 on it.
+// REQ-57: the console's lead read (a Students query asking for the Next Action Due id) gets CONSOLE_LEADS plus the
+// REQ-59 funnel leads (FUNNEL_LEADS, Stage Trial, which the queue ignores), the Touches data source answers two
+// touches, and a Lessons Type = Trial query gets CONSOLE_TRIALS plus the REQ-59 trial lesson. Ezra's trial sits 100 days
+// back, outside the funnel's window. Other Students and Lessons queries are unchanged. POST /__console/leads-fail toggles a 500 on the console lead read; POST
+// /__console/lose makes Gail Overdue Stage Lost.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -61,8 +69,74 @@ const FAMILIES = [
   family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "Kim Kuby-Student", "Active", null, null),
   family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004", "Haider Afzal", "Active", "afzal.family@example.com", "Afzal Parent"),
   family("dddddddd-dddd-4ddd-8ddd-dddddddd0001", "Ada Afzal", "Paused", "afzal.family@example.com", "Afzal Parent"),
+  // REQ-46: a family whose only class is two days out, for schedule-aware cancellations. Not in STUDENTS.
+  family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0005", "Nina Notice", "Active", "notice.parent@example.com", "Noel Notice"),
+  // REQ-47: a family whose teacher has entered no availability, for the make-up fallback. Not in STUDENTS.
+  family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0006", "Omar Offer", "Active", "offer.parent@example.com", "Olive Offer"),
 ];
 let familiesFail = false;
+
+// REQ-57: console leads. Synthetic; times relative to now. Lou Lost and Dee Optout never enter the queue.
+const atHours = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
+const sel = (name) => ({ select: name ? { name } : null });
+const dt = (start) => ({ date: start ? { start } : null });
+const txt = (t) => ({ rich_text: t ? [{ plain_text: t }] : [] });
+const consoleLead = (n, name, stage, extra = {}) => ({
+  object: "page",
+  id: `eeeeeeee-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+  created_time: atHours(-100 + n),
+  properties: {
+    "Student Name": { title: [{ plain_text: name }] }, Stage: sel(stage), Owner: { relation: [] }, "Next Action": sel("Call"), "Next Action Due": dt(null),
+    Attempts: { number: null }, "Last Contact": dt(null), Source: sel(null), "Lost Reason": sel(null), "Contacted At": dt(null), "Trial Booked At": dt(null),
+    "Trial Attended At": dt(null), "Closed At": dt(null), "Trial Time": dt(null), "Trial Teacher": { relation: [] }, Level: sel(null), "Major Gaps": txt(null),
+    "Recommended Plan": sel(null), "Trial Summary": txt(null), "Parent Name": txt(null), "Lead ID": txt(null), Grade: sel(null), Subjects: { multi_select: [] },
+    "Parent Phone": { phone_number: "555-0177" },
+    ...extra,
+  },
+});
+const CONSOLE_LEADS = [
+  consoleLead(1, "Nova New", "New", {
+    Owner: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] }, "Next Action Due": dt(atHours(1)), Grade: sel("11"),
+    Subjects: { multi_select: [{ name: "MHF4U" }] }, Source: sel("Meta form"), "Lead ID": txt("E2E-LEAD-77"), Attempts: { number: 0 },
+  }),
+  consoleLead(2, "Gail Overdue", "Working", { "Next Action Due": dt(atHours(-1)), "Last Contact": dt(atHours(-48)) }),
+  consoleLead(3, "Ezra Awaiting", "Awaiting Close", {
+    "Next Action": sel("Close call"), "Next Action Due": dt(atHours(48)), "Trial Time": dt(atHours(-100 * 24)), Level: sel("Solid (80 to 89)"),
+    "Major Gaps": txt("Factoring"), "Trial Summary": txt("Keen, needs pacing"),
+  }),
+  consoleLead(4, "Lou Lost", "Lost", { "Next Action Due": dt(atHours(-5)) }),
+  consoleLead(5, "Dee Optout", "Working", { "Lost Reason": sel("Do not contact"), "Next Action Due": dt(atHours(-5)) }),
+  consoleLead(6, "Will Later", "Working", { "Next Action": sel("Text"), "Next Action Due": dt(atHours(72)), "Last Contact": dt(atHours(-120)) }),
+  consoleLead(7, "Exa Nodue", "Working", { "Last Contact": dt(atHours(-24)) }),
+];
+const CONSOLE_LEAD_PROPS = [
+  "Owner", "Next Action", "Next Action Due", "Attempts", "Last Contact", "Source", "Lost Reason", "Contacted At", "Trial Booked At", "Trial Attended At",
+  "Closed At", "Trial Time", "Trial Teacher", "Level", "Major Gaps", "Recommended Plan", "Trial Summary", "Lead ID", "Grade", "Subjects",
+];
+const CONSOLE_LEAD_SCHEMA = Object.fromEntries(CONSOLE_LEAD_PROPS.map((n, i) => [n, { id: n === "Next Action Due" ? "cnad" : `cl${i}` }]));
+let consoleLeadsFail = false;
+const TOUCHES_DS = "772939bd-bd88-4272-9f1f-20ce75ef2204";
+const TOUCH_SCHEMA = { properties: { Type: { id: "tty" }, Outcome: { id: "tou" }, Student: { id: "tst" }, Staff: { id: "tsf" }, Note: { id: "tno" }, When: { id: "twh" } } };
+const touch = (n, lead, type, outcome, note, hours) => ({
+  object: "page", id: `eeeeeeee-1111-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+  properties: {
+    Type: sel(type), Outcome: sel(outcome), Student: { relation: [{ id: lead }] }, Staff: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] },
+    Note: txt(note), When: { created_time: atHours(hours) },
+  },
+});
+const CONSOLE_TOUCHES = [
+  touch(1, CONSOLE_LEADS[1].id, "Call", "No answer", "Left a voicemail", -48),
+  touch(2, CONSOLE_LEADS[2].id, "Call", "Interested", "Wants Tuesday slots", -24),
+];
+const CONSOLE_TRIALS = [{
+  object: "page", id: "eeeeeeee-2222-4000-8000-000000000001",
+  properties: {
+    Type: sel("Trial"), Date: dt(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() - 100 * 86400000))),
+    Teacher: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] }, "Related to Students & Parents (Lessons 1)": { relation: [{ id: CONSOLE_LEADS[2].id }] },
+    "Duration (hrs)": { number: 1 }, "Topic Covered": txt("Quadratics"), "Trial: Diagnosis": txt("Needs factoring practice"),
+    "Trial: Preferred Lesson Day": { multi_select: [{ name: "Tue" }] },
+  },
+}];
 
 // Weekly Schedule text per student, empty to start (so a first booking can adopt the student).
 const schedule = new Map(STUDENTS.map((s) => [s.id, ""]));
@@ -118,6 +192,45 @@ const dump = () => ({
   })),
   comments,
 });
+// REQ-60: seeded Marketing rows for Creation mode, apart from the in-memory pages the daily task writes.
+const TASK_TYPES_DS = "80e411f2-eb5b-4055-b560-55061669d9f7";
+const WORK_SCHEMA = { properties: Object.fromEntries(
+  ["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type", "Parent Project", "Expected result", "Alignment", "Children"].map((n, i) => [n, { id: `w${i}` }]),
+) };
+const TASK_TYPES_SCHEMA = { properties: { "Task type": { id: "title" } } };
+const torontoDate = (offsetDays) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + offsetDays * 86_400_000));
+const CONSOLE_WORK_IDS = {
+  project: "eeeeeeee-6060-4000-8000-000000000001", childNext: "eeeeeeee-6060-4000-8000-000000000002", childDefined: "eeeeeeee-6060-4000-8000-000000000003",
+  standalone: "eeeeeeee-6060-4000-8000-000000000004", waiting: "eeeeeeee-6060-4000-8000-000000000005", done: "eeeeeeee-6060-4000-8000-000000000006",
+  delivery: "eeeeeeee-6060-4000-8000-000000000007", weekly: "3ead6ae7-3dd7-811e-b525-e3626520b805", taskType: "eeeeeeee-6060-4000-8000-0000000000aa",
+};
+const W = CONSOLE_WORK_IDS;
+const workRow = (id, { name, area = "Marketing", state = "Next", type = "Task", due = null, parent = null, types = [], expected = "" }) => ({
+  object: "page", id, properties: {
+    Name: { title: [{ plain_text: name }] }, Area: { select: { name: area } }, State: { select: { name: state } }, Type: { select: { name: type } },
+    "Due / Review": { date: due ? { start: due } : null }, Owner: { rich_text: [{ plain_text: "Charlie" }] },
+    "Task Type": { relation: types.map((t) => ({ id: t })) }, "Parent Project": { relation: parent ? [{ id: parent }] : [] },
+    "Expected result": { rich_text: expected ? [{ plain_text: expected }] : [] },
+  },
+});
+const CONSOLE_WORK = [
+  workRow(W.project, { name: "E2E video series", state: "Doing", type: "Project" }),
+  workRow(W.childNext, { name: "E2E video 01 script", parent: W.project, types: [W.taskType], expected: "One reviewed script" }),
+  workRow(W.childDefined, { name: "E2E video 02 recording", state: "Defined", parent: W.project }),
+  workRow(W.standalone, { name: "E2E course page update", state: "Inbox", due: torontoDate(1) }),
+  workRow(W.waiting, { name: "E2E waiting on footage", state: "Waiting / Blocked" }),
+  workRow(W.done, { name: "E2E finished marketing task", state: "Done" }),
+  workRow(W.delivery, { name: "E2E delivery task", area: "Delivery" }),
+  workRow(W.weekly, { name: "E2E weekly marketing review", type: "Recurring", due: torontoDate(-1) }),
+];
+let consoleWorkFails = false;
+const clauseOk = (row, c) => {
+  const v = row.properties[c.property]?.select?.name ?? null;
+  if (c.select?.does_not_equal !== undefined) return v !== c.select.does_not_equal;
+  if (c.select?.equals !== undefined) return v === c.select.equals;
+  return true;
+};
+
 // The body is buffered once, up front, so the journal and the handlers can both read it.
 const readBody = async (req) => (req.rawBody ? JSON.parse(req.rawBody) : {});
 const bufferBody = (req) =>
@@ -145,6 +258,8 @@ const LESSON = {
 const LESSONS_SCHEMA = { properties: {
   Lesson: { id: "title" }, Date: { id: "ldt" }, Teacher: { id: "lte" }, "Related to Students & Parents (Lessons 1)": { id: "lst" },
   "Duration (hrs)": { id: "ldu" }, "Paid to Teacher": { id: "lpd" }, "Pay Period": { id: "lpp" }, Type: { id: "lty" }, "Class occurrence": { id: "lco" },
+  // REQ-57 and REQ-59: the console's trial-evidence reader (TRIAL_PROPS).
+  "Topic Covered": { id: "ltc" }, "Trial: Diagnosis": { id: "ltd" }, "Trial: Preferred Lesson Day": { id: "ltp" },
 } };
 const lessons = new Map(); // id -> { id, props }
 const lessonDay = (offset) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + offset * 86400000));
@@ -157,6 +272,31 @@ lessons.set("cccccccc-cccc-4ccc-8ccc-cccccccc0002", { id: "cccccccc-cccc-4ccc-8c
   "Paid to Teacher": { checkbox: false },
   "Class occurrence": { rich_text: [] },
 } });
+// REQ-59: console fixtures, dated from today in Toronto so the funnel counts hold on any run day.
+// L1 booked day -5, attended day -3 (and a trial lesson that day); L2 booked day -4, Trial Time day -2, nothing
+// else (outcome unknown); L3 is Ada (Paid invoice AP-E2E-0003), booked -20, attended -18, closed -10.
+const CONSOLE_L1 = "99999999-9999-4999-8999-999999990001";
+const CONSOLE_L2 = "99999999-9999-4999-8999-999999990002";
+const CONSOLE_L3 = "dddddddd-dddd-4ddd-8ddd-dddddddd0001";
+const consoleDate = (offset) => ({ date: { start: lessonDay(offset) } });
+const funnelLead = (id, name, props) => ({
+  id, created_time: "2026-01-05T10:00:00.000Z",
+  properties: { "Student Name": { title: [{ plain_text: name }] }, Stage: { select: { name: "Trial" } }, ...props },
+});
+const FUNNEL_LEADS = () => [
+  funnelLead(CONSOLE_L1, "Console Lead One", { "Trial Booked At": consoleDate(-5), "Trial Time": { date: { start: `${lessonDay(-3)}T15:00:00.000Z` } }, "Trial Attended At": consoleDate(-3) }),
+  funnelLead(CONSOLE_L2, "Console Lead Two", { "Trial Booked At": consoleDate(-4), "Trial Time": { date: { start: `${lessonDay(-2)}T15:00:00.000Z` } } }),
+  funnelLead(CONSOLE_L3, "Ada Afzal", {
+    "Trial Booked At": consoleDate(-20), "Trial Time": { date: { start: `${lessonDay(-18)}T15:00:00.000Z` } }, "Trial Attended At": consoleDate(-18), "Closed At": consoleDate(-10),
+  }),
+];
+const CONSOLE_TRIAL_LESSONS = () => [{
+  id: "cccccccc-cccc-4ccc-8ccc-cccccccc0101",
+  properties: {
+    Date: consoleDate(-3), Teacher: { relation: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001" }] },
+    "Related to Students & Parents (Lessons 1)": { relation: [{ id: CONSOLE_L1 }] }, "Duration (hrs)": { number: 1 }, Type: { select: { name: "Trial" } },
+  },
+}];
 const refOf = (l) => (l.props["Class occurrence"]?.rich_text ?? []).map((r) => r.plain_text ?? r.text?.content ?? "").join("");
 const lessonJson = (l) => ({ id: l.id, properties: l.props });
 function lessonMatches(l, f) {
@@ -174,6 +314,10 @@ async function lessonsApi(req, res) {
   if (req.method === "GET" && path === `/v1/data_sources/${LESSONS_DS}`) return res.end(JSON.stringify(LESSONS_SCHEMA)), true;
   if (req.method === "POST" && path === `/v1/data_sources/${LESSONS_DS}/query`) {
     const body = await readBody(req);
+    // REQ-57 and REQ-59: the console's Type = Trial read gets both trial lessons, kept out of the lesson-link rows above.
+    if (body.filter?.property === "Type" && body.filter?.select?.equals === "Trial") {
+      return res.end(JSON.stringify({ results: [...CONSOLE_TRIALS, ...CONSOLE_TRIAL_LESSONS()], has_more: false, next_cursor: null })), true;
+    }
     const hits = [...lessons.values()].filter((l) => lessonMatches(l, body.filter ?? {}));
     return res.end(JSON.stringify({ results: hits.slice(0, body.page_size ?? 100).map(lessonJson), has_more: false, next_cursor: null })), true;
   }
@@ -344,6 +488,16 @@ async function workApi(req, res) {
     Object.assign(workPages.get(pageId).props, body.properties ?? {});
     return res.end("{}"), true;
   }
+  if (req.method === "GET" && url === `/v1/data_sources/${WORK_DS}`) return res.end(JSON.stringify(WORK_SCHEMA)), true;
+  if (req.method === "GET" && url === `/v1/data_sources/${TASK_TYPES_DS}`) return res.end(JSON.stringify(TASK_TYPES_SCHEMA)), true;
+  if (req.method === "POST" && url.startsWith(`/v1/data_sources/${TASK_TYPES_DS}/query?`)) {
+    return res.end(JSON.stringify({ results: [{ object: "page", id: W.taskType, properties: { "Task type": { title: [{ plain_text: "Script" }] } } }], has_more: false, next_cursor: null })), true;
+  }
+  if (req.method === "POST" && url.startsWith(`/v1/data_sources/${WORK_DS}/query?`)) {
+    if (consoleWorkFails) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })), true; }
+    const clauses = (await readBody(req)).filter?.and ?? [];
+    return res.end(JSON.stringify({ results: CONSOLE_WORK.filter((r) => clauses.every((c) => clauseOk(r, c))), has_more: false, next_cursor: null })), true;
+  }
   if (req.method === "POST" && url === `/v1/data_sources/${WORK_DS}/query`) {
     const body = await readBody(req);
     const title = body.filter?.title?.equals;
@@ -379,6 +533,8 @@ async function workApi(req, res) {
 http.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   if (req.method === "GET" && req.url === "/__journal") return res.end(JSON.stringify(journal));
+  if (req.method === "POST" && req.url === "/__work/fail-console") { consoleWorkFails = true; return res.end(JSON.stringify({ consoleWorkFails })); }
+  if (req.method === "POST" && req.url === "/__work/heal-console") { consoleWorkFails = false; return res.end(JSON.stringify({ consoleWorkFails })); }
   if (req.method === "POST" && req.url === "/__billing/fail") { billingFails = !billingFails; return res.end(JSON.stringify({ billingFails })); }
   if (req.method === "POST" && req.url === "/__schedule/fail") { scheduleFails = !scheduleFails; return res.end(JSON.stringify({ scheduleFails })); }
   if (req.method === "POST" && req.url === "/__people/fail") { peopleFails = !peopleFails; return res.end(JSON.stringify({ peopleFails })); }
@@ -387,6 +543,11 @@ http.createServer(async (req, res) => {
     const now = RYAN_PAGE.properties.Status.select.name === "Active" ? "Inactive" : "Active";
     RYAN_PAGE.properties.Status = { select: { name: now } };
     return res.end(JSON.stringify({ status: now }));
+  }
+  if (req.method === "POST" && req.url === "/__console/leads-fail") { consoleLeadsFail = !consoleLeadsFail; return res.end(JSON.stringify({ consoleLeadsFail })); }
+  if (req.method === "POST" && req.url === "/__console/lose") {
+    CONSOLE_LEADS[1].properties.Stage = sel("Lost");
+    return res.end("{}");
   }
   if (req.method === "POST" && req.url === "/__students/fail") { familiesFail = !familiesFail; return res.end(JSON.stringify({ familiesFail })); }
   if (req.method === "POST" && req.url === "/__schedule/commit-then-fail") { commitThenFail = true; return res.end(JSON.stringify({ commitThenFail })); }
@@ -444,9 +605,18 @@ http.createServer(async (req, res) => {
     res.end(JSON.stringify({ properties: {
       "Student Name": { id: "title" }, Stage: { id: "stage" }, "Weekly Schedule": { id: "wk" }, "Schedule Source": { id: "src" },
       "Hourly Rate (CAD)": { id: "hr" }, "Lesson Cadence": { id: "lc" }, "Billing Family": { id: "bf" }, "Parent Phone": { id: "pp" }, Notes: { id: "nts" },
-      "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" },
+      // REQ-57 and REQ-59: the console's leads reader (LEAD_PROPS). "cnad" gates its query below.
+      "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" }, ...CONSOLE_LEAD_SCHEMA,
     } }));
     return;
+  }
+  if (req.method === "GET" && req.url === `/v1/data_sources/${TOUCHES_DS}`) return res.end(JSON.stringify(TOUCH_SCHEMA));
+  if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${TOUCHES_DS}/query`)) {
+    return res.end(JSON.stringify({ results: CONSOLE_TOUCHES, has_more: false, next_cursor: null }));
+  }
+  if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`) && (req.url ?? "").includes("filter_properties[]=cnad")) {
+    if (consoleLeadsFail) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })); }
+    return res.end(JSON.stringify({ results: [...CONSOLE_LEADS, ...FUNNEL_LEADS()], has_more: false, next_cursor: null }));
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`)) {
     const filter = JSON.stringify((await readBody(req)).filter ?? {});

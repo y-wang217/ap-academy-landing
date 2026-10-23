@@ -111,3 +111,14 @@ describe("Iris stores no model text", () => {
     expect(IRIS.map(rel)).toEqual(expect.arrayContaining(["lib/iris/classify.ts", "lib/iris/classify-prompt.ts", "lib/iris/classify-step.ts", "lib/iris/route.ts", "lib/iris/quote.ts"]));
   });
 });
+
+// REQ-47 AC7: Iris never books. The schedule reader and the slot engine never write.
+describe("Iris never books", () => {
+  it("lib/data/iris-schedule.ts and lib/iris/makeup.ts hold no insert, update, upsert, delete or rpc", () => {
+    for (const f of [join(ROOT, "lib", "data", "iris-schedule.ts"), join(ROOT, "lib", "iris", "makeup.ts")]) {
+      const src = readFileSync(f, "utf8");
+      expect(src, rel(f)).not.toMatch(/\.(insert|update|upsert|delete|rpc)\(/);
+      expect(src, rel(f)).not.toMatch(/\b(insert|update|upsert|delete|rpc)\b/i);
+    }
+  });
+});

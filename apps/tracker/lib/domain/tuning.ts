@@ -90,4 +90,6 @@ export const TUNING = {
   consoleTouchesWindowDays: 90,
   /** Rows an Operations list (lesson gaps, no-shows, upcoming classes) shows before an "N more" link (REQ-58). */
   consoleOperationsListCap: 25,
+  /** Rows a console detail list (trial funnel, cash pulse) shows before an "N more in Notion" link (REQ-59). */
+  consoleDetailListCap: 25,
 } as const;

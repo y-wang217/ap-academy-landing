@@ -9,7 +9,8 @@ import { createPeopleStore } from "@/lib/data/people";
 import { irisMailbox } from "@/lib/iris/config";
 import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { loadInbox, type InboxRow } from "@/lib/iris/handlers";
-import { IRIS_TEXT, ageText, confidenceText, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
+import { SCHEDULE_FLAGS } from "@/lib/iris/policy";
+import { IRIS_TEXT, ageText, confidenceText, flagLabel, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,10 @@ function Row({ row, now, mailbox }: { row: InboxRow; now: number; mailbox: strin
         {row.confidence !== null ? `${confidenceText(row.confidence)} · ` : ""}
         {stateLabel(row.state, row.escalationReason, { flags: row.flags, intent: row.intent })}
       </Link>
+      {/* The schedule flag never escalates, so it is shown beside the state (REQ-46). */}
+      {row.flags.filter((f) => (SCHEDULE_FLAGS as readonly string[]).includes(f)).map((f) => (
+        <span key={f} className="text-xs text-text-muted" data-flag={f}>{flagLabel(f)}</span>
+      ))}
       {row.pushFailed && <span className="text-xs font-medium text-error" data-push-failed>{IRIS_TEXT.phoneCopyFailed}</span>}
       {/* A failed send (REQ-48): Retry right here. */}
       {row.sendId && <RetrySend sendId={row.sendId} />}

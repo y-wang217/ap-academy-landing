@@ -24,7 +24,7 @@ export const PANEL_SLOTS: PanelSlot[] = [
   slot("sales", "dispatch", "list", "Daily dispatch", "No activity yet today"),
   slot("creation", "nextAsset", "queue", "Next asset", "Queue clear"),
   slot("creation", "work", "queue", "Work queue", "No tasks scheduled"),
-  slot("creation", "pipeline", "list", "Content pipeline", "No tasks scheduled"),
+  slot("creation", "pipeline", "list", "Weekly media review", "No weekly media review task found"),
   slot("creation", "signals", "list", "Signals", "No exceptions found"),
   slot("operations", "teacherLoad", "gauge", "Teacher load", "No teachers active"),
   slot("operations", "lessonGaps", "queue", "Lesson log gaps", "Nothing due"),
