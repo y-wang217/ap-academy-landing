@@ -24,6 +24,8 @@ const cut = (s: string | null) => (s === null ? null : s.slice(0, TEXT_CHARS));
 const Page = z.object({
   id: z.guid(),
   created_time: z.string().optional(),
+  // REQ-61: sent back by the outcome form as the stale check.
+  last_edited_time: z.string().optional(),
   properties: z.object({
     "Student Name": prop.title,
     Stage: prop.select,
@@ -56,6 +58,7 @@ function toLead(page: z.output<typeof Page>): LeadSource {
   return {
     id: page.id,
     createdAt: page.created_time ?? null,
+    lastEditedAt: page.last_edited_time ?? null,
     name: p["Student Name"].title.trim(),
     stage: val.select(p.Stage),
     ownerStaffId: val.firstId(p.Owner),

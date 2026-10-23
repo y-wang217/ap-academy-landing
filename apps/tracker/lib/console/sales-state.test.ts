@@ -3,7 +3,7 @@ import { fixtureLeads, LEAD_IDS, SALES_NOW, TRIAL_F } from "../../test/console/s
 import type { ConsolePanels, LeadRow, PanelResult } from "./contracts";
 import { PAGE_CAP_PREFIX } from "./facade";
 import {
-  filterCounts, initialSalesState, queueKeyTarget, retainedView, salesReducer, selectedOf, shouldRefreshOnSync, visibleItems,
+  filterCounts, initialSalesState, nextAfter, queueKeyTarget, retainedView, salesReducer, selectedOf, shouldRefreshOnSync, visibleItems,
   type SalesAction, type SalesState,
 } from "./sales-state";
 import { buildSalesView, type SalesView } from "./sales-view";
@@ -154,5 +154,30 @@ describe("initialSalesState with a lead", () => {
     expect(initialSalesState(v, second.replaceAll("-", "").toUpperCase()).selectedId).toBe(second);
     expect(initialSalesState(v, "ffffffff-0000-4000-8000-000000000999").selectedId).toBe(items[0].id);
     expect(initialSalesState(v).selectedId).toBe(items[0].id);
+  });
+});
+
+// REQ-61 AC11: after a logged outcome the selection moves on.
+describe("nextAfter", () => {
+  it("picks the first visible lead other than the logged one", () => {
+    const s = initialSalesState(view());
+    const [first, second] = ids(s);
+    expect(nextAfter(s, first)).toBe(second);
+    expect(nextAfter(s, second)).toBe(first);
+    const advanced = run(s, { type: "advance", loggedId: first });
+    expect(selectedOf(advanced)).toBe(second);
+    selectedInvariant(advanced);
+  });
+
+  it("keeps the logged lead when it is the only one, and is null for an empty queue", () => {
+    const only = initialSalesState(view(leadsResult("ready", [fixtureLeads()[0]])));
+    const [id] = ids(only);
+    expect(nextAfter(only, id)).toBe(id);
+    expect(nextAfter(initialSalesState(view(leadsResult("empty", []))), id)).toBeNull();
+  });
+
+  it("a logged lead that left the queue moves the selection to the first visible", () => {
+    const s = initialSalesState(view());
+    expect(nextAfter(s, "gone")).toBe(ids(s)[0]);
   });
 });

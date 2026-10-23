@@ -115,3 +115,18 @@ export function consoleDataSourceIds(): Omit<ConsoleNotionConfig, "token"> {
     taskTypesId: process.env.NOTION_TASK_TYPES_DATA_SOURCE_ID || DEFAULT_TASK_TYPES_DATA_SOURCE_ID,
   };
 }
+
+export type ConsoleWriteConfig = { token: string; studentsId: string; touchesId: string };
+
+/**
+ * Same token, pointed at Students & Parents and Touches for the console's call
+ * outcomes (REQ-61, tracker ADR 0076). Needs update access on Students &
+ * Parents and insert access on Touches, plus the `Last Txn` and `Txn ID` text
+ * properties, before an outcome can be logged.
+ */
+export function readConsoleWriteConfig(): ConsoleWriteConfig | null {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) return null;
+  const { studentsId, touchesId } = consoleDataSourceIds();
+  return { token, studentsId, touchesId };
+}

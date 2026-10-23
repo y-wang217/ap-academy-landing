@@ -1,0 +1,31 @@
+name: Iris poll
+
+# Every 15 minutes: reads new mail for Iris (tracker ADR 0053). Safe to repeat;
+# a paused Iris answers "paused" and touches nothing.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iris-poll
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Call the Iris run endpoint
+        env:
+          IRIS_CRON_SECRET: ${{ secrets.IRIS_CRON_SECRET }}
+          RUN_URL: ${{ vars.IRIS_RUN_URL || 'https://www.apacademy.ca/tracker/api/iris/run' }}
+        run: |
+          if [ -z "$IRIS_CRON_SECRET" ]; then
+            echo "::notice::Skipped: set the IRIS_CRON_SECRET repository secret (docs/designs/REQ-42.md)."
+            exit 0
+          fi
+          curl --fail-with-body -sS --max-time 90 -X POST -H "Authorization: Bearer $IRIS_CRON_SECRET" "$RUN_URL"

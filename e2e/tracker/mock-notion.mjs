@@ -27,6 +27,10 @@
 // touches, and a Lessons Type = Trial query gets CONSOLE_TRIALS plus the REQ-59 trial lesson. Ezra's trial sits 100 days
 // back, outside the funnel's window. Other Students and Lessons queries are unchanged. POST /__console/leads-fail toggles a 500 on the console lead read; POST
 // /__console/lose makes Gail Overdue Stage Lost. REQ-62: POST /__console/add-lead appends a Stage = New lead created now.
+// REQ-61: call outcomes. The Students schema carries Last Txn and the contract fields, Touches carries Touch and Txn ID
+// (POST /__console/not-ready toggles both markers off). A console lead page answers GET and PATCH (last_edited_time moves),
+// Touches answer a create, a query by Txn ID and a GET. POST /__console/commit-then-timeout applies the next Touch create
+// and answers 504. GET /__console/requests lists every /v1/ request since the mock started.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -85,6 +89,7 @@ const consoleLead = (n, name, stage, extra = {}) => ({
   object: "page",
   id: `eeeeeeee-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
   created_time: atHours(-100 + n),
+  last_edited_time: atHours(-100 + n),
   properties: {
     "Student Name": { title: [{ plain_text: name }] }, Stage: sel(stage), Owner: { relation: [] }, "Next Action": sel("Call"), "Next Action Due": dt(null),
     Attempts: { number: null }, "Last Contact": dt(null), Source: sel(null), "Lost Reason": sel(null), "Contacted At": dt(null), "Trial Booked At": dt(null),
@@ -121,6 +126,51 @@ const CONSOLE_LEAD_SCHEMA = Object.fromEntries(CONSOLE_LEAD_PROPS.map((n, i) => 
 let consoleLeadsFail = false;
 const TOUCHES_DS = "772939bd-bd88-4272-9f1f-20ce75ef2204";
 const TOUCH_SCHEMA = { properties: { Type: { id: "tty" }, Outcome: { id: "tou" }, Student: { id: "tst" }, Staff: { id: "tsf" }, Note: { id: "tno" }, When: { id: "twh" } } };
+// REQ-61: the write markers and the title, dropped while not ready.
+let consoleNotReady = false;
+let touchCommitThenTimeout = false;
+const touchSchema = () => ({ properties: { ...TOUCH_SCHEMA.properties, ...(consoleNotReady ? {} : { Touch: { id: "tti", type: "title" }, "Txn ID": { id: "ttx", type: "rich_text" } }) } });
+// A request's property value (rich text as {text: {content}}) as Notion answers it (plain_text).
+const answered = (v) => {
+  if (v?.rich_text) return { rich_text: v.rich_text.map((t) => ({ plain_text: t.text?.content ?? t.plain_text ?? "" })) };
+  if (v?.title) return { title: v.title.map((t) => ({ plain_text: t.text?.content ?? t.plain_text ?? "" })) };
+  return v;
+};
+async function consoleApi(req, res) {
+  const url = req.url ?? "";
+  const leadId = /^\/v1\/pages\/([0-9a-f-]{36})(\?.*)?$/.exec(url)?.[1];
+  const lead = leadId && CONSOLE_LEADS.find((l) => l.id === leadId);
+  if (lead && req.method === "GET") return res.end(JSON.stringify(lead)), true;
+  if (lead && req.method === "PATCH") {
+    const props = (await readBody(req)).properties ?? {};
+    for (const [k, v] of Object.entries(props)) lead.properties[k] = answered(v);
+    lead.last_edited_time = new Date().toISOString();
+    return res.end(JSON.stringify(lead)), true;
+  }
+  const touchHit = leadId && CONSOLE_TOUCHES.find((t) => t.id === leadId);
+  if (touchHit && req.method === "GET") return res.end(JSON.stringify(touchHit)), true;
+  if (req.method === "POST" && url === "/v1/pages") {
+    const body = await readBody(req);
+    if (body.parent?.data_source_id !== TOUCHES_DS) return false;
+    const created = { object: "page", id: randomUUID(), properties: { When: { created_time: new Date().toISOString() } } };
+    for (const [k, v] of Object.entries(body.properties ?? {})) created.properties[k] = answered(v);
+    CONSOLE_TOUCHES.unshift(created);
+    if (touchCommitThenTimeout) {
+      touchCommitThenTimeout = false;
+      res.statusCode = 504;
+      return res.end(JSON.stringify({ object: "error", status: 504 })), true;
+    }
+    return res.end(JSON.stringify(created)), true;
+  }
+  if (req.method === "POST" && url.startsWith(`/v1/data_sources/${TOUCHES_DS}/query`)) {
+    const filter = (await readBody(req)).filter;
+    if (filter?.property !== "Txn ID") return false;
+    const want = filter.rich_text?.equals;
+    const results = CONSOLE_TOUCHES.filter((t) => (t.properties["Txn ID"]?.rich_text ?? []).map((x) => x.plain_text).join("") === want);
+    return res.end(JSON.stringify({ results, has_more: false, next_cursor: null })), true;
+  }
+  return false;
+}
 const touch = (n, lead, type, outcome, note, hours) => ({
   object: "page", id: `eeeeeeee-1111-4000-8000-0000000000${String(n).padStart(2, "0")}`,
   properties: {
@@ -556,6 +606,9 @@ http.createServer(async (req, res) => {
     CONSOLE_LEADS.push(lead);
     return res.end(JSON.stringify({ id: lead.id, name: `Fresh Lead ${addedLeads}` }));
   }
+  if (req.method === "POST" && req.url === "/__console/not-ready") { consoleNotReady = !consoleNotReady; return res.end(JSON.stringify({ consoleNotReady })); }
+  if (req.method === "POST" && req.url === "/__console/commit-then-timeout") { touchCommitThenTimeout = true; return res.end(JSON.stringify({ touchCommitThenTimeout })); }
+  if (req.method === "GET" && req.url === "/__console/requests") return res.end(JSON.stringify(journal.map((j) => `${j.method} ${j.path}`)));
   if (req.method === "POST" && req.url === "/__console/lose") {
     CONSOLE_LEADS[1].properties.Stage = sel("Lost");
     return res.end("{}");
@@ -576,6 +629,7 @@ http.createServer(async (req, res) => {
   // Read-only: the seeded lesson answers a GET and nothing else.
   if (req.method === "GET" && req.url === `/v1/pages/${LESSON_ID}`) return res.end(JSON.stringify(LESSON));
   if ((req.url ?? "").includes(LESSON_ID)) { res.statusCode = 405; return res.end(JSON.stringify({ object: "error", status: 405 })); }
+  if (await consoleApi(req, res)) return;
   if (await lessonsApi(req, res)) return;
   if (await workApi(req, res)) return;
   if (await billingApi(req, res)) return;
@@ -618,10 +672,13 @@ http.createServer(async (req, res) => {
       "Hourly Rate (CAD)": { id: "hr" }, "Lesson Cadence": { id: "lc" }, "Billing Family": { id: "bf" }, "Parent Phone": { id: "pp" }, Notes: { id: "nts" },
       // REQ-57 and REQ-59: the console's leads reader (LEAD_PROPS). "cnad" gates its query below.
       "Parent Email": { id: "pe" }, "Parent Name": { id: "pn" }, ...CONSOLE_LEAD_SCHEMA,
+      // REQ-61: the outcome writer's contract fields and its marker.
+      "Target Program": { id: "tpg" }, "Sales Notes": { id: "sln" }, "Last Payment Date": { id: "lpd" },
+      ...(consoleNotReady ? {} : { "Last Txn": { id: "ltx", type: "rich_text" } }),
     } }));
     return;
   }
-  if (req.method === "GET" && req.url === `/v1/data_sources/${TOUCHES_DS}`) return res.end(JSON.stringify(TOUCH_SCHEMA));
+  if (req.method === "GET" && req.url === `/v1/data_sources/${TOUCHES_DS}`) return res.end(JSON.stringify(touchSchema()));
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${TOUCHES_DS}/query`)) {
     return res.end(JSON.stringify({ results: CONSOLE_TOUCHES, has_more: false, next_cursor: null }));
   }

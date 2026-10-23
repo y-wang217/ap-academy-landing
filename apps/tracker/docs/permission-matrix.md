@@ -407,6 +407,20 @@ delete either raises `42501` or touches no row.
 | staff link + parent link | none. Neither role reads it |
 | grade teacher + parent link | none. Neither role reads it |
 
+### `console_transitions`
+
+| role | access |
+|---|---|
+| owner | read, write: insert (as themselves, state running), update of the state columns only, `claim_console_transition` (org). No delete; the request and its intended writes are fixed at insert and a done or failed row never moves (REQ-61, tracker ADR 0076). `owner reads console transitions`, `owner logs console transitions`, `owner moves console transitions` |
+| grade teacher | none. owner-only policies |
+| scheduling-only teacher | none. owner-only policies |
+| student | none. owner-only policies |
+| parent | none. owner-only policies |
+| owner + staff link | read, write: the union of the `owner` and `scheduling-only teacher` rows |
+| grade teacher + staff link | none. Neither role reads it |
+| staff link + parent link | none. Neither role reads it |
+| grade teacher + parent link | none. Neither role reads it |
+
 ## Parents
 
 ### `parent_links`
@@ -551,7 +565,7 @@ below still apply on top. The other three reads are still live Notion reads.
 
 ## Founder Console
 
-`/tracker/console` and `/tracker/api/console/*` (REQ-53, tracker ADR 0062, workspace ADR 0006). Owner only, decided by `getViewer()` before any read; the health route then confirms with `tracker.is_org_owner` on the owner's own client. No new table or function, so `supabase/tests/permission_matrix.sql` is unchanged.
+`/tracker/console` and `/tracker/api/console/*` (REQ-53, tracker ADR 0062, workspace ADR 0006). Owner only, decided by `getViewer()` before any read; the health route then confirms with `tracker.is_org_owner` on the owner's own client. REQ-53 added no table or function; REQ-61 adds `console_transitions` (classified above) and `claim_console_transition`.
 
 | viewer | page | API |
 |---|---|---|
@@ -566,3 +580,9 @@ below still apply on top. The other three reads are still live Notion reads.
 | owner + staff link | 200, as owner | 200 |
 | grade teacher + staff link, staff link + parent link, grade teacher + parent link | 404 | 403 `forbidden` |
 | any viewer, cross-site write | n/a | 403 `forbidden` from the proxy, before the session is read |
+
+`POST /tracker/api/console/outcomes` (REQ-61, tracker ADR 0076, workspace ADR 0007) is the one console
+write. The same gate and denials as the table above, before the body is read, any Notion page is
+fetched or any `console_transitions` row is touched; then the owner's own client writes the transition
+log (RLS: `console_transitions` above) and the route writes Notion Touches and the eleven Students &
+Parents keys ADR 0007 lists.

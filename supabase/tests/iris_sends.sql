@@ -118,6 +118,15 @@ begin
   end if;
 end $$;
 
+-- approve_draft is revoked (0030): approving always goes through a send (AC11) --------
+do $$ begin
+  perform ist.as_user('a0000000-0000-0000-0000-000000000001');
+  perform ist.expect_error($q$select iris.approve_draft('40000000-0000-0000-0000-000000000001', 1)$q$, '42501');
+  perform ist.as_service();
+  perform ist.expect_error($q$select iris.approve_draft('40000000-0000-0000-0000-000000000001', 1)$q$, '42501');
+  perform ist.as_super();
+end $$;
+
 -- Paused approve leaves nothing (Org Two is paused) -----------------------------------
 do $$
 declare res jsonb;

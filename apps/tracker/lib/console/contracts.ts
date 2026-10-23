@@ -35,7 +35,9 @@ export const notionPageUrl = (id: string) => `https://www.notion.so/${id.replace
 
 // What each reader returns, before names are joined. Notion ids as Notion sends them.
 export type LeadSource = {
-  id: string; createdAt: string | null; name: string; stage: string | null; ownerStaffId: string | null; nextAction: string | null;
+  id: string; createdAt: string | null;
+  /** REQ-61: the page's last_edited_time, the outcome form's stale check. */
+  lastEditedAt?: string | null; name: string; stage: string | null; ownerStaffId: string | null; nextAction: string | null;
   nextActionDue: string | null; attempts: number | null; lastContact: string | null; source: string | null; lostReason: string | null;
   contactedAt: string | null; trialBookedAt: string | null; trialAttendedAt: string | null; closedAt: string | null; trialTime: string | null;
   trialTeacherId: string | null; level: string | null; hasMajorGaps: boolean; recommendedPlan: string | null; hasTrialSummary: boolean;
@@ -73,6 +75,7 @@ export const LeadRow = z.object({
   level: str, hasMajorGaps: z.boolean(), recommendedPlan: str, hasTrialSummary: z.boolean(), parentName: str, inPeopleCopy: z.boolean(),
   // REQ-57: dedupeKey stays in server-side panels; the sales view schema has no such key.
   dedupeKey: str, grade: str, subjects: z.array(z.string()), majorGaps: longText, trialSummary: longText,
+  lastEditedAt: str.optional(),
 });
 export const TouchRow = z.object({
   id: z.string(), pageUrl: z.string(), when: str, whenDate: str, type: str, outcome: str, studentId: str, staffId: str, staffName: str,

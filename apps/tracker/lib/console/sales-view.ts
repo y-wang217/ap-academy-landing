@@ -35,6 +35,9 @@ const SalesLead = z.object({
     trialTime: str, trialTeacherName: str, level: str, majorGaps: str, recommendedPlan: str, trialSummary: str, lesson: TrialLesson,
   }).nullable(),
   lastTouch: LastTouch,
+  // REQ-61: what the outcome form sends back as expected.lastEditedAt.
+  lastEditedAt: str.optional(),
+  lostReason: str.optional(),
 });
 const QueueException = z.object({ id: z.string(), pageUrl: z.string(), name: z.string(), stage: str, reason: z.enum(["No Next Action Due", "No Stage"]) });
 const SalesQueue = z.object({ items: z.array(SalesLead), exceptions: z.array(QueueException), mergedDuplicates: z.number(), truncated: z.boolean(), windowDays: z.number() });
@@ -78,7 +81,7 @@ function leadOf(entry: QueueEntry, trials: Map<string, TrialLessonRow> | null, t
     filter: FILTER_OF[entry.bucket], priorityReason: entry.priorityReason, nextAction: l.nextAction, nextActionDue: l.nextActionDue,
     attempts: l.attempts, ownerName: l.ownerName, ownerState: l.ownerStaffId === null ? "unassigned" : l.ownerName === null ? "unknown" : "named",
     grade: l.grade, subjects: l.subjects, source: l.source, createdAt: l.createdAt, lastContact: l.lastContact, contactedAt: l.contactedAt,
-    trialBookedAt: l.trialBookedAt, trialAttendedAt: l.trialAttendedAt, closedAt: l.closedAt,
+    trialBookedAt: l.trialBookedAt, trialAttendedAt: l.trialAttendedAt, closedAt: l.closedAt, lastEditedAt: l.lastEditedAt ?? null, lostReason: l.lostReason,
     trial: hasTrialField || lesson.state !== "none"
       ? { trialTime: l.trialTime, trialTeacherName: l.trialTeacherName, level: l.level, majorGaps: l.majorGaps, recommendedPlan: l.recommendedPlan, trialSummary: l.trialSummary, lesson }
       : null,

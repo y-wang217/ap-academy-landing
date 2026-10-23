@@ -27,6 +27,7 @@ const page = (id: string, name: string, extra: Record<string, unknown> = {}) => 
   object: "page",
   id,
   created_time: "2026-10-20T14:00:00.000Z",
+  last_edited_time: "2026-10-21T09:00:00.000Z",
   properties: {
     "Student Name": v.title(name),
     Stage: v.select("New"),
@@ -61,7 +62,7 @@ const page = (id: string, name: string, extra: Record<string, unknown> = {}) => 
 const LEAD_SOURCE_KEYS = [
   "attempts", "closedAt", "contactedAt", "createdAt", "hasMajorGaps", "hasTrialSummary", "id", "lastContact", "level", "lostReason", "name",
   "nextAction", "nextActionDue", "ownerStaffId", "parentName", "recommendedPlan", "source", "stage", "trialAttendedAt", "trialBookedAt",
-  "trialTeacherId", "trialTime", "leadId", "grade", "subjects", "majorGaps", "trialSummary",
+  "trialTeacherId", "trialTime", "leadId", "grade", "subjects", "majorGaps", "trialSummary", "lastEditedAt",
 ];
 
 describe("fetchLeads", () => {
@@ -87,7 +88,7 @@ describe("fetchLeads", () => {
     expect(row).toMatchObject({
       id: S1, name: "Sam Lee", stage: "New", ownerStaffId: OWNER, trialTeacherId: TEACHER, attempts: 2,
       nextActionDue: "2026-11-01T04:30:00.000Z", lastContact: "2026-10-19", lostReason: null, hasMajorGaps: true, hasTrialSummary: false,
-      parentName: "Pat Lee", createdAt: "2026-10-20T14:00:00.000Z",
+      parentName: "Pat Lee", createdAt: "2026-10-20T14:00:00.000Z", lastEditedAt: "2026-10-21T09:00:00.000Z",
       leadId: "l-77", grade: "11", subjects: ["MHF4U", "SPH4U"], majorGaps: "fractions and factoring", trialSummary: null,
     });
     expect(JSON.stringify(r)).not.toMatch(/555-0100|pat@example|private notes/);

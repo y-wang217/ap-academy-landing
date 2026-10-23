@@ -6,6 +6,7 @@ import { FILTERS, filterCounts, queueKeyTarget, retainedView, selectedOf, visibl
 import type { SalesLead, SalesQueue } from "../../../lib/console/sales-view";
 import { localDateOf } from "../../../lib/time";
 import { InstrumentPanel, type PanelFrame } from "../kit/instrument-panel";
+import { OutcomeForm } from "./outcome-form";
 import { useSales } from "./sales-provider";
 
 const inField = (target: EventTarget | null) => target instanceof Element && target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])") !== null;
@@ -91,7 +92,8 @@ function Rolodex({ lead }: { lead: SalesLead }) {
 /**
  * The Sales NEXT panel (REQ-57): filters, the exception line, the ranked
  * queue as a listbox with exactly one selected lead, and the Rolodex for it.
- * The console never acts: Enter and the link open the lead's Notion page.
+ * Enter and the link open the lead's Notion page; the outcome form under the
+ * Rolodex (REQ-61) is the only write, and it never calls or texts anyone.
  */
 export function NextLead(frame: PanelFrame) {
   const { state, dispatch, retry } = useSales();
@@ -212,7 +214,12 @@ export function NextLead(frame: PanelFrame) {
                   </li>
                 ))}
               </ol>
-              {selected && <Rolodex lead={selected} />}
+              {selected && (
+                <div className="console-sales-detail">
+                  <Rolodex lead={selected} />
+                  <OutcomeForm key={selected.id} lead={selected} />
+                </div>
+              )}
             </div>
           )}
         </>
