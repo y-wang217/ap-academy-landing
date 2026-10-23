@@ -925,7 +925,12 @@
   color: var(--muted);
 }
 .console-signal {
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
+}
+.console-signal .console-row-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .console-health-rail {
   flex: 1 1 100%;
