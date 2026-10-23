@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
 import { normalId } from "../domain/billing";
 import { TUNING } from "../domain/tuning";
 import { NotionUncertain, type LeadWriter } from "../notion/lead-writer";
@@ -41,7 +41,7 @@ export const OUTCOME_MESSAGES = {
   failed: "Notion refused the save. Nothing was changed.",
 } as const;
 
-export const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
+export const sha256 = (s: string) => hash("sha256", s, "hex");
 
 /** Same value, with datetimes compared as instants. */
 function same(a: string | number | null | undefined, b: string | number | null | undefined): boolean {

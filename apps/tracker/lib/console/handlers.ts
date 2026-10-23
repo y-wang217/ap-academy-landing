@@ -163,7 +163,7 @@ export async function handleConsoleOutcome(input: {
   const parsed = OutcomeBodySchema.safeParse(await input.request.json().catch(() => undefined));
   if (!parsed.success) return send(400, { error: "bad_request" });
   const deps = input.deps(gate.viewer);
-  if (!deps) return send(503, { error: "notion_not_ready", missing: ["NOTION_TOKEN"] });
+  if (!deps) return send(503, { error: "notion_not_ready", missing: ["Notion connection"] });
   let staffId: string | null;
   try {
     const { data, error } = await gate.viewer.db.tracker.rpc("my_staff_id", { target_org: gate.viewer.orgId });

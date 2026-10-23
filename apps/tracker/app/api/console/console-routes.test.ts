@@ -395,11 +395,11 @@ describe("POST /api/console/outcomes", () => {
     expect((await post(owner(r2.db), r2)).res.status).toBe(502);
   });
 
-  it("no Notion token is 503 notion_not_ready, with no write", async () => {
+  it("no Notion connection is 503 notion_not_ready, with no write", async () => {
     const r = rig();
     const request = new Request("http://localhost/x", { method: "POST", body: JSON.stringify(valid()) });
     const res = await handleConsoleOutcome({ viewer: async () => owner(r.db), request, now: () => NOW, deps: () => null });
-    expect([res.status, await res.text()]).toEqual([503, '{"error":"notion_not_ready","missing":["NOTION_TOKEN"]}']);
+    expect([res.status, await res.text()]).toEqual([503, '{"error":"notion_not_ready","missing":["Notion connection"]}']);
   });
 
   it("is POST only", () => {
