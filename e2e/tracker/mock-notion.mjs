@@ -31,6 +31,9 @@
 // (POST /__console/not-ready toggles both markers off). A console lead page answers GET and PATCH (last_edited_time moves),
 // Touches answer a create, a query by Txn ID and a GET. POST /__console/commit-then-timeout applies the next Touch create
 // and answers 504. GET /__console/requests lists every /v1/ request since the mock started.
+// REQ-63: POST /__console/touches-fail toggles a 500 on the console's Touches read (not the Txn ID lookup),
+// POST /__console/trials-fail toggles a 500 on the Lessons Type = Trial read, and POST /__work/no-weekly toggles
+// the pinned weekly review row out of the Work query. Each changes nothing until toggled.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -124,6 +127,8 @@ const CONSOLE_LEAD_PROPS = [
 ];
 const CONSOLE_LEAD_SCHEMA = Object.fromEntries(CONSOLE_LEAD_PROPS.map((n, i) => [n, { id: n === "Next Action Due" ? "cnad" : `cl${i}` }]));
 let consoleLeadsFail = false;
+let consoleTouchesFail = false;
+let consoleTrialsFail = false;
 const TOUCHES_DS = "772939bd-bd88-4272-9f1f-20ce75ef2204";
 const TOUCH_SCHEMA = { properties: { Type: { id: "tty" }, Outcome: { id: "tou" }, Student: { id: "tst" }, Staff: { id: "tsf" }, Note: { id: "tno" }, When: { id: "twh" } } };
 // REQ-61: the write markers and the title, dropped while not ready.
@@ -278,6 +283,7 @@ const CONSOLE_WORK = [
   workRow(W.weekly, { name: "E2E weekly marketing review", type: "Recurring", due: torontoDate(-1) }),
 ];
 let consoleWorkFails = false;
+let consoleNoWeekly = false;
 const clauseOk = (row, c) => {
   const v = row.properties[c.property]?.select?.name ?? null;
   if (c.select?.does_not_equal !== undefined) return v !== c.select.does_not_equal;
@@ -370,6 +376,7 @@ async function lessonsApi(req, res) {
     const body = await readBody(req);
     // REQ-57 and REQ-59: the console's Type = Trial read gets both trial lessons, kept out of the lesson-link rows above.
     if (body.filter?.property === "Type" && body.filter?.select?.equals === "Trial") {
+      if (consoleTrialsFail) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })), true; }
       return res.end(JSON.stringify({ results: [...CONSOLE_TRIALS, ...CONSOLE_TRIAL_LESSONS()], has_more: false, next_cursor: null })), true;
     }
     const hits = [...lessons.values()].filter((l) => lessonMatches(l, body.filter ?? {}));
@@ -550,7 +557,8 @@ async function workApi(req, res) {
   if (req.method === "POST" && url.startsWith(`/v1/data_sources/${WORK_DS}/query?`)) {
     if (consoleWorkFails) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })), true; }
     const clauses = (await readBody(req)).filter?.and ?? [];
-    return res.end(JSON.stringify({ results: CONSOLE_WORK.filter((r) => clauses.every((c) => clauseOk(r, c))), has_more: false, next_cursor: null })), true;
+    const rows = CONSOLE_WORK.filter((r) => clauses.every((c) => clauseOk(r, c)) && !(consoleNoWeekly && r.id === W.weekly));
+    return res.end(JSON.stringify({ results: rows, has_more: false, next_cursor: null })), true;
   }
   if (req.method === "POST" && url === `/v1/data_sources/${WORK_DS}/query`) {
     const body = await readBody(req);
@@ -598,6 +606,9 @@ http.createServer(async (req, res) => {
     RYAN_PAGE.properties.Status = { select: { name: now } };
     return res.end(JSON.stringify({ status: now }));
   }
+  if (req.method === "POST" && req.url === "/__work/no-weekly") { consoleNoWeekly = !consoleNoWeekly; return res.end(JSON.stringify({ consoleNoWeekly })); }
+  if (req.method === "POST" && req.url === "/__console/touches-fail") { consoleTouchesFail = !consoleTouchesFail; return res.end(JSON.stringify({ consoleTouchesFail })); }
+  if (req.method === "POST" && req.url === "/__console/trials-fail") { consoleTrialsFail = !consoleTrialsFail; return res.end(JSON.stringify({ consoleTrialsFail })); }
   if (req.method === "POST" && req.url === "/__console/leads-fail") { consoleLeadsFail = !consoleLeadsFail; return res.end(JSON.stringify({ consoleLeadsFail })); }
   if (req.method === "POST" && req.url === "/__console/add-lead") {
     addedLeads += 1;
@@ -680,6 +691,7 @@ http.createServer(async (req, res) => {
   }
   if (req.method === "GET" && req.url === `/v1/data_sources/${TOUCHES_DS}`) return res.end(JSON.stringify(touchSchema()));
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${TOUCHES_DS}/query`)) {
+    if (consoleTouchesFail) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })); }
     return res.end(JSON.stringify({ results: CONSOLE_TOUCHES, has_more: false, next_cursor: null }));
   }
   if (req.method === "POST" && (req.url ?? "").startsWith(`/v1/data_sources/${STUDENTS_DS}/query`) && (req.url ?? "").includes("filter_properties[]=cnad")) {

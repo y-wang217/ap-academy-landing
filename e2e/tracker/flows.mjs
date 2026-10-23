@@ -6,7 +6,7 @@
 // Run through ./run.sh, or directly with TRACKER_BASE set to a running tracker.
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 
 // Playwright is not a workspace dependency: use a global install.
 const require = createRequire(execSync("npm root -g").toString().trim() + "/");
@@ -2383,6 +2383,528 @@ try {
         await owner.context().close();
       }
       check("REQ-61: refusals and denials left no extra transition row", count("select count(*) from tracker.console_transitions") === rowsBefore + 2);
+    }
+
+    // REQ-63: the release acceptance pack (tracker ADR 0079). Captures at four sizes, the full Tab walk, axe, 200%
+    // zoom, reduced motion, text status, no value without a showable status, the role matrix, one provider down at a
+    // time against PROVIDER_SLOTS, and one sanitised loop per mode. Every lever turned on is turned off in a finally.
+    {
+      // Which slots each health provider must degrade, and which only meet the AC11 rule; every other slot is
+      // independent and keeps its baseline status. Checked against the health JSON and panel-slots.ts before use.
+      const SIGNALS3 = ["sales.signals", "creation.signals", "operations.signals"];
+      const PROVIDER_SLOTS = {
+        leads: { degrades: ["sales.next", "sales.radar", "sales.conversion", "operations.trials"], partial: ["sales.northStar", ...SIGNALS3, "operations.integrations"] },
+        touches: { degrades: [], partial: ["sales.next", "sales.radar", ...SIGNALS3, "operations.integrations"] },
+        trialLessons: { degrades: ["sales.conversion", "operations.trials"], partial: ["sales.next", "sales.radar", "operations.lessonGaps", "operations.upcoming", ...SIGNALS3, "operations.integrations"] },
+        work: { degrades: ["creation.nextAsset", "creation.work", "creation.pipeline"], partial: [...SIGNALS3, "operations.integrations"] },
+        invoices: { degrades: ["sales.cashflow", "operations.finance", "sales.conversion", "operations.trials"], partial: ["sales.northStar", ...SIGNALS3, "operations.integrations"] },
+        // A failed people read leaves the leads' name join unavailable, so the leads panel, and the queue and radar
+        // built on it, go stale (lib/console/facade.ts lines 133 to 139, sales-view.ts lines 117 to 129).
+        people: { degrades: ["sales.next", "sales.radar"], partial: ["sales.northStar", "sales.capacity", "operations.teacherLoad", "operations.lessonGaps", "operations.upcoming", ...SIGNALS3, "operations.integrations"] },
+      };
+      const mock = (path, method = "POST") => fetch(`${MOCK_NOTION}${path}`, { method, headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+      const LEVERS = {
+        leads: [() => mock("/__console/leads-fail"), () => mock("/__console/leads-fail")],
+        touches: [() => mock("/__console/touches-fail"), () => mock("/__console/touches-fail")],
+        trialLessons: [() => mock("/__console/trials-fail"), () => mock("/__console/trials-fail")],
+        work: [() => mock("/__work/fail-console"), () => mock("/__work/heal-console")],
+        invoices: [() => mock("/__billing/fail"), () => mock("/__billing/fail")],
+        // The REQ-31 pattern: the people copy unreadable on the owner's own client, restored at once.
+        people: [async () => psql("revoke select on tracker.student_people from authenticated"), async () => psql("grant select on tracker.student_people to authenticated")],
+      };
+      // The health rail entry that carries each provider's reason (lib/console/signals.ts HEALTH_KEYS). Touches has none:
+      // its failure is the provider_failure:touches signal (docs/designs/REQ-63.md, Builder notes).
+      const HEALTH_ENTRY = { leads: "notionLeads", trialLessons: "notionLessons", invoices: "notionInvoices", work: "notionWork", people: "peopleSync", touches: null };
+      const MODES = ["sales", "creation", "operations"];
+      const SIZES = [[1920, 1080], [1440, 900], [1280, 720], [390, 844]];
+      const STATES = ["loading", "empty", "stale", "error", "unverifiable"];
+      const BADGE_TEXT = { ready: "Current", empty: "Empty", loading: "Loading", stale: "Stale", error: "Error", unverifiable: "Unverified" };
+      const HERO = { sales: ["radar", "next"], creation: ["nextAsset"], operations: ["teacherLoad"] };
+      const TRIM = { sales: ["northStar", "conversion", "capacity", "cashflow"], creation: [], operations: ["finance", "trials"] };
+      const SLOT_IDS = [...readFileSync(new URL("../../apps/tracker/lib/console/panel-slots.ts", import.meta.url), "utf8").matchAll(/slot\("(sales|creation|operations)", "([A-Za-z]+)"/g)].map((m) => `${m[1]}.${m[2]}`);
+      const SHOTS63 = new URL("../../docs/spec/founder-console/screenshots/req-63/", import.meta.url);
+      mkdirSync(SHOTS63, { recursive: true });
+      for (const f of readdirSync(SHOTS63)) if (/\.(png|json)$/.test(f)) unlinkSync(new URL(f, SHOTS63));
+      const shot = (name) => new URL(name, SHOTS63).pathname;
+      const trackerRequire = createRequire(new URL("../../apps/tracker/package.json", import.meta.url));
+      const AXE = trackerRequire.resolve("axe-core/axe.min.js");
+      const modeAt = (w, h, mode, options) => bridgeAt(w, h, `/console?mode=${mode}`, options);
+      const slotKey = (e) => `${e.closest("[data-mode-panel]")?.getAttribute("data-mode-panel")}.${e.getAttribute("data-panel")}`;
+      // AC11: no panel shows a value unless it is ready or stale.
+      const noValueUnlessReady = (p) => p.locator("[data-panel]").evaluateAll((els) => els
+        .filter((e) => ["empty", "loading", "error", "unverifiable"].includes(e.getAttribute("data-status") ?? "") && e.querySelector("[data-panel-value]"))
+        .map((e) => `${e.closest("[data-mode-panel]")?.getAttribute("data-mode-panel")}.${e.getAttribute("data-panel")}=${e.getAttribute("data-status")}`));
+      const valueOffences = [];
+      const ac11 = async (p, where) => { for (const o of await noValueUnlessReady(p)) valueOffences.push(`${where}: ${o}`); };
+      const statusesOf = (p, mode) => p.locator(`[data-mode-panel="${mode}"] [data-panel]`).evaluateAll((els) => Object.fromEntries(els.map((e) => [`${e.closest("[data-mode-panel]").getAttribute("data-mode-panel")}.${e.getAttribute("data-panel")}`, {
+        status: e.getAttribute("data-status"), value: e.querySelector("[data-panel-value]") !== null, canonical: e.querySelector("[data-canonical]") !== null,
+      }])));
+      // AC1: scrolled to, the element has a non-zero box that intersects the viewport (the page scrolls; the rail is below the fold).
+      const onScreen = async (p, selector) => {
+        const el = p.locator(selector).first();
+        if ((await el.count()) === 0) return false;
+        await el.scrollIntoViewIfNeeded();
+        return el.evaluate((e) => {
+          const r = e.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+        });
+      };
+      // One element at a time: each check scrolls, so they must not run concurrently.
+      const allOnScreen = async (p, selectors) => {
+        const off = [];
+        for (const s of selectors) if (!(await onScreen(p, s))) off.push(s);
+        return off;
+      };
+      const kick = async (p) => {
+        await p.evaluate(async () => {
+          const set = (state) => {
+            Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+            document.dispatchEvent(new Event("visibilitychange"));
+          };
+          set("hidden");
+          await new Promise((r) => setTimeout(r, 50));
+          set("visible");
+        });
+      };
+
+      // AC1 to AC3, AC11: the three modes at the four sizes, full page.
+      for (const [w, h] of SIZES) {
+        for (const mode of MODES) {
+          const p = await modeAt(w, h, mode);
+          await syncSettled(p);
+          await ac11(p, `mode ${mode} ${w}x${h}`);
+          if (w >= 1440) {
+            const panel = `[data-mode-panel="${mode}"]`;
+            const parts = {
+              horizon: await onScreen(p, "[data-horizon]"),
+              header: (await onScreen(p, "header.console-header")) && ((await p.locator("header.console-header .console-brand").textContent()) ?? "").includes("AP ACADEMY // FOUNDER CONSOLE"),
+              tabs: (await onScreen(p, '[role="tablist"][aria-label="Console mode"]')) && (await p.locator('[role="tablist"][aria-label="Console mode"] [role="tab"]').count()) === 3,
+              sync: await onScreen(p, "[data-sync-line]"),
+              hero: (await allOnScreen(p, [...HERO[mode].map((id) => `${panel} [data-panel="${id}"]`), ...(mode === "sales" ? [`${panel} [data-panel="next"] [data-rolodex]`] : [])])).join(),
+              trim: (await allOnScreen(p, TRIM[mode].map((id) => `${panel} [data-panel="${id}"]`))).join(),
+              rail: (await onScreen(p, "[data-rail]")) && [3, 4, 5, 6].includes(await p.locator("[data-rail] [data-indicator]").count()),
+            };
+            check(`REQ-63: ${mode} at ${w}x${h} shows the horizon, header rail, tabs, sync line, hero, metric trim and bottom rail`, Object.entries(parts).every(([k, v]) => (k === "hero" || k === "trim" ? v === "" : v)), JSON.stringify(parts));
+          } else {
+            const tabs = await insideWidth(p, p.getByRole("tablist"), w);
+            const primary = await insideWidth(p, p.locator(`[data-mode-panel="${mode}"] [data-panel="${HERO[mode].at(-1)}"] h2`), w);
+            check(`REQ-63: ${mode} at ${w}x${h} has no sideways scroll, with the tabs and the primary panel in the first viewport width`, (await noSideScroll(p)) && tabs && primary, `${tabs} ${primary}`);
+          }
+          await p.evaluate(() => window.scrollTo(0, 0));
+          await p.screenshot({ path: shot(`mode-${mode}-${w}x${h}.png`), fullPage: true });
+          await p.context().close();
+        }
+      }
+
+      // AC3: the five panel states from the preview, viewport only, each scrolled into view.
+      for (const [w, h] of SIZES) {
+        for (const state of STATES) {
+          const p = await bridgeAt(w, h, "/console/preview?mode=sales");
+          const mode = await p.locator(`[data-panel][data-status="${state}"]`).first().evaluate((e) => e.closest("[data-mode-panel]")?.getAttribute("data-mode-panel") ?? "").catch(() => "");
+          let shown = false;
+          if (mode) {
+            if (mode !== "sales") {
+              await p.goto(`${BASE}/console/preview?mode=${mode}`);
+              await p.locator("[data-console]").waitFor({ timeout: 15000 });
+            }
+            const panel = p.locator(`[data-mode-panel="${mode}"] [data-panel][data-status="${state}"]`).first();
+            await panel.evaluate((e) => e.scrollIntoView({ block: "center" }));
+            shown = await panel.isVisible();
+            await ac11(p, `preview ${mode} ${w}x${h}`);
+          }
+          check(`REQ-63: the preview shows a ${state} panel at ${w}x${h}`, shown, mode);
+          await p.screenshot({ path: shot(`state-${state}-${w}x${h}.png`) });
+          await p.context().close();
+        }
+      }
+
+      // AC3: each mode's capture beside the numbered guide and the reference render.
+      {
+        const ASSETS = new URL("../../docs/spec/founder-console/handoff/visual-assets/", import.meta.url);
+        const dataUrl = (url, type) => `data:${type};base64,${readFileSync(url).toString("base64")}`;
+        const guide = dataUrl(new URL("numbered-panel-guide.jpg", ASSETS), "image/jpeg");
+        const reference = dataUrl(new URL("founder-command-bridge-reference.png", ASSETS), "image/png");
+        const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+        const page = await ctx.newPage();
+        for (const [w, h] of [[1920, 1080], [1440, 900]]) {
+          for (const mode of MODES) {
+            const capture = dataUrl(new URL(`mode-${mode}-${w}x${h}.png`, SHOTS63), "image/png");
+            await page.setContent(`<!doctype html><style>body{margin:0;background:#100d18;color:#ffe8d1;font:14px system-ui}main{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:12px;align-items:start}figure{margin:0}img{width:100%;display:block}figcaption{padding:6px 0}</style><main><figure><img src="${guide}"><figcaption>Numbered panel guide</figcaption></figure><figure><img src="${reference}"><figcaption>Reference render</figcaption></figure><figure><img src="${capture}"><figcaption>/console?mode=${mode} at ${w}x${h}</figcaption></figure></main>`);
+            await page.waitForFunction(() => [...document.images].every((i) => i.complete && i.naturalWidth > 0));
+            await page.screenshot({ path: shot(`compare-${mode}-${w}x${h}.png`), fullPage: true });
+          }
+        }
+        await ctx.close();
+      }
+      const pngs = readdirSync(SHOTS63).filter((f) => f.endsWith(".png"));
+      const wanted = [
+        ...SIZES.flatMap(([w, h]) => MODES.map((m) => `mode-${m}-${w}x${h}.png`)),
+        ...SIZES.flatMap(([w, h]) => STATES.map((s) => `state-${s}-${w}x${h}.png`)),
+        ...[[1920, 1080], [1440, 900]].flatMap(([w, h]) => MODES.map((m) => `compare-${m}-${w}x${h}.png`)),
+      ];
+      check("REQ-63: screenshots/req-63/ holds exactly the 38 named, non-empty PNG files",
+        wanted.length === 38 && pngs.length === 38 && wanted.every((f) => pngs.includes(f) && statSync(new URL(f, SHOTS63)).size > 0),
+        `${pngs.length} ${wanted.filter((f) => !pngs.includes(f)).join(",")}`);
+
+      // AC4, AC5, AC7, AC8 at 1440x900 for each mode and the preview.
+      const PAGES = [...MODES.map((m) => [m, `/console?mode=${m}`]), ["preview", "/console/preview?mode=sales"]];
+      for (const [name, path] of PAGES) {
+        const p = await bridgeAt(1440, 900, path);
+        await syncSettled(p);
+        // AC4: the sequential focus order (radio groups one stop, closed details only their summary, tabindex -1 skipped).
+        await p.evaluate(() => { let n = 0; for (const e of document.querySelectorAll("[data-console] *")) e.setAttribute("data-tab-key", String(n++)); });
+        const expected = await p.evaluate(() => {
+          const sel = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+          const radioStop = (e) => {
+            if (e.type !== "radio" || !e.name) return true;
+            const group = [...document.querySelectorAll(`input[type="radio"][name="${e.name}"]`)];
+            return (group.find((r) => r.checked) ?? group[0]) === e;
+          };
+          const inClosed = (e) => {
+            const d = e.parentElement?.closest("details:not([open])");
+            return Boolean(d) && !(e.tagName === "SUMMARY" && e.parentElement === d);
+          };
+          return [...document.querySelector("[data-console]").querySelectorAll(sel)]
+            .filter((e) => e.getAttribute("tabindex") !== "-1" && !e.closest("[hidden]") && !inClosed(e) && radioStop(e) && e.getClientRects().length > 0)
+            .map((e) => e.getAttribute("data-tab-key"));
+        });
+        await p.evaluate(() => { document.activeElement instanceof HTMLElement && document.activeElement.blur(); window.scrollTo(0, 0); });
+        const stops = [];
+        const weak = [];
+        let hidden = 0;
+        for (let i = 0; i < 400; i++) {
+          await p.keyboard.press("Tab");
+          const s = await p.evaluate(() => {
+            const a = document.activeElement;
+            if (!a || a === document.body || !a.closest("[data-console]")) return null;
+            const style = (e) => {
+              const c = getComputedStyle(e);
+              return { width: c.outlineWidth, line: c.outlineStyle, shadow: c.boxShadow };
+            };
+            const focused = style(a);
+            a.blur();
+            const resting = style(a);
+            a.focus({ focusVisible: true });
+            return { key: a.getAttribute("data-tab-key"), label: `${a.tagName} ${(a.textContent || a.getAttribute("aria-label") || "").trim().slice(0, 24)}`, focused, resting, hidden: Boolean(a.closest("[hidden]")) };
+          });
+          if (s === null) {
+            if (stops.length) break;
+            continue;
+          }
+          stops.push(s.key);
+          if (s.hidden) hidden += 1;
+          const visible = (parseFloat(s.focused.width) >= 2 && s.focused.line !== "none") || s.focused.shadow !== "none";
+          if (!visible || JSON.stringify(s.focused) === JSON.stringify(s.resting)) weak.push(`${s.label} ${JSON.stringify(s.focused)}`);
+        }
+        check(`REQ-63: ${name}: Tab from the page start reaches all ${expected.length} focusable elements in DOM order, none hidden`,
+          expected.length > 0 && JSON.stringify(stops) === JSON.stringify(expected) && hidden === 0, `${stops.length} stops, ${hidden} hidden`);
+        check(`REQ-63: ${name}: every Tab stop has a visible focus indicator that differs from its resting style`, weak.length === 0, weak.slice(0, 3).join(" | "));
+
+        // AC5: axe over [data-console], with the results kept next to the captures.
+        await p.addScriptTag({ path: AXE });
+        const axe = await p.evaluate(() => window.axe.run(document.querySelector("[data-console]"), { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] } }));
+        const nodes = (list) => list.map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.map((n) => n.target.join(" ")) }));
+        writeFileSync(shot(`axe-${name}.json`), `${JSON.stringify({ page: path, viewport: "1440x900", testEngine: axe.testEngine, tags: ["wcag2a", "wcag2aa", "wcag21aa"], violations: nodes(axe.violations), incomplete: nodes(axe.incomplete), passes: axe.passes.length }, null, 2)}\n`);
+        const serious = axe.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+        check(`REQ-63: ${name}: axe-core reports no serious or critical WCAG 2.1 AA violation`, serious.length === 0, serious.map((v) => `${v.id}(${v.nodes.length})`).join(", "));
+
+        // AC8: every panel's badge and every health entry say their status in text.
+        const badges = await p.locator("[data-panel]").evaluateAll((els, text) => els.filter((e) => (e.querySelector(":scope > header .console-badge")?.textContent ?? "").trim() !== text[e.getAttribute("data-status")]).map((e) => e.getAttribute("data-panel")), BADGE_TEXT);
+        const health = await p.locator("[data-health]").evaluateAll((els) => els.filter((e) => !(e.querySelector("[data-health-status]")?.textContent ?? "").trim()).map((e) => e.getAttribute("data-health")));
+        check(`REQ-63: ${name}: every panel badge and health entry names its status in text`, badges.length === 0 && health.length === 0 && (await p.locator("[data-panel]").count()) === 20, `${badges.join(",")} ${health.join(",")}`);
+        await ac11(p, `${name} 1440x900`);
+        await p.context().close();
+
+        // AC7: reduced motion, after load and after one poll.
+        const r = await bridgeAt(1440, 900, path, { reducedMotion: "reduce" });
+        const motion = () => r.evaluate(() => ({
+          running: document.getAnimations().filter((a) => a.playState === "running").length,
+          moving: [...document.querySelectorAll("[data-console], [data-console] *")].filter((e) => getComputedStyle(e).transitionDuration.split(",").some((d) => parseFloat(d) !== 0)).length,
+        }));
+        const loaded = await motion();
+        const polled = r.waitForResponse((res) => res.url().includes("/api/console/"), { timeout: 15000 }).catch(() => null);
+        await kick(r);
+        const poll = await polled;
+        await r.waitForTimeout(300);
+        const after = await motion();
+        check(`REQ-63: ${name}: with reduced motion nothing animates and every transition is 0s, after load and after a poll`,
+          poll !== null && loaded.running === 0 && loaded.moving === 0 && after.running === 0 && after.moving === 0, JSON.stringify({ loaded, after, poll: poll?.url() ?? null }));
+        await r.context().close();
+      }
+
+      // AC6: 720x450 is 1440x900 at 200% zoom.
+      for (const mode of MODES) {
+        const p = await modeAt(720, 450, mode);
+        await syncSettled(p);
+        const panel = `[data-mode-panel="${mode}"]`;
+        const actions = {
+          sales: [`${panel} [data-panel="next"] [role="option"][aria-selected="true"]`, `${panel} [data-panel="next"] form.console-outcome button[type="submit"]`],
+          creation: [`${panel} [data-panel="nextAsset"] a:text-is("Open in Notion")`],
+          operations: [`${panel} [data-panel="teacherLoad"] [data-teacher]`],
+        }[mode];
+        const inside = [await insideWidth(p, p.getByRole("tablist"), 720)];
+        for (const a of actions) inside.push((await p.locator(a).count()) > 0 && (await insideWidth(p, p.locator(a).first(), 720)));
+        check(`REQ-63: ${mode} at 720x450 (200% zoom) has no sideways scroll and its primary actions fully in width`, (await noSideScroll(p)) && inside.every(Boolean), inside.join());
+        await p.context().close();
+      }
+
+      // AC12: every console route, times every method it exports, times every role.
+      {
+        const API = new URL("../../apps/tracker/app/api/console/", import.meta.url);
+        const routes = readdirSync(API).filter((d) => existsSync(new URL(`${d}/route.ts`, API))).map((d) => ({
+          name: d, methods: [...readFileSync(new URL(`${d}/route.ts`, API), "utf8").matchAll(/export async function (GET|POST|PUT|PATCH|DELETE)\b/g)].map((m) => m[1]),
+        }));
+        check("REQ-63: the probe set has at least health, sales, signals and outcomes, each with a method", ["health", "sales", "signals", "outcomes"].every((n) => routes.some((r) => r.name === n)) && routes.every((r) => r.methods.length > 0),
+          routes.map((r) => `${r.name}:${r.methods.join("+")}`).join(" "));
+        const outcome = { requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb6363", pageId: "eeeeeeee-0000-4000-8000-000000000007", outcome: "no_answer", expected: { stage: "Working", attempts: 0, lastEditedAt: new Date().toISOString() }, note: "" };
+        const call = (who, route, method, origin = ORIGIN) => who.request.fetch(`${BASE}/api/console/${route}`, { method, maxRedirects: 0, headers: { Origin: origin }, ...(method === "GET" ? {} : { data: outcome }) });
+        const rowsBefore = Number(psql("select count(*) from tracker.console_transitions"));
+
+        // The revoked owner: an owner membership, used once, then deleted with psql while the session stays signed in.
+        const revoked = await signedIn(browser, "revoked-owner@example.com");
+        psql(`insert into tracker.memberships (user_id, org_id, role) select id, '10000000-0000-0000-0000-00000000aaaa', 'owner' from auth.users where email = 'revoked-owner@example.com'`);
+        const before = await revoked.context().request.get(`${BASE}/api/console/health`, { maxRedirects: 0 });
+        check("REQ-63: the second owner gets 200 from the health route before revocation", before.status() === 200, String(before.status()));
+        psql("delete from tracker.memberships where user_id = (select id from auth.users where email = 'revoked-owner@example.com')");
+
+        const guest = await browser.newContext();
+        const ROLES = [["Ryan (scheduling teacher)", ryan.context()], ["teacher2 (grade teacher)", teacher2.context()], ["sam (student)", student.context()], ["the parent", parent.context()], ["nobody (no role)", outsider.context()], ["the revoked owner", revoked.context()]];
+        const guestBad = [];
+        const roleBad = [];
+        for (const { name, methods } of routes) {
+          for (const method of methods) {
+            const g = await call(guest, name, method);
+            if (!(g.status() === 307 && g.headers()["location"] === `/login?next=/tracker/api/console/${name}`)) guestBad.push(`${method} ${name} ${g.status()} ${g.headers()["location"]}`);
+            for (const [label, ctx] of ROLES) {
+              const res = await call(ctx, name, method);
+              const body = await res.text();
+              const ok = (res.status() === 403 && body === '{"error":"forbidden"}') || (res.status() === 404 && !body.includes("data-console") && !body.includes('"data"'));
+              if (!ok) roleBad.push(`${label} ${method} ${name} ${res.status()} ${body.slice(0, 60)}`);
+            }
+          }
+        }
+        check("REQ-63: a guest gets 307 to /login?next= from every route and method", guestBad.length === 0, guestBad.join(" | "));
+        check("REQ-63: every non-owner role, the revoked owner included, gets 403 forbidden or 404 from every route and method", roleBad.length === 0, roleBad.join(" | "));
+        const pageBad = [];
+        for (const path of ["/console", "/console?mode=creation", "/console?mode=operations"]) {
+          const nobody = await outsider.context().request.get(`${BASE}${path}`, { maxRedirects: 0 });
+          const nobodyBody = await nobody.text();
+          if (nobody.status() !== 404) pageBad.push(`nobody ${path} ${nobody.status()}`);
+          for (const [label, ctx] of ROLES) {
+            const res = await ctx.request.get(`${BASE}${path}`, { maxRedirects: 0 });
+            if (res.status() !== 404 || (await res.text()) !== nobodyBody) pageBad.push(`${label} ${path} ${res.status()}`);
+          }
+        }
+        check("REQ-63: /console and its modes are 404 for every non-owner, byte-identical to the role-less body", pageBad.length === 0, pageBad.join(" | "));
+        const owner = teacher.context();
+        const unsafe = routes.flatMap((r) => r.methods.filter((m) => m !== "GET").map((m) => [r.name, m]));
+        const crossBad = [];
+        for (const [name, method] of unsafe) {
+          const res = await call(owner, name, method, "https://evil.example");
+          if (res.status() !== 403) crossBad.push(`${method} ${name} ${res.status()}`);
+        }
+        check("REQ-63: a cross-site request with each unsafe method a route exports is 403", unsafe.length > 0 && crossBad.length === 0, `${unsafe.map(([n, m]) => `${m} ${n}`).join(", ")} ${crossBad.join(" | ")}`);
+        check("REQ-63: the probes wrote no transition row", Number(psql("select count(*) from tracker.console_transitions")) === rowsBefore);
+        await guest.close();
+        await revoked.context().close();
+      }
+
+      // AC13: one provider down at a time. First the table is checked against the health JSON and panel-slots.ts.
+      {
+        const healthNow = async () => JSON.parse(await (await teacher.context().request.get(`${BASE}/api/console/health`)).text());
+        const providers = Object.keys((await healthNow()).providers ?? {}).sort();
+        const coverage = Object.entries(PROVIDER_SLOTS).filter(([, row]) => {
+          const listed = [...row.degrades, ...row.partial];
+          return new Set(listed).size !== listed.length || listed.some((s) => !SLOT_IDS.includes(s));
+        }).map(([k]) => k);
+        const tableOk = SLOT_IDS.length === 20 && JSON.stringify(Object.keys(PROVIDER_SLOTS).sort()) === JSON.stringify(providers) && coverage.length === 0
+          && JSON.stringify(Object.keys(LEVERS).sort()) === JSON.stringify(providers);
+        check("REQ-63: PROVIDER_SLOTS names exactly the health providers, each with a lever, and its lists cover only the 20 slots",
+          tableOk, `${providers.join(",")} | ${SLOT_IDS.length} slots | bad rows ${coverage.join(",")}`);
+        const notExercised = providers.filter((k) => !LEVERS[k]);
+        check("REQ-63: every provider is exercised (none without a lever)", notExercised.length === 0, notExercised.join(","));
+        if (tableOk) {
+          const pages = {};
+          for (const mode of MODES) pages[mode] = await modeAt(1440, 900, mode);
+          const read = async (mode, path = `/console?mode=${mode}`) => {
+            await pages[mode].goto(`${BASE}${path}`);
+            await pages[mode].locator("[data-console]").waitFor({ timeout: 15000 });
+            return statusesOf(pages[mode], mode);
+          };
+          const baseline = {};
+          for (const mode of MODES) Object.assign(baseline, await read(mode));
+          check("REQ-63: the degradation baseline has all 20 slots", Object.keys(baseline).length === 20 && SLOT_IDS.every((s) => baseline[s]), Object.keys(baseline).length.toString());
+          for (const [provider, row] of Object.entries(PROVIDER_SLOTS)) {
+            const [on, off] = LEVERS[provider];
+            await on();
+            let healed = false;
+            try {
+              const now = {};
+              const counts = {};
+              for (const mode of MODES) {
+                Object.assign(now, await read(mode));
+                counts[mode] = await pages[mode].locator(`[data-mode-panel="${mode}"] [data-panel]`).count();
+                await ac11(pages[mode], `${provider} down, ${mode}`);
+              }
+              const h = (await healthNow()).providers?.[provider];
+              check(`REQ-63: ${provider} down: the health route says error with a message`, h?.status === "error" && Boolean(h?.errorMessage), JSON.stringify(h));
+              const ops = pages.operations;
+              const reason = HEALTH_ENTRY[provider]
+                ? ((await ops.locator(`[data-mode-panel="operations"] [data-panel="integrations"] [data-health="${HEALTH_ENTRY[provider]}"] .console-health-reason`).textContent().catch(() => "")) ?? "")
+                : ((await ops.locator(`[data-mode-panel="operations"] [data-panel="signals"] [data-signal="provider_failure:${provider}"]`).textContent().catch(() => "")) ?? "");
+              check(`REQ-63: ${provider} down: Operations shows a text reason for it`, reason.trim().length > 0, `${HEALTH_ENTRY[provider] ?? `provider_failure:${provider}`}: ${reason.trim().slice(0, 80)}`);
+              const degradedBad = row.degrades.filter((s) => {
+                const n = now[s];
+                return !n || !["error", "stale", "unverifiable"].includes(n.status) || (n.value && n.status !== "stale") || (baseline[s].canonical && !n.canonical);
+              }).map((s) => `${s}=${now[s]?.status}`);
+              check(`REQ-63: ${provider} down: its slots degrade (${row.degrades.length})`, degradedBad.length === 0, degradedBad.join(","));
+              const independent = SLOT_IDS.filter((s) => !row.degrades.includes(s) && !row.partial.includes(s));
+              const moved = independent.filter((s) => now[s]?.status !== baseline[s].status).map((s) => `${s}:${baseline[s].status}->${now[s]?.status}`);
+              check(`REQ-63: ${provider} down: the ${independent.length} independent slots keep their baseline status`, moved.length === 0, moved.join(","));
+              const partialBad = row.partial.filter((s) => now[s] && ["empty", "loading", "error", "unverifiable"].includes(now[s].status) && now[s].value);
+              check(`REQ-63: ${provider} down: its partial slots meet the AC11 rule`, partialBad.length === 0, partialBad.join(","));
+              check(`REQ-63: ${provider} down: every mode still renders all its panels`, counts.sales === 9 && counts.creation === 4 && counts.operations === 7, JSON.stringify(counts));
+            } finally {
+              await off();
+              healed = true;
+            }
+            // Retry (Open gap 3): the Retry link of the first degraded slot in error on that mode, else a reload.
+            const actions = [];
+            const after = {};
+            for (const mode of MODES) {
+              const p = pages[mode];
+              let clicked = false;
+              for (const s of row.degrades.filter((x) => x.startsWith(`${mode}.`))) {
+                const retry = p.locator(`[data-mode-panel="${mode}"] [data-panel="${s.split(".")[1]}"][data-status="error"] .console-failure a`, { hasText: "Retry" });
+                if ((await retry.count()) > 0) {
+                  // The tabpanel may be hidden after a Retry to "?"; follow its href, as a click would.
+                  const href = await retry.first().getAttribute("href");
+                  await p.goto(new URL(href ?? "?", p.url()).toString());
+                  await p.locator("[data-console]").waitFor({ timeout: 15000 });
+                  clicked = true;
+                  actions.push(`${mode}: Retry on ${s}`);
+                  break;
+                }
+              }
+              if (!clicked) {
+                await p.reload();
+                await p.locator("[data-console]").waitFor({ timeout: 15000 });
+                actions.push(`${mode}: reload`);
+              }
+              Object.assign(after, await statusesOf(p, mode));
+            }
+            const notBack = SLOT_IDS.filter((s) => after[s]?.status !== baseline[s].status).map((s) => `${s}:${baseline[s].status}->${after[s]?.status}`);
+            check(`REQ-63: ${provider} healed: the retry action returns every slot to its baseline`, healed && notBack.length === 0, `${actions.join("; ")} ${notBack.join(",")}`);
+          }
+          for (const mode of MODES) await pages[mode].context().close();
+        }
+      }
+
+      // AC14: one sanitised loop per mode, with evidence lines.
+      {
+        const evidence = (line) => console.log(`      evidence: ${line}`);
+        const requests = async (from) => (await mock("/__console/requests", "GET")).slice(from);
+
+        // Sales: next lead, open record, log a non-send outcome, reload, history and the next lead.
+        {
+          const start = (await mock("/__console/requests", "GET")).length;
+          const next = (p) => p.locator('#console-panel-sales [data-panel="next"]');
+          const selectedName = async (p) => ((await next(p).locator('[role="option"][aria-selected="true"] .console-row-title').textContent()) ?? "").trim();
+          const p = await modeAt(1440, 900, "sales");
+          await syncSettled(p);
+          const lead = await selectedName(p);
+          const record = (await next(p).locator(".console-sales-open").getAttribute("href")) ?? "";
+          const hex = /notion\.so\/([0-9a-f]{32})/.exec(record)?.[1] ?? "";
+          const pageId = hex ? `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}` : "";
+          const form = next(p).locator("form.console-outcome");
+          await form.getByLabel("No answer").check();
+          await form.getByRole("button", { name: "Log outcome" }).click();
+          let moved = false;
+          for (let i = 0; i < 100 && !moved; i++) {
+            moved = (await selectedName(p)) !== lead;
+            if (!moved) await p.waitForTimeout(200);
+          }
+          const nextLead = await selectedName(p);
+          const row = psql(`select id || ' ' || state from tracker.console_transitions where notion_page_id = '${pageId || "00000000-0000-0000-0000-000000000000"}' order by created_at desc limit 1`);
+          const [rowId, state] = row.split(" ");
+          // The transition's audit row (written on its update to done) carries the row in `after`.
+          const audits = rowId ? Number(psql(`select count(*) from tracker.audit_log where table_name = 'console_transitions' and after->>'id' = '${rowId}' and after->>'state' = 'done'`)) : 0;
+          const creates = (await requests(start)).filter((r) => r === "POST /v1/pages").length;
+          await p.reload();
+          await syncSettled(p);
+          await next(p).locator('[role="option"]').filter({ hasText: lead }).first().click();
+          const history = ((await next(p).locator("[data-rolodex]").innerText()) ?? "").replaceAll("\n", " ");
+          check("REQ-63 Sales loop: the next lead's record opens in Notion, No answer logs, the transition is done and audited, one Touch is created and read back, and the queue moves on",
+            Boolean(lead) && Boolean(pageId) && moved && state === "done" && audits >= 1 && creates === 1 && history.includes("No answer"),
+            `${lead} -> ${nextLead} ${row} audits=${audits} creates=${creates}`);
+          evidence(`Sales: lead ${lead} (${pageId}), transition ${rowId} ${state}, ${audits} audit row, ${creates} Touch create, read-back shows No answer, next lead ${nextLead}`);
+          await p.context().close();
+        }
+
+        // Creation: the next task, with the weekly review present, then with none; nothing written to Work.
+        {
+          const start = (await mock("/__journal", "GET")).length;
+          const p = await modeAt(1440, 900, "creation");
+          const cr = (id) => p.locator(`#console-panel-creation [data-panel="${id}"]`);
+          const task = await cr("nextAsset").locator("[data-task-id]").getAttribute("data-task-id").catch(() => null);
+          const weekly = await cr("pipeline").locator("[data-task-id]").getAttribute("data-task-id").catch(() => null);
+          let none = "";
+          let noneStatus = "";
+          await mock("/__work/no-weekly");
+          try {
+            await p.reload();
+            await p.locator("[data-console]").waitFor({ timeout: 15000 });
+            noneStatus = (await cr("pipeline").getAttribute("data-status")) ?? "";
+            none = await cr("pipeline").innerText();
+          } finally {
+            await mock("/__work/no-weekly");
+          }
+          const patches = (await mock("/__journal", "GET")).slice(start).filter((j) => j.method === "PATCH" || (j.method === "POST" && j.path === "/v1/pages"));
+          check("REQ-63 Creation loop: the next task and the weekly review show, then No weekly media review task found, with no Work write",
+            Boolean(task) && weekly === "3ead6ae7-3dd7-811e-b525-e3626520b805" && noneStatus === "empty" && none.includes("No weekly media review task found") && patches.length === 0,
+            `${task} ${weekly} ${noneStatus} ${patches.length}`);
+          evidence(`Creation: next task ${task}, weekly review ${weekly}, then ${noneStatus} "No weekly media review task found", ${patches.length} Work writes`);
+          await p.context().close();
+        }
+
+        // Operations: a teacher with no availability, a cancelled occurrence and a lesson gap; trials and cash pulse.
+        {
+          const start = (await mock("/__console/requests", "GET")).length;
+          const T63 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0063";
+          const series = psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), '${T63}', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0063', 'E2E63', 'weekly', '${isoIn(0)}', '23:00', 60, '00000000-0000-0000-0000-00000000aaaa') returning id`).split("\n")[0];
+          try {
+            const p = await modeAt(1440, 900, "operations");
+            const ops = (id) => p.locator(`#console-panel-operations [data-panel="${id}"]`);
+            const row = () => ops("teacherLoad").locator(`[data-teacher="${T63}"]`);
+            const nextWeek = async () => Number(/([\d.]+)\s*h scheduled/.exec((await row().locator("td").nth(1).innerText().catch(() => "")) ?? "")?.[1] ?? NaN);
+            const rowText = await row().innerText().catch(() => "");
+            const missing = (await row().locator('[data-availability="not_entered"], [data-availability="unknown"]').count()) > 0 && !rowText.includes("0 h available") && !rowText.includes("(0%)");
+            const scheduledBefore = await nextWeek();
+            psql(`insert into tracker.class_exceptions (org_id, request_id, series_id, original_date, kind, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), '${series}', '${isoIn(7)}', 'cancelled', '00000000-0000-0000-0000-00000000aaaa')`);
+            await p.reload();
+            await p.locator("[data-console]").waitFor({ timeout: 15000 });
+            const scheduledAfter = await nextWeek();
+            await p.goto(`${BASE}/console?mode=operations&gapDays=31&window=90`);
+            await p.locator("[data-console]").waitFor({ timeout: 15000 });
+            const gaps = await ops("lessonGaps").locator("[data-gap]").evaluateAll((els) => els.map((e) => e.getAttribute("data-gap")));
+            const unknown = ((await ops("trials").locator('[data-funnel-count="Outcome unknown"]').innerText().catch(() => "")) ?? "").replace(/\s+/g, " ").trim();
+            const finance = await ops("finance").innerText();
+            const collected = await ops("finance").locator('[data-cash-line="Collected"]').innerText().catch(() => "");
+            const due = await ops("finance").locator('[data-cash-line="Outstanding due"]').count();
+            const writes = (await requests(start)).filter((r) => /^(PATCH|DELETE|POST \/v1\/pages$)/.test(r));
+            check("REQ-63 Operations loop: no availability shows unknown, never 0 h; the cancelled class leaves the load; a gap, an unknown-outcome trial and Paid-only collected show",
+              missing && scheduledBefore === 1 && scheduledAfter === 0 && gaps.length > 0 && unknown.startsWith("Outcome unknown 1")
+                && collected.includes("$480.00") && due === 1 && finance.includes("Drafts 1") && finance.includes("Voids 1") && writes.length === 0,
+              `${missing} ${scheduledBefore}->${scheduledAfter} gaps=${gaps.length} ${unknown} ${collected.slice(0, 40)} due=${due} writes=${writes.length}`);
+            evidence(`Operations: teacher ${T63} availability not entered (no 0 h), next week ${scheduledBefore} h then ${scheduledAfter} h after the cancellation, gaps ${gaps.join(",")}, trials "${unknown}", collected "${collected.replace(/\s+/g, " ").slice(0, 60)}", Drafts 1, Voids 1, ${writes.length} Notion writes`);
+            await p.context().close();
+          } finally {
+            psql(`delete from tracker.class_exceptions where series_id = '${series}'`);
+            psql(`delete from tracker.class_series where id = '${series}'`);
+          }
+        }
+      }
+      check("REQ-63: no captured, failed or loop page showed a value on an empty, loading, error or unverifiable panel", valueOffences.length === 0, valueOffences.slice(0, 5).join(" | "));
     }
   }
 
