@@ -2266,6 +2266,124 @@ try {
       }
       check("REQ-62: screenshots written to docs/spec/founder-console/screenshots/req-62/", true);
     }
+
+    // REQ-61: call outcomes written to the mock Notion's console leads and Touches, through the transition log.
+    {
+      const mock = (path, method = "POST") => fetch(`${MOCK_NOTION}${path}`, { method, headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+      const next = (p) => p.locator('#console-panel-sales [data-panel="next"]');
+      const selectedName = async (p) => ((await next(p).locator('[role="option"][aria-selected="true"] .console-row-title').textContent()) ?? "").trim();
+      const form = (p) => next(p).locator("form.console-outcome");
+      const statusText = async (p) => ((await form(p).locator(".console-outcome-status").textContent().catch(() => "")) ?? "");
+      const pick = (p, name) => next(p).locator('[role="option"]').filter({ hasText: name }).first().click();
+      const until = async (fn, timeout = 20000) => {
+        const end = Date.now() + timeout;
+        while (Date.now() < end) {
+          if (await fn().catch(() => false)) return true;
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        return false;
+      };
+      const count = (sql) => Number(psql(sql));
+      const requests = async (from) => (await mock("/__console/requests", "GET")).slice(from);
+      const start = (await mock("/__console/requests", "GET")).length;
+      const rowsBefore = count("select count(*) from tracker.console_transitions");
+      const auditsBefore = count("select count(*) from tracker.audit_log where table_name = 'console_transitions'");
+
+      const p = await bridgeAt(1440, 900, "/console?mode=sales");
+      const origins = new Set();
+      p.on("request", (r) => origins.add(new URL(r.url()).origin));
+      await syncSettled(p);
+
+      // AC2, AC11: No answer with a note on Will Later; the queue moves on and the Touch is in Notion.
+      await pick(p, "Will Later");
+      await form(p).getByLabel("No answer").check();
+      await form(p).getByLabel("Note (optional)").fill("E2E voicemail");
+      await form(p).getByRole("button", { name: "Log outcome" }).click();
+      const moved = await until(async () => (await selectedName(p)) !== "Will Later");
+      check("REQ-61: logging No answer moves the selection to another lead", moved, await selectedName(p));
+      check("REQ-61: one transition row, done, and one audit row",
+        count("select count(*) from tracker.console_transitions") === rowsBefore + 1
+          && psql("select state from tracker.console_transitions order by created_at desc limit 1") === "done"
+          && count("select count(*) from tracker.audit_log where table_name = 'console_transitions'") === auditsBefore + 1,
+        psql("select state || ' ' || coalesce(last_error, '') from tracker.console_transitions order by created_at desc limit 1"));
+      check("REQ-61: the transition row keeps no note text",
+        count("select count(*) from tracker.console_transitions where touch::text like '%E2E voicemail%' or patch::text like '%E2E voicemail%'") === 0);
+      await p.reload();
+      await syncSettled(p);
+      await pick(p, "Will Later");
+      const rolodex = (await next(p).locator("[data-rolodex]").innerText()).replaceAll("\n", " ");
+      check("REQ-61: after a reload Will Later shows Attempts 1 and the new Touch", /Attempts\s+1/.test(rolodex) && rolodex.includes("No answer") && rolodex.includes("E2E voicemail"), rolodex.slice(0, 300));
+
+      // AC2 (contract A): Trial booked on Nova New with empty contract fields names them and writes nothing.
+      const beforeContract = (await requests(start)).length;
+      await pick(p, "Nova New");
+      await form(p).getByLabel("Trial booked").check();
+      await form(p).getByRole("button", { name: "Log outcome" }).click();
+      await until(async () => (await statusText(p)).includes("Fill these in Notion first"));
+      const refused = await statusText(p);
+      const contractWrites = (await requests(start)).slice(beforeContract).filter((r) => /^(PATCH|POST \/v1\/pages$)/.test(r));
+      check("REQ-61: Trial booked with empty contract fields lists them and sends no write",
+        refused.includes("Target Program") && refused.includes("Sales Notes") && contractWrites.length === 0 && (await selectedName(p)) === "Nova New",
+        `${refused} | ${contractWrites.join(", ")}`);
+
+      // AC8: the Touch create lands but answers 504; Retry finishes it with one Touch.
+      const tomorrow = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + 86_400_000));
+      await form(p).getByLabel("Contacted, call back later").check();
+      await form(p).getByLabel("Call back at").fill(`${tomorrow}T16:00`);
+      await mock("/__console/commit-then-timeout");
+      await form(p).getByRole("button", { name: "Log outcome" }).click();
+      const unsure = await until(async () => (await form(p).getByRole("button", { name: "Retry" }).count()) === 1);
+      check("REQ-61: a Touch create that times out leaves the lead selected with Retry and the inputs locked",
+        unsure && (await selectedName(p)) === "Nova New" && (await form(p).getByLabel("Call back at").isDisabled()), await statusText(p));
+      const req = psql("select request_id from tracker.console_transitions order by created_at desc limit 1");
+      check("REQ-61: the transition is uncertain", psql(`select state from tracker.console_transitions where request_id = '${req}'`) === "uncertain");
+      await form(p).getByRole("button", { name: "Retry" }).click();
+      await until(async () => (await selectedName(p)) !== "Nova New");
+      const creates = (await requests(start)).filter((r) => r === "POST /v1/pages").length;
+      check("REQ-61: Retry finishes it with no second Touch create",
+        psql(`select state from tracker.console_transitions where request_id = '${req}'`) === "done" && creates === 2,
+        `${psql(`select state || ' ' || coalesce(last_error, '') from tracker.console_transitions where request_id = '${req}'`)} creates=${creates}`);
+
+      // AC12: the browser only talked to the app origin, and the server only to Notion's /v1/ paths.
+      check("REQ-61: the browser made requests only to the app origin", [...origins].every((o) => o === ORIGIN), [...origins].join());
+      check("REQ-61: every mock Notion request in this flow is a /v1/ path", (await requests(start)).every((r) => / \/v1\//.test(r)));
+
+      // AC13: without the marker properties the form says to add them and nothing is written.
+      await mock("/__console/not-ready");
+      const notReadyFrom = (await requests(start)).length;
+      await p.reload();
+      await syncSettled(p);
+      await form(p).getByLabel("No answer").check();
+      await form(p).getByRole("button", { name: "Log outcome" }).click();
+      await until(async () => (await statusText(p)).includes("Add the Txn ID and Last Txn properties"));
+      check("REQ-61: not ready shows the AC13 text and sends no write",
+        (await statusText(p)).includes("Add the Txn ID and Last Txn properties in Notion before logging outcomes.")
+          && (await requests(start)).slice(notReadyFrom).filter((r) => /^(PATCH|POST \/v1\/pages$)/.test(r)).length === 0,
+        await statusText(p));
+      await mock("/__console/not-ready");
+      check("REQ-61: the Sales page with the form has no sideways scroll at 1440", await noSideScroll(p));
+      await p.context().close();
+      {
+        const narrow = await bridgeAt(390, 844, "/console?mode=sales");
+        await syncSettled(narrow);
+        check("REQ-61: the Sales page with the form has no sideways scroll at 390", await noSideScroll(narrow));
+        await narrow.context().close();
+      }
+
+      // AC5: other roles get 403 from the route; a cross-site POST is refused by the proxy.
+      const body = { requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb6161", pageId: "eeeeeeee-0000-4000-8000-000000000006", outcome: "no_answer", expected: { stage: "Working", attempts: 1, lastEditedAt: new Date().toISOString() }, note: "" };
+      for (const [label, who] of [["Ryan", ryan], ["the role-less user", outsider]]) {
+        const res = await who.context().request.post(`${BASE}/api/console/outcomes`, { data: body, headers: { Origin: ORIGIN }, maxRedirects: 0 });
+        check(`REQ-61: ${label} gets 403 forbidden from the outcomes route`, res.status() === 403 && (await res.text()) === '{"error":"forbidden"}', `${res.status()}`);
+      }
+      {
+        const owner = await bridgeAt(1440, 900, "/console?mode=sales");
+        const res = await owner.context().request.post(`${BASE}/api/console/outcomes`, { data: body, headers: { Origin: "https://evil.example" }, maxRedirects: 0 });
+        check("REQ-61: a cross-site POST gets 403 from the proxy", res.status() === 403, `${res.status()}`);
+        await owner.context().close();
+      }
+      check("REQ-61: refusals and denials left no extra transition row", count("select count(*) from tracker.console_transitions") === rowsBefore + 2);
+    }
   }
 
   // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.

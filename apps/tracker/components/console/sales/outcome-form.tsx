@@ -204,7 +204,9 @@ export function OutcomeForm({ lead }: { lead: SalesLead }) {
       status = statusOf(0, null);
     }
     if (status.kind === "done") {
-      setDraft({ input: EMPTY, requestId: null, status });
+      // The saved draft goes back to idle; only this render shows the done line.
+      drafts.set(lead.id, { input: EMPTY, requestId: null, status: { kind: "idle" } });
+      setDraftState({ input: EMPTY, requestId: null, status });
       await advance(lead.id);
       return;
     }
