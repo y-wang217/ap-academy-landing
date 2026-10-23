@@ -16,14 +16,14 @@ const uuid = z.guid();
 const hhmm = z.string().transform((t) => t.slice(0, 5));
 const ts = z.string();
 
-const WindowRow = z.object({
+export const WindowRow = z.object({
   id: uuid, notion_staff_id: uuid, weekday: z.number(), start_time: hhmm, end_time: hhmm,
   effective_from: z.string(), effective_until: z.string().nullable(), updated_at: ts,
 }).transform((r): WindowRecord => ({
   id: r.id, staffId: r.notion_staff_id, weekday: r.weekday, startTime: r.start_time, endTime: r.end_time,
   effectiveFrom: r.effective_from, effectiveUntil: r.effective_until, updatedAt: r.updated_at,
 }));
-const AvailabilityExceptionRow = z.object({
+export const AvailabilityExceptionRow = z.object({
   id: uuid, notion_staff_id: uuid, on_date: z.string(), kind: z.enum(["time_off", "extra"]),
   start_time: hhmm.nullable(), end_time: hhmm.nullable(), updated_at: ts,
 }).transform((r): AvailabilityExceptionRecord => ({

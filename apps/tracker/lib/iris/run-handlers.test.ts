@@ -4,6 +4,7 @@ import type { DraftPort } from "./draft";
 import { handleIrisRun, type IrisRunDeps } from "./handlers";
 import { GmailError, type GmailMessage } from "./gmail";
 import type { GmailPort } from "./intake";
+import type { ClassifierIntent } from "./policy";
 import { fakeIrisStore } from "./store.fake";
 
 // REQ-42 AC10, AC11, AC12, AC19, AC20: the bearer-protected run.
@@ -30,7 +31,7 @@ function world(opts: { paused?: boolean; listFails?: boolean; classify?: Classif
     get: async (_t, id) => (gmailCalls.push(`get:${id}`), message(id, "who@z.com")),
   };
   const directoryCalls: number[] = [];
-  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, schedule: null };
+  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, schedule: null, availability: null };
   const build = vi.fn((org: string) => (org ? deps : null));
   const run = (authorization: string | null = AUTH, env = { secret: SECRET as string | undefined, orgId: ORG as string | undefined }) =>
     handleIrisRun({ authorization, env, build, now: () => new Date(T0) });
@@ -246,7 +247,7 @@ describe("handleIrisRun: make-up offers", () => {
   const family = [{ studentId: SAM, studentName: "Sam Lee", stage: "Active", parentEmail: "ann@x.com", parentName: "Ann Lee" }];
 
   it("drafts an offer, then classifies the pick on the same thread as a new message", async () => {
-    const intents = ["reschedule_request", "general_question"];
+    const intents: ClassifierIntent[] = ["reschedule_request", "general_question"];
     const classify: ClassifyPort = async () => {
       const intent = intents.shift() ?? "general_question";
       return { ok: true, model: "m", inputTokens: 1, outputTokens: 1, output: { intents: [intent], primary: intent, confidence: 0.95, flags: [], childName: "", summary: "" } };

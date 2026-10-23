@@ -5,11 +5,19 @@
 // adds the classifier intents, the flags and the sensitive-trigger phrases.
 // Version 3 (REQ-44) adds the voice rules, the signature and what gets a draft.
 // Version 4 (REQ-46) splits cancellations by notice from the scheduler.
+// Version 5 (REQ-47) offers make-up times from teacher availability.
 
-export const POLICY_VERSION = 4;
+export const POLICY_VERSION = 5;
 
 /** A cancellation with at least this many hours of notice is "with notice". */
 export const NOTICE_HOURS = 12;
+
+/** The line the model writes where code puts the make-up times (REQ-47). */
+export const OPTIONS_TOKEN = "[OPTIONS]";
+/** At most this many make-up times are offered, one per date. */
+export const MAKEUP_MAX_SLOTS = 3;
+/** No make-up time starts sooner than this many hours after the run. */
+export const MAKEUP_LEAD_HOURS = 24;
 
 export const REPLY_TYPES = [
   "cancel_with_notice",
@@ -49,12 +57,12 @@ export const POLICY: Record<ReplyType | EscalateOnly, PolicySection> = {
   },
   reschedule_request: {
     title: "Reschedule request",
-    text: "Make-up and reschedule times come only from the teacher's real availability. Until Iris can read it, say that Charlie will send some options.",
+    text: "Make-up and reschedule times come only from the teacher's real availability. No times can be offered for this class yet, so say that Charlie will send options.",
     autoSendAllowed: true,
   },
   reschedule_offer: {
     title: "Reschedule offer",
-    text: "Offer only the times supplied with the message, which come from the teacher's real availability. Never book a time.",
+    text: "Offer the make-up times listed for this family, which come from the teacher's real availability. Write the line [OPTIONS] on its own line where the times go; the times are written in for you. Never write a day or a clock time yourself. Never say a time is booked: Charlie confirms once the family picks one.",
     autoSendAllowed: true,
   },
   pause_or_stop: {
@@ -130,7 +138,13 @@ export const DRAFTABLE_INTENTS = ["cancellation", "reschedule_request", "pause_o
 export const DRAFTABLE_ESCALATIONS = ["no_show"] as const;
 /** What a classified cancellation becomes once the scheduler shows its notice (REQ-46). */
 export const SCHEDULE_REPLY_TYPES = ["cancel_with_notice", "late_cancel"] as const;
-export type DraftableType = (typeof DRAFTABLE_INTENTS)[number] | (typeof DRAFTABLE_ESCALATIONS)[number] | (typeof SCHEDULE_REPLY_TYPES)[number];
+/** What a classified reschedule request becomes when the teacher has free time (REQ-47). */
+export const OFFER_REPLY_TYPES = ["reschedule_offer"] as const;
+export type DraftableType =
+  | (typeof DRAFTABLE_INTENTS)[number]
+  | (typeof DRAFTABLE_ESCALATIONS)[number]
+  | (typeof SCHEDULE_REPLY_TYPES)[number]
+  | (typeof OFFER_REPLY_TYPES)[number];
 
 /**
  * What the classifier may answer (REQ-43). cancel_with_notice and late_cancel
@@ -170,10 +184,10 @@ export const FLAGS = ["money_dispute", "legal_threat", "crisis", "hardship", "re
 export type Flag = (typeof FLAGS)[number];
 
 /**
- * Flags code adds after the schedule read (REQ-46). Kept out of FLAGS, so the
- * classifier is never asked for them and they never escalate.
+ * Flags code adds after the schedule read (REQ-46, REQ-47). Kept out of FLAGS,
+ * so the classifier is never asked for them and they never escalate.
  */
-export const SCHEDULE_FLAGS = ["schedule_unknown"] as const;
+export const SCHEDULE_FLAGS = ["schedule_unknown", "availability_not_entered", "no_free_slot"] as const;
 
 export const FLAG_HINTS: Record<Flag, string> = {
   money_dispute: "The family disputes a charge, an amount or a payment.",

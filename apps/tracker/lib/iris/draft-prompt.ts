@@ -1,5 +1,5 @@
 import { historyLines, messageBlock, scrubber, type HistoryLine } from "./classify-prompt";
-import { HOLDING_LINE, POLICY, SCHEDULE_REPLY_TYPES, VOICE_RULES, type DraftableType } from "./policy";
+import { HOLDING_LINE, OPTIONS_TOKEN, POLICY, SCHEDULE_REPLY_TYPES, VOICE_RULES, type DraftableType } from "./policy";
 
 /**
  * What Iris sends to Claude to draft one reply (REQ-44 AC1, tracker ADR
@@ -17,8 +17,10 @@ export type DraftInput = {
   surnames: string[];
   history: HistoryLine[];
   body: string;
-  /** The missed and next class dates, YYYY-MM-DD, for the two schedule-aware types only (REQ-46). */
+  /** The missed (or to-move) and next class dates, YYYY-MM-DD, for the schedule-aware types only (REQ-46, REQ-47). */
   schedule?: { missedDate: string; nextDate: string | null };
+  /** How many make-up times code writes in at the placeholder, for reschedule_offer only (REQ-47). Never the times themselves. */
+  optionCount?: number;
 };
 
 const dayFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
@@ -67,7 +69,11 @@ export function buildDraftPrompt(input: DraftInput): { system: string; user: str
 }
 
 function scheduleLines(input: DraftInput): string[] {
-  if (!input.schedule || !(SCHEDULE_REPLY_TYPES as readonly string[]).includes(input.replyType)) return [];
-  const next = input.schedule.nextDate ? classDay(input.schedule.nextDate) : "none on the schedule";
-  return [`Missed class: ${classDay(input.schedule.missedDate)}`, `Next scheduled class: ${next}`];
+  if (!input.schedule) return [];
+  const next = `Next scheduled class: ${input.schedule.nextDate ? classDay(input.schedule.nextDate) : "none on the schedule"}`;
+  if (input.replyType === "reschedule_offer") {
+    return [`Class to move: ${classDay(input.schedule.missedDate)}`, next, `Make-up times offered: ${input.optionCount ?? 0}, written in for you where you put ${OPTIONS_TOKEN}`];
+  }
+  if (!(SCHEDULE_REPLY_TYPES as readonly string[]).includes(input.replyType)) return [];
+  return [`Missed class: ${classDay(input.schedule.missedDate)}`, next];
 }

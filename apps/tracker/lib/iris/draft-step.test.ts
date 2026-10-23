@@ -344,7 +344,6 @@ describe("runDraft: schedule-aware cancellations (REQ-46)", () => {
 // REQ-47 AC3 to AC5, AC8, AC10: reschedule requests offer real make-up times, written in by code.
 describe("runDraft: make-up offers (REQ-47)", () => {
   const TEACHER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009";
-  const NO_HOURS = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0010";
   // T0 is Wed 2026-10-21 08:00 Toronto. Sam's class is every Tuesday 17:00, so the class to move is Tue 27 October.
   const weekly = (o: Partial<ClassSeries> = {}): ClassSeries => ({
     id: "s1", staffId: TEACHER, studentId: SAM, subject: "MPM2D", kind: "weekly", startDate: "2026-10-06", startTime: "17:00", durationMinutes: 60, effectiveUntil: null, ...o,
@@ -408,7 +407,7 @@ describe("runDraft: make-up offers (REQ-47)", () => {
     ["no_free_slot", { [TEACHER]: { windows: [{ weekday: 2, startTime: "17:00", endTime: "18:00", effectiveFrom: "2026-01-01", effectiveUntil: null }] } }, { [SAM]: [weekly()] }, "some"],
     ["schedule_unknown", {}, {}, "some"],
     ["schedule_unknown", {}, { [SAM]: [weekly()] }, "none"],
-  ] as const)("fallback %s: a reschedule_request draft with no time and the flag, not escalated", async (flag, calendars, series, student) => {
+  ] as [string, Record<string, Partial<TeacherCalendar>>, Record<string, ClassSeries[]>, "some" | "none"][])("fallback %s: a reschedule_request draft with no time and the flag, not escalated", async (flag, calendars, series, student) => {
     const w = world();
     const id = await w.add({ ...reschedule, flags: [], ...(student === "none" && { notionStudentId: null }) });
     w.setReply(() => good({ body: "Hi Pat,\n\nNo problem. Charlie will send options." }));
