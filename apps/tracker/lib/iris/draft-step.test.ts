@@ -73,7 +73,7 @@ describe("runDraft: a clean draft (AC2)", () => {
     const w = world();
     const id = await w.add();
     const out = await runDraft(w.deps());
-    expect(out).toEqual({ result: "ok", drafted: 1, escalated: 0, failed: 0, error: null });
+    expect(out).toEqual({ result: "ok", drafted: 1, escalated: 0, failed: 0, error: null, draftedIds: [{ messageId: id, draftId: w.draftsOf(id)[0].id }] });
     const [d] = w.draftsOf(id);
     expect(d).toMatchObject({ version: 1, state: "proposed", createdBy: "iris", edited: false, replyType: "cancellation", policyVersion: POLICY_VERSION, bodyText: CLEAN });
     expect(d.bodyText).not.toContain(SIGNATURE);
@@ -179,7 +179,7 @@ describe("runDraft: failures, caps and budget (AC7)", () => {
   it("no port makes zero calls and reads nothing", async () => {
     const w = world();
     await w.add();
-    expect(await runDraft(w.deps({ draft: null }))).toEqual({ result: "ok", drafted: 0, escalated: 0, failed: 0, error: null });
+    expect(await runDraft(w.deps({ draft: null }))).toEqual({ result: "ok", drafted: 0, escalated: 0, failed: 0, error: null, draftedIds: [] });
     expect(w.db.calls).not.toContain("listDraftable");
   });
 

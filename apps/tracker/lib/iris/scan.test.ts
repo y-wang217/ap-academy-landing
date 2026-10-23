@@ -1,7 +1,9 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { TUNING } from "../domain/tuning";
 import { DEFAULT_CREDITS_DATA_SOURCE_ID, DEFAULT_INVOICES_DATA_SOURCE_ID } from "../notion/config";
+import { AUTOMATED_LINE, NEVER_AUTO_SEND } from "./policy";
 
 // REQ-42 AC8, AC25: what the Iris code may name, and who may read parent fields.
 const ROOT = join(__dirname, "..", "..");
@@ -120,5 +122,26 @@ describe("Iris never books", () => {
       expect(src, rel(f)).not.toMatch(/\.(insert|update|upsert|delete|rpc)\(/);
       expect(src, rel(f)).not.toMatch(/\b(insert|update|upsert|delete|rpc)\b/i);
     }
+  });
+});
+
+// REQ-49 AC3, AC11: the SQL keeps its own copies of the never list and the streak; they match the code.
+describe("auto-send constants", () => {
+  const sql = readFileSync(join(ROOT, "..", "..", "supabase", "migrations", "0031_iris_auto_send.sql"), "utf8");
+
+  it("every never list in 0031 is NEVER_AUTO_SEND, and every streak threshold is TUNING.irisAutoSendStreak", () => {
+    const lists = [...sql.matchAll(/never_list constant text\[\] := array\[([^\]]*)\]/g)].map((m) => m[1].split(",").map((x) => x.trim().replace(/'/g, "")));
+    expect(lists.length).toBeGreaterThanOrEqual(2);
+    for (const l of lists) expect(l).toEqual([...NEVER_AUTO_SEND]);
+    const streaks = [...sql.matchAll(/streak_threshold constant integer := (\d+);/g)].map((m) => Number(m[1]));
+    expect(streaks.length).toBeGreaterThanOrEqual(2);
+    for (const n of streaks) expect(n).toBe(TUNING.irisAutoSendStreak);
+  });
+
+  it("revokes the owner's raw switch, and AUTOMATED_LINE is the decision 13 text", () => {
+    expect(sql).toMatch(/revoke update \(auto_send_enabled\) on iris\.reply_types from authenticated;/);
+    expect(AUTOMATED_LINE).toBe(
+      "This reply was sent automatically from AP Academy's written policy. If anything here is not right, reply to this email and Charlie will pick it up personally.",
+    );
   });
 });

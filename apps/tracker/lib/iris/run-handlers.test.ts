@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import { runAutoSend } from "./auto-send";
 import type { ClassifyPort } from "./classify";
 import type { DraftPort } from "./draft";
 import { handleIrisRun, type IrisRunDeps } from "./handlers";
 import { GmailError, type GmailMessage, type GmailSendPort } from "./gmail";
 import type { GmailPort } from "./intake";
 import { POLICY_VERSION } from "./policy";
+import { runSends } from "./send";
 import type { ClassifierIntent } from "./policy";
 import { fakeIrisStore } from "./store.fake";
 
@@ -433,5 +435,109 @@ describe("handleIrisRun: make-up offers", () => {
     expect(byGmail("m2")).toMatchObject({ intent: "general_question", state: "drafted", threadId: byGmail("m1").threadId });
     expect(w.db.drafts.get(offer.id)).toEqual(offer);
     expect(reads).toHaveLength(2);
+  });
+});
+
+// REQ-49 AC1, AC4, AC6 to AC8: the policy reset and the auto-send gate in the run.
+describe("handleIrisRun: auto-send", () => {
+  const SAM = "11111111-1111-4111-8111-111111111111";
+  const family = [{ studentId: SAM, studentName: "Sam Lee", stage: "Active", parentEmail: "ann@x.com", parentName: "Ann Lee" }];
+
+  function autoWorld(o: { sendingEnabled?: boolean; typeOn?: boolean } = {}) {
+    const order: string[] = [];
+    const classify: ClassifyPort = async () => (order.push("classify"), {
+      ok: true, model: "m", inputTokens: 1, outputTokens: 1,
+      output: { intents: ["general_question"], primary: "general_question", confidence: 0.95, flags: [], childName: "", summary: "" },
+    });
+    const draft: DraftPort = async () => (order.push("draft"), { ok: true, model: "m", inputTokens: 1, outputTokens: 1, output: { body: "Hi Ann,\n\nYes, Tuesday works.", needsCharlie: false, reason: "" } });
+    const pushed: string[][] = [];
+    const push: IrisRunDeps["push"] = async ({ store }) => {
+      order.push("push");
+      pushed.push((await store.listPushable(5, 20)).map((c) => c.messageId));
+      return { pushed: 0, failed: 0, removed: 0, error: null };
+    };
+    const g = sendPort("gm-1");
+    const w = world({ classify, draft, push, sender: g.port });
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.directory = async () => family;
+    deps.gmail.get = async (_t, id) => message(id, "ann@x.com");
+    w.db.settings.sendingEnabled = o.sendingEnabled ?? true;
+    w.db.replyType("general_question", { autoSendEnabled: o.typeOn ?? true }, POLICY_VERSION);
+    const reset = w.db.store.resetForPolicy;
+    w.db.store.resetForPolicy = async (v) => (order.push("reset"), reset(v));
+    const gate = w.db.store.autoSendCandidates;
+    w.db.store.autoSendCandidates = async (ids) => (order.push("gate"), gate(ids));
+    return { w, g, order, pushed };
+  }
+
+  it("resets for the policy first, gates after draft and before push, sends with the line, and pushes nothing auto-approved", async () => {
+    const { w, g, order, pushed } = autoWorld();
+    const body = await (await w.run()).json();
+    expect(order).toEqual(["reset", "classify", "draft", "gate", "push"]);
+    expect(body).toMatchObject({ result: "ok", drafted: 1, sent: 1 });
+    expect(w.db.runs[0]).toMatchObject({ sent: 1, error: null });
+    expect(g.calls).toEqual(["sendToken", "send"]);
+    expect(pushed).toEqual([[]]);
+    const outbound = [...w.db.messages.values()].find((m) => m.direction === "outbound")!;
+    expect(outbound.bodyText).toContain("This reply was sent automatically");
+  });
+
+  it("a type that is off is skipped with one event, and the draft goes to the phone backup", async () => {
+    const { w, g, pushed } = autoWorld({ typeOn: false });
+    await w.run();
+    expect(g.calls).toEqual([]);
+    expect(w.db.events.filter((e) => e.kind === "auto_send_skipped").map((e) => e.detail.conditions)).toEqual([["type_disabled"]]);
+    expect(pushed[0]).toHaveLength(1);
+  });
+
+  it("a send held at night goes out with the first run at or after 07:00", async () => {
+    const { w, g } = autoWorld();
+    w.db.setNow(() => Date.parse("2026-10-23T02:00:00Z"));
+    const a = w.db.drafted({ replyType: "general_question", intent: "general_question" });
+    const night = await runAutoSend({
+      store: w.db.store, sender: g.port, mailbox: "charlie@apacademy.ca", settings: w.db.settings, drafted: [a], now: () => new Date("2026-10-23T02:00:00Z"), startedAtMs: Date.parse("2026-10-23T02:00:00Z"),
+    });
+    expect(night).toMatchObject({ approved: 1, sent: 0 });
+    w.db.setNow(() => Date.parse("2026-10-23T10:59:00Z"));
+    expect(await w.db.store.listStuckSends(5)).toEqual([]);
+    w.db.setNow(() => Date.parse("2026-10-23T11:00:01Z"));
+    expect(await runSends({ store: w.db.store, gmail: g.port, mailbox: "charlie@apacademy.ca", now: () => new Date("2026-10-23T11:00:01Z"), startedAtMs: Date.parse("2026-10-23T11:00:01Z") }))
+      .toMatchObject({ sent: 1 });
+    expect(w.db.drafts.get(a.draftId)!.state).toBe("sent");
+  });
+
+  it("a paused run touches no reply type and sends nothing", async () => {
+    const { w, g } = autoWorld();
+    w.db.settings.paused = true;
+    w.db.replyType("late_cancel", {}, POLICY_VERSION - 1);
+    expect(await (await w.run()).json()).toEqual({ result: "paused" });
+    expect(w.db.calls).not.toContain("resetForPolicy");
+    expect(w.db.replyTypes.get("late_cancel")!.autoSendEnabled).toBe(true);
+    expect(g.calls).toEqual([]);
+  });
+
+  it("an edit or a reject of a draft of an enabled type switches it off and resets the streak", () => {
+    const db = fakeIrisStore();
+    db.replyType("late_cancel");
+    db.review(db.drafted().draftId, "edit");
+    expect(db.replyTypes.get("late_cancel")).toMatchObject({ autoSendEnabled: false, autoSendEligible: false, uneditedStreak: 0, disabledReason: "edited_after_enable" });
+    db.replyType("late_cancel");
+    db.review(db.drafted().draftId, "reject");
+    expect(db.replyTypes.get("late_cancel")).toMatchObject({ autoSendEnabled: false, disabledReason: "edited_after_enable" });
+    expect(db.events.filter((e) => e.kind === "auto_send_disabled")).toHaveLength(2);
+  });
+
+  it("a changed POLICY_VERSION turns every type off at the next run, and a second run changes nothing", async () => {
+    const { w } = autoWorld({ typeOn: true });
+    w.db.replyType("late_cancel", {}, POLICY_VERSION - 1);
+    w.db.replyType("cancellation", { autoSendEnabled: false }, POLICY_VERSION - 1);
+    await w.run();
+    expect(w.db.replyTypes.get("late_cancel")).toMatchObject({ autoSendEnabled: false, autoSendEligible: false, uneditedStreak: 0, streakPolicyVersion: POLICY_VERSION, disabledReason: "policy_changed" });
+    expect(w.db.replyTypes.get("cancellation")).toMatchObject({ uneditedStreak: 0, streakPolicyVersion: POLICY_VERSION, disabledReason: null });
+    expect(w.db.replyTypes.get("general_question")!.autoSendEnabled).toBe(true);
+    const disabled = () => w.db.events.filter((e) => e.kind === "auto_send_disabled").length;
+    expect(disabled()).toBe(1);
+    expect(await w.db.store.resetForPolicy(POLICY_VERSION)).toBe(0);
+    expect(disabled()).toBe(1);
   });
 });

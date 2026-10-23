@@ -149,3 +149,28 @@ describe("ADR 0075", () => {
     }
   });
 });
+
+// REQ-49 AC14: the auto-send ADR and the operator guide.
+describe("ADR 0078", () => {
+  const file = "0078-iris-auto-send.md";
+  it("has every section, is indexed and has no em dash", () => {
+    const src = read(join(DECISIONS, file));
+    expect(src, file).toMatch(/^Status: accepted/m);
+    for (const h of ["## Context", "## Decision", "## Alternatives considered", "## Consequences"]) expect(src, `${file} ${h}`).toContain(h);
+    expect(read(join(DECISIONS, "README.md"))).toContain(`(${file})`);
+    expect(src).not.toMatch(/[—]/);
+  });
+
+  it("names the switches, the gate, quiet hours and the three fail-safes", () => {
+    const src = read(join(DECISIONS, file));
+    for (const s of ["Sending enabled", "set_auto_send", "auto_approve_draft", "evaluateGate", "20", "quiet hours", "07:00", "edited_after_enable", "send_failed", "policy_changed", "withdrawn", "0031"]) {
+      expect(src, s).toContain(s);
+    }
+  });
+
+  it("the operator guide says how to switch auto-send and how to stop a 07:00 send", () => {
+    const src = read(join(ROOT, "apps/tracker/docs/iris-operations.md"));
+    for (const s of ["## Auto-send", "Sending enabled", "Turn off", "07:00", "edited", "policy"]) expect(src, s).toContain(s);
+    expect(src).not.toMatch(/[—]/);
+  });
+});

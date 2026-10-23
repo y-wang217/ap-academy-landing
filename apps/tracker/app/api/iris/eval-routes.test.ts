@@ -185,7 +185,10 @@ describe("loadReadiness (AC11)", () => {
     const r = await loadReadiness(reader, "claude-test");
     if (r.kind !== "ok") throw new Error("expected ok");
     expect(r.rows.map((x) => x.type)).toEqual(["cancel_with_notice", "late_cancel", "cancellation", "reschedule_request", "reschedule_offer", "general_question"]);
-    expect(r.rows.find((x) => x.type === "cancellation")).toEqual({ type: "cancellation", pass: false, failing: ["streak"], count: 22, streak: 7 });
+    expect(r.rows.find((x) => x.type === "cancellation")).toEqual({
+      type: "cancellation", pass: false, failing: ["streak"], count: 22, streak: 7,
+      enabled: false, eligible: false, switchable: false, approvedTotal: 0, editedTotal: 0, rejectedTotal: 0, disabledReason: null, disabledAt: null,
+    });
     expect(r.never).toEqual(["pause_or_stop", "billing_question", "refund_request", "no_show", "other"]);
   });
 
