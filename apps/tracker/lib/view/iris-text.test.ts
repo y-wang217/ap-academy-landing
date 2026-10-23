@@ -83,7 +83,7 @@ describe("iris-text: classification labels", () => {
 describe("iris-text, drafting", () => {
   it("labels the new states and reasons", () => {
     expect(stateLabel("drafted", null)).toBe("Draft waiting");
-    expect(stateLabel("approved", null)).toBe("Approved, sending");
+    expect(stateLabel("approved", null)).toBe("Approved, send by hand");
     expect(stateLabel("sent", null)).toBe("Sent");
     expect(stateLabel("escalated", "needs_charlie")).toBe("Iris wants you to check");
     expect(stateLabel("escalated", "draft_rule")).toBe("Draft held back");

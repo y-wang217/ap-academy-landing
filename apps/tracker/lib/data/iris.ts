@@ -1,10 +1,8 @@
 import { z } from "zod";
 import type { IrisReader } from "../iris/handlers";
-import type { SendStore } from "../iris/send";
-import { ApproveSendResult, ClaimResultValue, ClassifiableRow, DraftRow, FailResultValue, FinishResultValue, RetrySendResult, SendContextRow, SendViewRow, DraftableRow, HistoryRow, InboxMessageRow, InboxThreadRow, MessageDetailRow, OwnerSettingsRow, PurgeCounts, PushRow, PushCandidateRow, PushDayRow, ReviewResult, RetryRow, RunRow, SettingsRow, ThreadMessageRow, ThreadRow, type InboxMessage } from "../iris/schemas";
+import { ClassifiableRow, DraftRow, DraftableRow, HistoryRow, InboxMessageRow, InboxThreadRow, MessageDetailRow, OwnerSettingsRow, PurgeCounts, PushRow, PushCandidateRow, PushDayRow, ReviewResult, RetryRow, RunRow, SettingsRow, ThreadMessageRow, ThreadRow, type InboxMessage } from "../iris/schemas";
 import { EventRow } from "../iris/eval-schemas";
 import type { EvalPendingMessage, IrisStore, MessageInsert, MessagePatch, ThreadPatch } from "../iris/store";
-import { TUNING } from "../domain/tuning";
 import type { Db } from "./client";
 
 /**
@@ -78,53 +76,8 @@ const THREAD_SELECT = "id, gmail_thread_id, first_received_at, last_inbound_at, 
 const PUSH_SELECT = "id, message_id, draft_id, day, notion_block_id, comment_done, state, attempts, last_error, purge_at";
 const DRAFT_SELECT = "id, version, reply_type, body_text, policy_version, state, created_by, edited, approved_at, rejected_reason, created_at";
 
-const SEND_CONTEXT = "id, state, attempts, rfc_message_id, draft:drafts(body_text), message:messages(from_email, rfc_message_id, thread:threads(gmail_thread_id, subject))";
-
-/**
- * The send rows (REQ-48, migration 0028), through whichever client is passed:
- * the owner's for Approve and Retry, the service client for the run. Every
- * change goes through a security definer function that checks the caller.
- */
-function sendStore(iris: IrisClient, orgId: string): SendStore {
-  return {
-    async sendContext(sendId) {
-      const { data, error } = await iris.from("sends").select(SEND_CONTEXT).eq("org_id", orgId).eq("id", sendId).maybeSingle();
-      if (error) fail();
-      return data ? SendContextRow.parse(data) : null;
-    },
-    async claimSend(sendId, leaseSeconds, maxAttempts) {
-      const { data, error } = await iris.rpc("claim_send", { p_send: sendId, p_lease_seconds: leaseSeconds, p_max_attempts: maxAttempts });
-      if (error) fail();
-      return ClaimResultValue.parse(data);
-    },
-    async finishSend(sendId, r) {
-      const { data, error } = await iris.rpc("finish_send", { p_send: sendId, p_gmail_message_id: r.gmailMessageId, p_from: r.from, p_body: r.body, p_sent_at: r.sentAt });
-      if (error) fail();
-      if (FinishResultValue.parse(data) === "not_found") fail();
-    },
-    async failSendAttempt(sendId, message, maxAttempts) {
-      const { data, error } = await iris.rpc("fail_send_attempt", { p_send: sendId, p_error: message.slice(0, 300), p_max_attempts: maxAttempts });
-      if (error) fail();
-      return FailResultValue.parse(data);
-    },
-  };
-}
-
 export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
   return {
-    ...sendStore(iris, orgId),
-    async listStuckSends(limit) {
-      const { data, error } = await iris
-        .from("sends")
-        .select("id")
-        .eq("org_id", orgId)
-        .eq("state", "sending")
-        .or(`lease_until.is.null,lease_until.lt."${new Date().toISOString()}"`)
-        .order("created_at", { ascending: true })
-        .limit(limit);
-      if (error) fail();
-      return z.array(z.object({ id: z.guid() })).parse(data ?? []).map((r) => r.id);
-    },
     async getSettings() {
       const { data, error } = await iris.from("settings").select().eq("org_id", orgId).maybeSingle();
       if (error) fail();
@@ -372,7 +325,7 @@ export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
         .from("runs")
         .insert({
           org_id: orgId, started_at: r.startedAt, finished_at: r.finishedAt, result: r.result,
-          seen: r.seen, stored: r.stored, matched: r.matched, classified: r.classified, drafted: r.drafted, sent: r.sent, escalated: r.escalated, skipped: r.skipped, failed: r.failed, purged: r.purged,
+          seen: r.seen, stored: r.stored, matched: r.matched, classified: r.classified, drafted: r.drafted, escalated: r.escalated, skipped: r.skipped, failed: r.failed, purged: r.purged,
           error: r.error?.slice(0, 300) ?? null,
         })
         .select("id")
@@ -488,20 +441,14 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
     const threadIds = [...new Set(rows.map((r) => r.thread_id))];
     const threads = new Map<string, z.infer<typeof InboxThreadRow>>();
     const failedPush = new Set<string>();
-    const failedSend = new Map<string, string>();
     if (threadIds.length > 0) {
-      const ids = rows.map((r) => r.id);
-      const [t, p, f] = await Promise.all([
+      const [t, p] = await Promise.all([
         iris.from("threads").select("id, gmail_thread_id, subject, notion_student_ids").in("id", threadIds),
-        iris.from("pushes").select("message_id").eq("org_id", orgId).eq("state", "failed").in("message_id", ids),
-        section === "failed"
-          ? iris.from("sends").select("id, message_id").eq("org_id", orgId).eq("state", "failed").in("message_id", ids)
-          : Promise.resolve({ data: [], error: null }),
+        iris.from("pushes").select("message_id").eq("org_id", orgId).eq("state", "failed").in("message_id", rows.map((r) => r.id)),
       ]);
-      if (t.error || p.error || f.error) fail();
+      if (t.error || p.error) fail();
       for (const row of z.array(InboxThreadRow).parse(t.data ?? [])) threads.set(row.id, row);
       for (const row of z.array(z.object({ message_id: z.guid() })).parse(p.data ?? [])) failedPush.add(row.message_id);
-      for (const row of z.array(z.object({ id: z.guid(), message_id: z.guid() })).parse(f.data ?? [])) failedSend.set(row.message_id, row.id);
     }
     return rows.map((r) => {
       const t = threads.get(r.thread_id);
@@ -509,7 +456,6 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
         id: r.id, gmailThreadId: t?.gmail_thread_id ?? "", fromEmail: r.from_email, subject: t?.subject ?? null, snippet: r.snippet,
         receivedAt: r.received_at, state: r.state, escalationReason: r.escalation_reason, intent: r.intent, confidence: r.confidence, flags: r.flags,
         notionStudentIds: t?.notion_student_ids ?? [], notionStudentId: r.notion_student_id, pushFailed: failedPush.has(r.id),
-        ...(section === "failed" ? { sendId: failedSend.get(r.id) ?? null } : {}),
       };
     });
   };
@@ -519,17 +465,6 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
     return ReviewResult.parse(data);
   };
   return {
-    ...sendStore(iris, orgId),
-    async approveForSend(id, version) {
-      const { data, error } = await iris.rpc("approve_draft_for_send", { p_draft: id, p_version: version, p_lease_seconds: TUNING.irisSendLeaseSeconds });
-      if (error) fail();
-      return ApproveSendResult.parse(data);
-    },
-    async retrySend(sendId) {
-      const { data, error } = await iris.rpc("retry_send", { p_send: sendId, p_lease_seconds: TUNING.irisSendLeaseSeconds });
-      if (error) fail();
-      return RetrySendResult.parse(data);
-    },
     async getSettings() {
       const { data, error } = await iris.from("settings").select("paused, mailbox, last_poll_at, last_poll_result, last_error, confidence_threshold").eq("org_id", orgId).maybeSingle();
       if (error) fail();
@@ -556,7 +491,7 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
       if (m.error) fail();
       if (!m.data) return null;
       const msg = z.object({ thread_id: z.guid(), received_at: z.string() }).parse(m.data);
-      const [t, d, s] = await Promise.all([
+      const [t, d] = await Promise.all([
         iris
           .from("messages")
           .select("id, received_at, direction, source, body_text, snippet")
@@ -566,11 +501,12 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
           .order("received_at", { ascending: true })
           .limit(50),
         iris.from("drafts").select(DRAFT_SELECT).eq("org_id", orgId).eq("message_id", id).order("version", { ascending: false }),
-        iris.from("sends").select("id, state, attempts, last_error, sent_at, lease_until").eq("org_id", orgId).eq("message_id", id).order("created_at", { ascending: false }).limit(1),
       ]);
-      if (t.error || d.error || s.error) fail();
-      const sends = z.array(SendViewRow).parse(s.data ?? []);
-      return { thread: z.array(ThreadMessageRow).parse(t.data ?? []), drafts: z.array(DraftRow).parse(d.data ?? []), send: sends[0] ?? null };
+      if (t.error || d.error) fail();
+      return { thread: z.array(ThreadMessageRow).parse(t.data ?? []), drafts: z.array(DraftRow).parse(d.data ?? []) };
+    },
+    async approveDraft(id, version) {
+      return (await review("approve_draft", { p_draft: id, p_version: version })).result;
     },
     async saveDraftEdit(id, version, body) {
       return review("save_draft_edit", { p_draft: id, p_version: version, p_body: body });

@@ -1,7 +1,5 @@
-import { isIrisMessageId } from "./compose";
 import { charlieManualRow, shortError, type GmailPort } from "./intake";
 import type { GmailMessage } from "./gmail";
-import { headerMap } from "./mime";
 import type { IrisSettings, IrisStore } from "./store";
 
 /**
@@ -12,9 +10,7 @@ import type { IrisSettings, IrisStore } from "./store";
  * stored once as an outbound charlie_manual row, and every earlier message of
  * that thread still waiting on Charlie is handled with reason
  * answered_by_charlie and its pending draft superseded. The streak is not
- * touched. A Gmail failure is an error line for the run, never a 502. A
- * reply Iris sent itself (our <iris-...@apacademy.ca> Message-ID) is left to
- * the send step, which records it (REQ-48).
+ * touched. A Gmail failure is an error line for the run, never a 502.
  */
 export const SENT_QUERY = "in:sent newer_than:3d";
 const MAX_GETS = 20;
@@ -49,7 +45,7 @@ async function storeSent(store: IrisStore, gmail: GmailPort, token: string, ids:
   for (const id of fresh) {
     try {
       const msg = await gmail.get(token, id);
-      if (msg.labelIds?.includes("SENT") && !isIrisMessageId(headerMap(msg.payload)["Message-ID"])) sent.push(msg);
+      if (msg.labelIds?.includes("SENT")) sent.push(msg);
     } catch {
       out.error ??= "Could not read a sent message";
     }

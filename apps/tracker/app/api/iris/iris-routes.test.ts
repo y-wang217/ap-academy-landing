@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  handleApproveDraft, handleEditDraft, handleIrisSettings, handleMarkHandled, handleRejectDraft, handleRetrySend, handleRunNow, loadInbox, loadIrisSettings, loadMessage, torontoMidnight,
+  handleApproveDraft, handleEditDraft, handleIrisSettings, handleMarkHandled, handleRejectDraft, handleRunNow, loadInbox, loadIrisSettings, loadMessage, torontoMidnight,
   type IrisAdminDeps, type IrisReader,
 } from "../../../lib/iris/handlers";
-import { GmailError, type GmailSendPort } from "../../../lib/iris/gmail";
 import { POLICY_VERSION } from "../../../lib/iris/policy";
-import { attemptSend } from "../../../lib/iris/send";
-import { fakeIrisStore } from "../../../lib/iris/store.fake";
 import type { MessageDetail, ThreadView } from "../../../lib/iris/schemas";
 import type { SchedulerIdentity } from "../../../lib/scheduler/identity";
 
@@ -34,7 +31,6 @@ const D2 = "55555555-5555-4555-8555-555555555555";
 const VIEW: ThreadView = {
   thread: [],
   drafts: [{ id: D1, version: 1, replyType: "cancellation", bodyText: "Hi", policyVersion: POLICY_VERSION, state: "proposed", createdBy: "iris", edited: false, approvedAt: null, rejectedReason: null, createdAt: "2026-10-20T10:01:00Z" }],
-  send: null,
 };
 
 function fakeReader(over: Partial<IrisReader> = {}) {
@@ -55,12 +51,7 @@ function fakeReader(over: Partial<IrisReader> = {}) {
     listSentToday: spy("listSentToday", []),
     listFailed: spy("listFailed", []),
     getThreadView: spy("getThreadView", VIEW as ThreadView | null),
-    approveForSend: spy("approveForSend", { result: "ok" as const, sendId: D2 as string | null, state: "sending" as const as "sending" | "sent" | "failed" | null }),
-    retrySend: spy("retrySend", { result: "ok" as const, state: "sending" as const as "sending" | "sent" | "failed" | null }),
-    sendContext: spy("sendContext", null),
-    claimSend: spy("claimSend", "claimed" as const),
-    finishSend: spy("finishSend", undefined),
-    failSendAttempt: spy("failSendAttempt", "retrying" as const),
+    approveDraft: spy("approveDraft", "ok" as const),
     saveDraftEdit: spy("saveDraftEdit", { result: "ok" as const, draftId: D2 }),
     rejectDraft: spy("rejectDraft", "ok" as const),
     updatePaused: spy("updatePaused", 1),
@@ -71,36 +62,10 @@ function fakeReader(over: Partial<IrisReader> = {}) {
   return { reader, calls };
 }
 
-/** A scripted Gmail send port: `send` answers in order (an id, or a status to fail with); a refused send token is `tokenRefused`. */
-function fakeSendPort(o: { send?: (string | number)[]; found?: string | null; tokenRefused?: number; findFails?: boolean } = {}) {
-  const calls: string[] = [];
-  const answers = [...(o.send ?? ["gm-1"])];
-  const port: GmailSendPort = {
-    readToken: async () => (calls.push("readToken"), "read-tok"),
-    sendToken: async () => {
-      calls.push("sendToken");
-      if (o.tokenRefused) throw new GmailError(`Gmail token refused (${o.tokenRefused})`, o.tokenRefused);
-      return "send-tok";
-    },
-    send: async (_t, raw) => {
-      calls.push(`send:${raw.length > 0}`);
-      const a = answers.length > 1 ? answers.shift()! : answers[0];
-      if (typeof a === "number") throw new GmailError(`Gmail returned ${a}`, a);
-      return { id: a, threadId: "t" };
-    },
-    findSent: async () => {
-      calls.push("findSent");
-      if (o.findFails) throw new GmailError("Gmail returned 503", 503);
-      return o.found ?? null;
-    },
-  };
-  return { port, calls };
-}
-
-function deps(identity: SchedulerIdentity, over: Partial<IrisReader> = {}, sender: GmailSendPort | null = fakeSendPort().port) {
+function deps(identity: SchedulerIdentity, over: Partial<IrisReader> = {}) {
   const r = fakeReader(over);
   const readerFor = vi.fn<(org: string) => IrisReader>(() => r.reader);
-  const d: IrisAdminDeps = { identity: async () => identity, reader: readerFor, sender: () => (sender ? { gmail: sender, mailbox: "charlie@apacademy.ca" } : null) };
+  const d: IrisAdminDeps = { identity: async () => identity, reader: readerFor };
   return { d, readerFor, calls: r.calls };
 }
 
@@ -319,6 +284,7 @@ describe("POST /api/iris/messages/[id]/handled (AC15)", () => {
 
 // REQ-44 AC8 to AC10, AC13, AC15, AC18: the draft reviews, the four queue sections and phone alerts.
 const REVIEWS: [string, (d: IrisAdminDeps, id: string, body: unknown) => Promise<Response>, unknown, keyof IrisReader][] = [
+  ["approve", handleApproveDraft, { version: 1 }, "approveDraft"],
   ["edit", handleEditDraft, { version: 1, body: "Hi Pat, see you Tuesday." }, "saveDraftEdit"],
   ["reject", handleRejectDraft, { reason: "Too formal" }, "rejectDraft"],
 ];
@@ -398,157 +364,5 @@ describe("loadMessage drafts (AC14)", () => {
 describe("phone alerts (AC18)", () => {
   it("settings say phone alerts are off when NOTION_CHARLIE_USER_ID is unset", async () => {
     expect(await loadIrisSettings(deps(ADMIN).d, [], true, true)).toMatchObject({ kind: "ok", phoneAlertsOff: true });
-  });
-});
-
-// REQ-48 AC1, AC6 to AC9, AC12: Approve sends once; Retry searches first.
-/** A reader whose send rows live in the fake store, as the owner's client would see them. */
-function sendWorld(o: { paused?: boolean; send?: (string | number)[]; found?: string | null; tokenRefused?: number; findFails?: boolean; approved?: Parameters<ReturnType<typeof fakeIrisStore>["approved"]>[0] } = {}) {
-  const db = fakeIrisStore({ paused: o.paused ?? false });
-  const a = db.approved({ ...o.approved });
-  const gmail = fakeSendPort(o);
-  let approvals = 0;
-  const over: Partial<IrisReader> = {
-    approveForSend: async () => {
-      if (db.settings.paused) return { result: "paused", sendId: null, state: null };
-      approvals += 1;
-      return approvals === 1 ? { result: "ok", sendId: a.sendId, state: "sending" } : { result: "existing", sendId: a.sendId, state: db.sends.get(a.sendId)!.state };
-    },
-    retrySend: async (id) => {
-      const x = db.sends.get(id);
-      if (!x) return { result: "not_found", state: null };
-      if (x.state !== "failed") return { result: "not_failed", state: x.state };
-      if (db.settings.paused) return { result: "paused", state: null };
-      Object.assign(x, { state: "sending", attempts: 1, lastError: null, leaseUntil: Date.now() + 60_000 });
-      return { result: "ok", state: "sending" };
-    },
-    sendContext: db.store.sendContext,
-    claimSend: db.store.claimSend,
-    finishSend: db.store.finishSend,
-    failSendAttempt: db.store.failSendAttempt,
-  };
-  const w = deps(ADMIN, over, gmail.port);
-  return { ...w, db, a, gmail };
-}
-
-describe("POST /api/iris/drafts/[id]/approve sends (REQ-48)", () => {
-  for (const [who, identity] of NOT_OWNERS) {
-    it(`a ${who} gets 403 with nothing read and no Gmail call`, async () => {
-      const g = fakeSendPort();
-      const w = deps(identity, {}, g.port);
-      expect((await handleApproveDraft(w.d, D1, { version: 1 })).status).toBe(403);
-      expect(w.readerFor).not.toHaveBeenCalled();
-      expect(g.calls).toEqual([]);
-    });
-  }
-
-  it("approve twice: 200 both times, one Gmail send, the send recorded once", async () => {
-    const w = sendWorld();
-    const first = await handleApproveDraft(w.d, D1, { version: 1 });
-    expect(first.status).toBe(200);
-    expect(await first.json()).toEqual({ ok: true, state: "sent", error: null });
-    const second = await handleApproveDraft(w.d, D1, { version: 1 });
-    expect(second.status).toBe(200);
-    expect(await second.json()).toEqual({ ok: true, state: "sent", error: null });
-    expect(w.gmail.calls).toEqual(["sendToken", "send:true"]);
-    expect(w.db.sends.get(w.a.sendId)).toMatchObject({ state: "sent", gmailMessageId: "gm-1" });
-    expect([...w.db.messages.values()].filter((m) => m.direction === "outbound" && m.source === "iris")).toHaveLength(1);
-  });
-
-  it("the first attempt sends without a search; a Gmail 500 is still 200 with the status line", async () => {
-    const w = sendWorld({ send: [500] });
-    const res = await handleApproveDraft(w.d, D1, { version: 1 });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, state: "sending", error: "Gmail returned 500" });
-    expect(w.gmail.calls).not.toContain("findSent");
-    expect(w.db.sends.get(w.a.sendId)).toMatchObject({ state: "sending", leaseUntil: null, lastError: "Gmail returned 500" });
-  });
-
-  it("paused is 409 paused with no approval and no Gmail call", async () => {
-    const w = sendWorld({ paused: true });
-    const res = await handleApproveDraft(w.d, D1, { version: 1 });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: "paused" });
-    expect(w.gmail.calls).toEqual([]);
-  });
-
-  it("Gmail not configured is 503 before any write", async () => {
-    const w = deps(ADMIN, {}, null);
-    const res = await handleApproveDraft(w.d, D1, { version: 1 });
-    expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "iris_not_configured" });
-    expect(w.calls).toEqual([]);
-  });
-
-  it("a conflict is 409, an unknown draft 404, a database throw 500", async () => {
-    const out = (result: "conflict" | "not_found") => async () => ({ result, sendId: null, state: null });
-    expect((await handleApproveDraft(deps(ADMIN, { approveForSend: out("conflict") }).d, D1, { version: 1 })).status).toBe(409);
-    expect((await handleApproveDraft(deps(ADMIN, { approveForSend: out("not_found") }).d, D1, { version: 1 })).status).toBe(404);
-    const failed = await handleApproveDraft(deps(ADMIN, { approveForSend: async () => { throw new Error("x"); } }).d, D1, { version: 1 });
-    expect(failed.status).toBe(500);
-    expect(await failed.json()).toEqual({ error: "save_failed" });
-  });
-
-  it("a refused send token fails only that attempt, with the not-authorised line", async () => {
-    const w = sendWorld({ tokenRefused: 403 });
-    const res = await handleApproveDraft(w.d, D1, { version: 1 });
-    expect(await res.json()).toEqual({ ok: true, state: "sending", error: "Gmail send is not authorised (403)" });
-  });
-
-  it("a bad id is 404 and a bad body 400, before Gmail or the reader", async () => {
-    const w = deps(ADMIN);
-    expect((await handleApproveDraft(w.d, "nope", { version: 1 })).status).toBe(404);
-    for (const bad of [null, {}, { version: 1, extra: 1 }]) expect((await handleApproveDraft(w.d, D1, bad)).status).toBe(400);
-    expect(w.calls).toEqual([]);
-  });
-});
-
-describe("POST /api/iris/sends/[id]/retry (REQ-48 AC6)", () => {
-  for (const [who, identity] of NOT_OWNERS) {
-    it(`a ${who} gets 403 with nothing read`, async () => {
-      const w = deps(identity);
-      expect((await handleRetrySend(w.d, D2)).status).toBe(403);
-      expect(w.readerFor).not.toHaveBeenCalled();
-    });
-  }
-
-  it("retry on a send that is not failed is 409; on another org's send 404", async () => {
-    const w = sendWorld();
-    expect((await handleRetrySend(w.d, w.a.sendId)).status).toBe(409);
-    expect((await handleRetrySend(w.d, "66666666-6666-4666-8666-666666666666")).status).toBe(404);
-    expect(w.gmail.calls).toEqual([]);
-  });
-
-  it("Approve plus two run attempts at Gmail 500 end failed; then Retry searches first and sends", async () => {
-    const w = sendWorld({ send: [500, 500, 500, "gm-9"] });
-    await handleApproveDraft(w.d, D1, { version: 1 });
-    for (let i = 0; i < 2; i++) {
-      expect(await w.db.store.claimSend(w.a.sendId, 60, 3)).toBe("claimed");
-      await attemptSend({ store: w.db.store, gmail: w.gmail.port, sendId: w.a.sendId, mailbox: "charlie@apacademy.ca", verifyFirst: true, now: () => new Date() });
-    }
-    expect(w.db.sends.get(w.a.sendId)).toMatchObject({ state: "failed", attempts: 3, lastError: "Gmail returned 500" });
-    w.gmail.calls.length = 0;
-    const res = await handleRetrySend(w.d, w.a.sendId);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, state: "sent", error: null });
-    expect(w.gmail.calls).toEqual(["readToken", "findSent", "sendToken", "send:true"]);
-  });
-
-  it("a message that went out earlier is recorded by Retry, not sent again", async () => {
-    const w = sendWorld({ found: "gm-earlier" });
-    w.db.sends.get(w.a.sendId)!.state = "failed";
-    const res = await handleRetrySend(w.d, w.a.sendId);
-    expect(await res.json()).toEqual({ ok: true, state: "sent", error: null });
-    expect(w.gmail.calls).toEqual(["readToken", "findSent"]);
-    expect(w.db.sends.get(w.a.sendId)!.gmailMessageId).toBe("gm-earlier");
-  });
-
-  it("paused Retry is 409 paused", async () => {
-    const w = sendWorld();
-    w.db.sends.get(w.a.sendId)!.state = "failed";
-    w.db.settings.paused = true;
-    const res = await handleRetrySend(w.d, w.a.sendId);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: "paused" });
   });
 });

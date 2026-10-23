@@ -22,9 +22,6 @@ insert into tracker.memberships (user_id, org_id, role) values
   ('b0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'teacher'),
   ('c0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'student'),
   ('e0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'parent');
--- Approving sends (REQ-48, 0028), so both orgs run for these checks.
-insert into iris.settings (org_id, paused) values
-  ('10000000-0000-0000-0000-000000000001', false), ('10000000-0000-0000-0000-000000000002', false);
 
 create schema idt;
 grant usage on schema idt to public;
@@ -209,7 +206,7 @@ begin
   foreach who in array array['a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001',
       'c0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001'] loop
     perform idt.as_user(who);
-    res := iris.approve_draft_for_send('40000000-0000-0000-0000-000000000001', 1, 60);
+    res := iris.approve_draft('40000000-0000-0000-0000-000000000001', 1);
     if res ->> 'result' <> 'not_found' then raise exception '% approve gave %', who, res; end if;
     res := iris.save_draft_edit('40000000-0000-0000-0000-000000000001', 1, 'Hijacked');
     if res ->> 'result' <> 'not_found' then raise exception '% edit gave %', who, res; end if;
@@ -218,12 +215,12 @@ begin
   end loop;
   perform set_config('role', 'anon', true);
   perform set_config('request.jwt.claims', '', true);
-  perform idt.expect_error($q$select iris.approve_draft_for_send('40000000-0000-0000-0000-000000000001', 1, 60)$q$, '42501');
+  perform idt.expect_error($q$select iris.approve_draft('40000000-0000-0000-0000-000000000001', 1)$q$, '42501');
   perform idt.expect_error($q$select iris.count_review('10000000-0000-0000-0000-000000000001', 'x', 'approve', false, 3)$q$, '42501');
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
   perform idt.expect_error($q$select iris.count_review('10000000-0000-0000-0000-000000000001', 'x', 'approve', false, 3)$q$, '42501');
   -- An unknown id reads as not_found too.
-  if iris.approve_draft_for_send(gen_random_uuid(), 1, 60) ->> 'result' <> 'not_found' then
+  if iris.approve_draft(gen_random_uuid(), 1) ->> 'result' <> 'not_found' then
     raise exception 'unknown draft should be not_found';
   end if;
   perform idt.as_super();
@@ -243,13 +240,13 @@ declare
   r iris.reply_types;
 begin
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  if iris.approve_draft_for_send('40000000-0000-0000-0000-000000000001', 2, 60) ->> 'result' <> 'conflict' then
+  if iris.approve_draft('40000000-0000-0000-0000-000000000001', 2) ->> 'result' <> 'conflict' then
     raise exception 'approve with a wrong version should conflict';
   end if;
-  res := iris.approve_draft_for_send('40000000-0000-0000-0000-000000000001', 1, 60);
+  res := iris.approve_draft('40000000-0000-0000-0000-000000000001', 1);
   if res ->> 'result' <> 'ok' then raise exception 'approve gave %', res; end if;
-  if iris.approve_draft_for_send('40000000-0000-0000-0000-000000000001', 1, 60) ->> 'result' <> 'existing' then
-    raise exception 'a second approve should return the existing send';
+  if iris.approve_draft('40000000-0000-0000-0000-000000000001', 1) ->> 'result' <> 'conflict' then
+    raise exception 'a second approve should conflict';
   end if;
   perform idt.as_super();
   select * into d from iris.drafts where id = '40000000-0000-0000-0000-000000000001';
@@ -286,7 +283,7 @@ begin
   if iris.save_draft_edit('40000000-0000-0000-0000-000000000003', 1, 'Again') ->> 'result' <> 'conflict' then
     raise exception 'editing a superseded version should conflict';
   end if;
-  if iris.approve_draft_for_send('40000000-0000-0000-0000-000000000003', 1, 60) ->> 'result' <> 'conflict' then
+  if iris.approve_draft('40000000-0000-0000-0000-000000000003', 1) ->> 'result' <> 'conflict' then
     raise exception 'approving a superseded version should conflict';
   end if;
   perform idt.as_super();
@@ -302,7 +299,7 @@ begin
   if r.unedited_streak <> 0 or r.auto_send_eligible then raise exception 'edit should reset the streak'; end if;
 
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  if iris.approve_draft_for_send(new_id, 2, 60) ->> 'result' <> 'ok' then raise exception 'approving the edit failed'; end if;
+  if iris.approve_draft(new_id, 2) ->> 'result' <> 'ok' then raise exception 'approving the edit failed'; end if;
   perform idt.as_super();
   r := idt.rt('cancellation');
   if r.edited_total <> 1 or r.unedited_streak <> 0 or r.approved_unedited_total <> 1 then
@@ -320,7 +317,7 @@ declare
   r iris.reply_types;
 begin
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  if iris.approve_draft_for_send('40000000-0000-0000-0000-000000000004', 1, 60) ->> 'result' <> 'ok' then raise exception 'setup approve failed'; end if;
+  if iris.approve_draft('40000000-0000-0000-0000-000000000004', 1) ->> 'result' <> 'ok' then raise exception 'setup approve failed'; end if;
   perform idt.as_super();
   -- A fresh draft on a second message, then reject it.
   perform idt.new_draft('31000000-0000-0000-0000-000000000005', '40000000-0000-0000-0000-000000000005', 'reschedule_request', 3);
@@ -362,7 +359,7 @@ begin
     perform idt.new_draft(msg, dr, 'general_question', 3);
     perform idt.as_user('a0000000-0000-0000-0000-000000000001');
     if i <= 20 then
-      if iris.approve_draft_for_send(dr, 1, 60) ->> 'result' <> 'ok' then raise exception 'approval % failed', i; end if;
+      if iris.approve_draft(dr, 1) ->> 'result' <> 'ok' then raise exception 'approval % failed', i; end if;
       perform idt.as_super();
       r := idt.rt('general_question');
       if i = 19 and (r.unedited_streak <> 19 or r.auto_send_eligible) then
@@ -385,18 +382,18 @@ begin
   perform idt.new_draft('52000000-0000-0000-0000-000000000002', '62000000-0000-0000-0000-000000000002', 'general_question', 4);
   perform idt.new_draft('52000000-0000-0000-0000-000000000003', '62000000-0000-0000-0000-000000000003', 'general_question', 3);
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  perform iris.approve_draft_for_send('62000000-0000-0000-0000-000000000001', 1, 60);
+  perform iris.approve_draft('62000000-0000-0000-0000-000000000001', 1);
   perform idt.as_super();
   if (idt.rt('general_question')).unedited_streak <> 1 then raise exception 'streak should restart after the edit'; end if;
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  perform iris.approve_draft_for_send('62000000-0000-0000-0000-000000000002', 1, 60);
+  perform iris.approve_draft('62000000-0000-0000-0000-000000000002', 1);
   perform idt.as_super();
   r := idt.rt('general_question');
   if r.unedited_streak <> 1 or r.streak_policy_version <> 4 then
     raise exception 'a newer policy version should restart at 1: %', to_jsonb(r);
   end if;
   perform idt.as_user('a0000000-0000-0000-0000-000000000001');
-  perform iris.approve_draft_for_send('62000000-0000-0000-0000-000000000003', 1, 60);
+  perform iris.approve_draft('62000000-0000-0000-0000-000000000003', 1);
   perform idt.as_super();
   r := idt.rt('general_question');
   if r.unedited_streak <> 1 or r.streak_policy_version <> 4 then
@@ -409,7 +406,7 @@ select idt.new_draft('31000000-0000-0000-0000-000000000006', '40000000-0000-0000
 set role authenticated;
 set request.jwt.claims = '{"sub": "a0000000-0000-0000-0000-000000000001"}';
 do $$ begin
-  if iris.approve_draft_for_send('40000000-0000-0000-0000-000000000006', 1, 60) ->> 'result' <> 'ok' then
+  if iris.approve_draft('40000000-0000-0000-0000-000000000006', 1) ->> 'result' <> 'ok' then
     raise exception 'an escalated message''s draft should be approvable';
   end if;
 end $$;

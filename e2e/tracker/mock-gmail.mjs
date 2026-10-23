@@ -3,17 +3,12 @@
 // JWT, GET /gmail/v1/users/me/messages (list, newest first; REQ-44: q "in:sent ..." lists only messages
 // labelled SENT, and any other q leaves them out; REQ-45: newer_than:Nd, older_than:Nd, from:(a OR b)
 // and to:(a OR b) filter by age and by the From or To address) and
-// GET /gmail/v1/users/me/messages/:id (format=full). REQ-48 adds POST /gmail/v1/users/me/messages/send
-// (stores the decoded message, labelled SENT, in its thread), q "rfc822msgid:<id>" on the list call, and
-// GET /gmail/v1/users/me/threads/:id?format=metadata. Test helpers:
+// GET /gmail/v1/users/me/messages/:id (format=full). Test helpers:
 //   POST /__gmail/add        body: a Gmail message; adds it to the inbox
 //   POST /__gmail/fail-list  toggles a 500 on the list call
 //   POST /__gmail/slow       toggles a 1.5 second delay on the list call (two runs at once overlap)
 //   GET  /__gmail/calls      every Gmail call so far, in order
 //   POST /__gmail/reset      clears the call journal
-//   GET  /__gmail/sent       every message accepted by messages.send: { id, threadId, raw, headers, body }
-//   POST /__gmail/fail-send  toggles a 500 on messages.send (nothing stored)
-//   POST /__gmail/accept-then-fail  toggles storing the message and then answering 500 (a crash after Gmail accepted it)
 // Every fixture is synthetic. The mailbox is charlie@apacademy.ca.
 import http from "node:http";
 
@@ -87,22 +82,8 @@ function matchesQuery(m, q) {
 }
 
 const calls = [];
-const sent = [];
 let failList = false;
 let slowList = false;
-let failSend = false;
-let acceptThenFail = false;
-
-/** A raw RFC 5322 message (base64url) as headers and a decoded text body. */
-function decodeRaw(raw) {
-  const text = Buffer.from(raw, "base64url").toString("utf8");
-  const [head, ...rest] = text.split("\r\n\r\n");
-  const headers = head.split("\r\n").map((l) => ({ name: l.slice(0, l.indexOf(":")), value: l.slice(l.indexOf(":") + 1).trim() }));
-  const encoded = headers.find((h) => h.name.toLowerCase() === "content-transfer-encoding")?.value === "base64";
-  const body = encoded ? Buffer.from(rest.join("\r\n\r\n").replace(/\r\n/g, ""), "base64").toString("utf8") : rest.join("\r\n\r\n");
-  return { headers, body };
-}
-const headerOf = (m, name) => (m.payload?.headers ?? []).find((h) => h.name.toLowerCase() === name.toLowerCase())?.value;
 const send = (res, status, body) => {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
@@ -121,9 +102,6 @@ http.createServer(async (req, res) => {
   if (url.pathname === "/__gmail/reset") { calls.length = 0; return send(res, 200, { ok: true }); }
   if (url.pathname === "/__gmail/fail-list") { failList = !failList; return send(res, 200, { failList }); }
   if (url.pathname === "/__gmail/slow") { slowList = !slowList; return send(res, 200, { slowList }); }
-  if (url.pathname === "/__gmail/sent") return send(res, 200, sent);
-  if (url.pathname === "/__gmail/fail-send") { failSend = !failSend; return send(res, 200, { failSend }); }
-  if (url.pathname === "/__gmail/accept-then-fail") { acceptThenFail = !acceptThenFail; return send(res, 200, { acceptThenFail }); }
   if (url.pathname === "/__gmail/add" && req.method === "POST") {
     const m = JSON.parse(raw);
     inbox.set(m.id, m);
@@ -140,40 +118,12 @@ http.createServer(async (req, res) => {
   if (url.pathname === "/gmail/v1/users/me/messages" && req.method === "GET") {
     if (slowList) await new Promise((r) => setTimeout(r, 1500));
     if (failList) return send(res, 500, { error: { code: 500, message: `backend error for ${MAILBOX}` } });
-    const q = url.searchParams.get("q") ?? "";
-    if (q.startsWith("rfc822msgid:")) {
-      const want = q.slice("rfc822msgid:".length).replace(/^<|>$/g, "");
-      const hits = [...inbox.values()].filter((m) => (headerOf(m, "Message-ID") ?? "").replace(/^<|>$/g, "") === want).map((m) => ({ id: m.id, threadId: m.threadId }));
-      return send(res, 200, hits.length > 0 ? { messages: hits, resultSizeEstimate: hits.length } : { resultSizeEstimate: 0 });
-    }
-    const sentOnly = q.startsWith("in:sent");
+    const sentOnly = (url.searchParams.get("q") ?? "").startsWith("in:sent");
     const ids = [...inbox.values()]
       .filter((m) => (m.labelIds ?? []).includes("SENT") === sentOnly && matchesQuery(m, q))
       .sort((a, b) => Number(b.internalDate) - Number(a.internalDate))
       .map((m) => ({ id: m.id, threadId: m.threadId }));
     return send(res, 200, { messages: ids, resultSizeEstimate: ids.length });
-  }
-  if (url.pathname === "/gmail/v1/users/me/messages/send" && req.method === "POST") {
-    if (failSend) return send(res, 500, { error: { code: 500, message: `backend error for ${MAILBOX}` } });
-    const { raw: rawMessage, threadId } = JSON.parse(raw);
-    const { headers, body } = decodeRaw(rawMessage);
-    const id = `sent-${sent.length + 1}`;
-    const stored = {
-      id, threadId: threadId ?? `thread-${id}`, internalDate: String(Date.now()), snippet: body.slice(0, 120), labelIds: ["SENT"],
-      payload: { mimeType: "text/plain", headers, body: { data: b64(body) } },
-    };
-    inbox.set(id, stored);
-    sent.push({ id, threadId: stored.threadId, raw: rawMessage, headers, body });
-    if (acceptThenFail) return send(res, 500, { error: { code: 500 } });
-    return send(res, 200, { id, threadId: stored.threadId, labelIds: ["SENT"] });
-  }
-  const threadMatch = /^\/gmail\/v1\/users\/me\/threads\/([^/]+)$/.exec(url.pathname)?.[1];
-  if (threadMatch && req.method === "GET") {
-    const wanted = url.searchParams.getAll("metadataHeaders").map((h) => h.toLowerCase());
-    const messages = [...inbox.values()]
-      .filter((m) => m.threadId === decodeURIComponent(threadMatch))
-      .map((m) => ({ id: m.id, threadId: m.threadId, payload: { headers: (m.payload?.headers ?? []).filter((h) => wanted.includes(h.name.toLowerCase())) } }));
-    return messages.length > 0 ? send(res, 200, { id: decodeURIComponent(threadMatch), messages }) : send(res, 404, { error: { code: 404 } });
   }
   const id = /^\/gmail\/v1\/users\/me\/messages\/([^/]+)$/.exec(url.pathname)?.[1];
   if (id && req.method === "GET") {

@@ -32,20 +32,14 @@ describe("Iris source scan", () => {
     }
   });
 
-  // REQ-48 AC9: gmail.send joins the read-only scope, in gmail.ts only; sending is its messages/send call only.
-  it("names only the read-only and send scopes, the send scope and send call only in gmail.ts, and no other write path", () => {
+  it("asks Gmail for the read-only scope only and names no write path", () => {
     for (const f of IRIS) {
       const src = readFileSync(f, "utf8");
       const scopes = src.match(/googleapis\.com\/auth\/[\w.]+/g) ?? [];
-      const allowed = rel(f) === "lib/iris/gmail.ts" ? ["googleapis.com/auth/gmail.readonly", "googleapis.com/auth/gmail.send"] : ["googleapis.com/auth/gmail.readonly"];
-      for (const s of scopes) expect(allowed, rel(f)).toContain(s);
-      if (rel(f) !== "lib/iris/gmail.ts") expect(src, rel(f)).not.toMatch(/messages\/send\b/);
-      expect(src, rel(f)).not.toMatch(/\/drafts\b|\/modify\b|batchModify|\btrash\b/);
+      for (const s of scopes) expect(s, rel(f)).toBe("googleapis.com/auth/gmail.readonly");
+      expect(src, rel(f)).not.toMatch(/\/send\b|\/drafts\b|\/modify\b|batchModify|\btrash\b/);
     }
-    const gmail = readFileSync(join(ROOT, "lib", "iris", "gmail.ts"), "utf8");
-    expect(gmail).toContain("googleapis.com/auth/gmail.readonly");
-    expect(gmail).toContain("googleapis.com/auth/gmail.send");
-    expect(gmail.match(/messages\/send\b/g)).toHaveLength(1);
+    expect(readFileSync(join(ROOT, "lib", "iris", "gmail.ts"), "utf8")).toContain("googleapis.com/auth/gmail.readonly");
   });
 
   it("parents.ts is imported only from lib/iris/ and the run route, never cached, and only reads", () => {
@@ -87,17 +81,6 @@ describe("Iris stores no model text", () => {
     for (const [, table, body] of tables) {
       const columns = body.split("\n").map((l) => l.trim()).filter((l) => /^[a-z_]+ /.test(l) && !/^(check|unique|primary|foreign|constraint)\b/.test(l)).map((l) => l.split(" ")[0]);
       for (const c of columns) expect(c, `${table}.${c}`).not.toMatch(/prompt|answer|summary|completion|response|reason_text/);
-    }
-  });
-
-  it("no 0028 table has such a column either (REQ-48)", () => {
-    const m27 = readFileSync(join(ROOT, "..", "..", "supabase", "migrations", "0028_iris_sends.sql"), "utf8");
-    const tables = [...m27.matchAll(/create table (iris\.\w+) \(([\s\S]*?)\n\);/g)];
-    expect(tables.map((t) => t[1])).toEqual(["iris.sends"]);
-    for (const [, table, body] of tables) {
-      const columns = body.split("\n").map((l) => l.trim()).filter((l) => /^[a-z_]+ /.test(l) && !/^(check|unique|primary|foreign|constraint)\b/.test(l)).map((l) => l.split(" ")[0]);
-      expect(columns, table).toContain("rfc_message_id");
-      for (const c of columns) expect(c, `${table}.${c}`).not.toMatch(/prompt|answer|summary|completion|response|body|email/);
     }
   });
 

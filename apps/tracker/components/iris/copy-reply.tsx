@@ -4,7 +4,7 @@ import { useState } from "react";
 import { buttonClass } from "@/components/ui";
 import { IRIS_TEXT } from "@/lib/view/iris-text";
 
-/** A draft approved before Iris 8/9 sent replies (REQ-44 AC14), which has no send row: the reply with its signature, and Copy. */
+/** After Approve (REQ-44 AC14): the reply with its signature, and Copy. Charlie sends it from Gmail until Iris 8/9. */
 export function CopyReply({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
