@@ -18,7 +18,8 @@ const tabpanel = (out: string, mode: ConsoleMode) => {
   return out.slice(out.lastIndexOf("<", start), Math.min(...ends));
 };
 const indicator = (out: string, key: string) => out.match(new RegExp(`data-indicator="${key}"[^]*?data-indicator-value="">(.*?)</span></li>`))?.[1];
-const TOTALS: Record<ConsoleMode, number> = { sales: 9, creation: 4, operations: 6 };
+// REQ-62 adds the Operations signals slot.
+const TOTALS: Record<ConsoleMode, number> = { sales: 9, creation: 4, operations: 7 };
 
 describe("panel slots", () => {
   it("Sales is in the AC12 order, next first", () => {
@@ -74,7 +75,7 @@ describe.each(CONSOLE_MODES)("ConsoleBridge, %s", (mode) => {
       expect(count(panel, "data-panel=")).toBe(TOTALS[m]);
       expect(count(panel, "Not connected yet")).toBe(TOTALS[m]);
     }
-    expect(count(out, "Not connected yet")).toBe(19);
+    expect(count(out, "Not connected yet")).toBe(20);
     expect(out).not.toContain("data-panel-value");
   });
 
@@ -180,7 +181,7 @@ describe("the funnel and cash slots", () => {
     expect(count(sales, "Not connected yet")).toBe(7);
     const ops = tabpanel(renderToStaticMarkup(h(ConsoleBridge, { mode: "operations", panels, now: NOW })), "operations");
     expect(count(ops, "data-notion-link")).toBe(2);
-    expect(count(ops, "Not connected yet")).toBe(4);
+    expect(count(ops, "Not connected yet")).toBe(5);
   });
 });
 
@@ -200,12 +201,12 @@ describe("the Operations slots", () => {
     panels.operations.upcoming = view("upcoming", [{ id: "u1", title: "Sam with Ryan, MHF4U", reason: "Regular", due: "Mon 26 Oct 16:00", href: "/tracker/schedule?date=2026-10-26" }]);
     const out = renderToStaticMarkup(h(ConsoleBridge, { mode: "operations", panels, now: NOW }));
     const ops = tabpanel(out, "operations");
-    expect([...ops.matchAll(/data-panel="([^"]+)"/g)].map((m) => m[1])).toEqual(["teacherLoad", "lessonGaps", "upcoming", "finance", "trials", "integrations"]);
+    expect([...ops.matchAll(/data-panel="([^"]+)"/g)].map((m) => m[1])).toEqual(["teacherLoad", "lessonGaps", "upcoming", "finance", "trials", "signals", "integrations"]);
     expect(ops).toContain("console-load");
     expect(ops).toContain("Show 31 days");
     expect(ops).toContain("Sam with Ryan, MHF4U");
     expect(ops).toContain('href="/tracker/schedule/lessons?from=a&amp;to=b"');
     expect(count(ops, "data-canonical")).toBe(3);
-    expect(count(ops, "Not connected yet")).toBe(3);
+    expect(count(ops, "Not connected yet")).toBe(4);
   });
 });

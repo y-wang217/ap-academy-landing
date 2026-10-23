@@ -147,7 +147,7 @@ function demoGaps(now: Date): LessonGapsData {
   const key = (d: string) => `sched:d0000000-0000-4000-8000-000000000001:${d}`;
   return {
     window: { from, to: today, days: 14, label: "Last 14 days" },
-    gaps: [{ id: key(addDays(today, -6)), key: key(addDays(today, -6)), title: "Student A with Teacher A, MHF4U", action: "review", reason: "Review", ended: "ended 17:00", href: "#lessons" }],
+    gaps: [{ id: key(addDays(today, -6)), key: key(addDays(today, -6)), title: "Student A with Teacher A, MHF4U", action: "review", reason: "Review", ended: "ended 17:00", endedAt: `${addDays(today, -6)}T21:00:00.000Z`, href: "#lessons" }],
     moreGaps: 0,
     noShows: [{ id: "ns-1", key: key(addDays(today, -13)), title: "Student A with Teacher A, MHF4U", ended: "ended 17:00", href: "#schedule" }],
     moreNoShows: 0,

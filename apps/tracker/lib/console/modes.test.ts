@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONSOLE_MODES, MODE_LABELS, parseGapDays, parseMode, parseWeek, parseWindow, tabKeyTarget, withParam } from "./modes";
+import { CONSOLE_MODES, MODE_LABELS, parseGapDays, parseLead, parseMode, parseWeek, parseWindow, tabKeyTarget, withParam } from "./modes";
 
 // REQ-55 AC2: the mode switch.
 describe("parseMode", () => {
@@ -77,5 +77,15 @@ describe("parseWindow and withParam", () => {
   });
   it("withParam sets one key and keeps mode and week", () => {
     expect(withParam(new URLSearchParams({ mode: "operations", week: "2026-10-12", window: "30" }), "window", "90")).toBe("?mode=operations&week=2026-10-12&window=90");
+  });
+});
+
+// REQ-62: ?lead= preselects a Sales lead; only a page id passes.
+describe("parseLead", () => {
+  it.each(["eeeeeeee-0000-4000-8000-000000000001", "eeeeeeee000040008000000000000001", ["EEEEEEEE-0000-4000-8000-000000000001"]])("keeps %j", (v) => {
+    expect(parseLead(v)?.toLowerCase().replaceAll("-", "")).toBe("eeeeeeee000040008000000000000001");
+  });
+  it.each([[undefined], [""], ["x"], ["javascript:alert(1)"], ["eeeeeeee-0000-4000-8000-00000000000"], [7]])("drops %j", (v) => {
+    expect(parseLead(v)).toBeNull();
   });
 });

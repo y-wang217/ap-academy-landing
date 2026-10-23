@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../../../lib/data/client";
 import type { Viewer } from "../../../lib/data/queries";
-import { handleConsoleHealth, handleConsoleSales } from "../../../lib/console/handlers";
+import { handleConsoleHealth, handleConsoleSales, handleConsoleSignals, type SignalSources } from "../../../lib/console/handlers";
+import type { OperationsPanels } from "../../../lib/console/operations";
+import { SignalsViewSchema } from "../../../lib/console/signals";
 import { SalesViewSchema } from "../../../lib/console/sales-view";
 import type { FacadeDeps, NotionPorts } from "../../../lib/console/facade";
 import type { OwnerViewer } from "../../../lib/console/guard";
@@ -179,6 +181,7 @@ describe("console routes", () => {
   it("the health and sales routes pass createConsoleDeps", () => {
     expect(readFileSync(join(root, "health", "route.ts"), "utf8")).toMatch(/deps: createConsoleDeps/);
     expect(readFileSync(join(root, "sales", "route.ts"), "utf8")).toMatch(/handleConsoleSales\(\{ viewer: getViewer, deps: createConsoleDeps \}\)/);
+    expect(readFileSync(join(root, "signals", "route.ts"), "utf8")).toMatch(/handleConsoleSignals\(\{ viewer: getViewer, deps: createConsoleDeps, sources: createSignalSources \}\)/);
   });
 });
 
@@ -224,5 +227,69 @@ describe("GET /api/console/sales", () => {
     expect((await sales(owner(fakeDb({ data: null, error: { message: "x" } }).db))).text).toBe('{"error":"console_unavailable"}');
     const res = await handleConsoleSales({ viewer: async () => { throw new Error("x"); }, now: () => NOW, deps: fakeDeps() });
     expect(res.status).toBe(503);
+  });
+});
+
+// REQ-62 AC5: the signals route behind the same owner gate, and nothing private in its body.
+describe("GET /api/console/signals", () => {
+  const empty = <T,>(panel: string, data: T) => ({
+    panel, status: "empty" as const, data, count: 0, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: NOW.toISOString(), staleReason: null, errorMessage: null, sourceEvidence: [],
+  });
+  const fakeSources = () => vi.fn((): SignalSources => ({
+    operations: async () => ({
+      teacherLoad: empty("teacherLoad", null), upcoming: empty("upcoming", []), capacity: empty("capacity", null),
+      lessonGaps: empty("lessonGaps", { window: { from: "a", to: "b", days: 14, label: "" }, gaps: [], moreGaps: 0, noShows: [], moreNoShows: 0, pendingLogs: 0, toggle: { href: "?", label: "" }, unlinkedHref: "/" }),
+    }) as unknown as OperationsPanels,
+    outbox: async () => ({ ok: true, checkedAt: NOW.toISOString(), rows: [{ id: "o1", kind: "summary", finishedAt: null, last_error: "Sentinel error for parent@example.com" } as never] }),
+    teaching: async () => ({ state: "free" }),
+  }));
+  const signals = async (viewer: Viewer, deps = fakeDeps(), sources = fakeSources()) => {
+    const res = await handleConsoleSignals({ viewer: async () => viewer, now: () => NOW, deps, sources });
+    return { res, text: await res.text(), deps, sources };
+  };
+  const owner = (db: Db): Viewer => ({ kind: "staff", ...base, orgId: ORG, role: "owner", db });
+  const LEAD = { createdAt: new Date(NOW.getTime() - 3_600_000).toISOString(), parentPhone: "555-0177", parentEmail: "parent@example.com" };
+
+  it("the owner gets 200, no-store, a schema-shaped body with no phone, email or last_error", async () => {
+    const f = fakeDb({ data: true, error: null });
+    const ports = fakePorts({ leads: async () => ok([{ ...(await fakePorts().leads({} as never)).rows[0], ...LEAD }]) });
+    const { res, text, sources } = await signals(owner(f.db), fakeDeps({ notion: ports }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const body = JSON.parse(text);
+    expect(SignalsViewSchema.parse(body)).toEqual(body);
+    expect(Object.keys(body).sort()).toEqual(["checkedAt", "checks", "health", "protectedTime", "signals"]);
+    expect(body.signals.map((s: { kind: string; title: string }) => `${s.kind} ${s.title}`)).toContain(`fresh_lead ${SENTINEL}`);
+    expect(text).not.toMatch(/555-0177|@|Sentinel error|Parent Sentinel/);
+    expect(f.rpc).toHaveBeenCalledWith("is_org_owner", { target_org: ORG });
+    expect(sources).toHaveBeenCalledTimes(1);
+  });
+
+  const denied: [string, (db: Db) => Viewer, number, string][] = [
+    ["grade teacher", (db) => ({ kind: "staff", ...base, orgId: ORG, role: "teacher", db }), 403, '{"error":"forbidden"}'],
+    ["student", (db) => ({ kind: "student", ...base, studentId: "s1", db }), 403, '{"error":"forbidden"}'],
+    ["parent", (db) => ({ kind: "parent", ...base, db }), 403, '{"error":"forbidden"}'],
+    ["role-less user", () => ({ kind: "none", ...base }), 403, '{"error":"forbidden"}'],
+    ["signed-out request", () => ({ kind: "signed_out" }), 401, '{"error":"unauthenticated"}'],
+    ["not-configured request", () => ({ kind: "not_configured" }), 503, '{"error":"console_not_configured"}'],
+  ];
+  for (const [who, make, status, body] of denied) {
+    it(`a ${who} gets ${status} with the fixed body and nothing is read`, async () => {
+      const f = fakeDb({ data: true, error: null });
+      const { res, text, deps, sources } = await signals(make(f.db));
+      expect([res.status, text]).toEqual([status, body]);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(f.rpc).not.toHaveBeenCalled();
+      expect(deps).not.toHaveBeenCalled();
+      expect(sources).not.toHaveBeenCalled();
+    });
+  }
+
+  it("is_org_owner false is 403, an rpc error or a throwing source is 503", async () => {
+    expect((await signals(owner(fakeDb({ data: false, error: null }).db))).res.status).toBe(403);
+    expect((await signals(owner(fakeDb({ data: null, error: { message: "x" } }).db))).text).toBe('{"error":"console_unavailable"}');
+    const throwing = vi.fn((): SignalSources => { throw new Error("x"); });
+    const { res, text } = await signals(owner(fakeDb({ data: true, error: null }).db), fakeDeps(), throwing);
+    expect([res.status, text]).toEqual([503, '{"error":"console_unavailable"}']);
   });
 });
