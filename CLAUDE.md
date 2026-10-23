@@ -10,6 +10,9 @@ Who edits people data and what the apps may copy:
 [`docs/adr/0004-notion-edits-people-supabase-reads-local.md`](docs/adr/0004-notion-edits-people-supabase-reads-local.md).
 Where the Founder Console lives and how it is gated:
 [`docs/adr/0006-founder-console-placement.md`](docs/adr/0006-founder-console-placement.md).
+What the console may write back to Notion people records (call outcomes):
+[`docs/adr/0007-console-writes-notion-people.md`](docs/adr/0007-console-writes-notion-people.md),
+which amends 0004.
 Each app has its own `CLAUDE.md`. Read the one for the app you are working in.
 
 ## Layout
