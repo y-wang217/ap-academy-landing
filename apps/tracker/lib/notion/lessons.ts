@@ -187,7 +187,7 @@ export function createLessonsPort(config: NotionConfig, fetcher: typeof fetch = 
   };
 }
 
-/** The Founder Console's trial evidence read (REQ-54, ADR 0065). Topic and diagnosis come back as presence only. */
+/** The Founder Console's trial evidence read (REQ-54, ADR 0065). Topic comes back as presence only; the diagnosis text, cut to 1000 characters, since REQ-57 (ADR 0071). */
 export const TRIAL_PROPS = [
   "Type", DATE, TEACHER, STUDENT, DURATION, "Topic Covered", "Trial: Diagnosis", "Trial: Preferred Lesson Day",
 ] as const;
@@ -215,6 +215,7 @@ const toTrial = (page: z.output<typeof TrialPage>): TrialLessonSource => {
     durationHours: val.number(p[DURATION]),
     hasTopic: val.present(p["Topic Covered"]),
     hasDiagnosis: val.present(p["Trial: Diagnosis"]),
+    diagnosis: val.text(p["Trial: Diagnosis"])?.slice(0, 1000) ?? null,
     preferredDays: val.multi(p["Trial: Preferred Lesson Day"]),
   };
 };

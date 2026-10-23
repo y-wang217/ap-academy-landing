@@ -15,11 +15,11 @@ const lead = (extra: Partial<LeadRow>): LeadRow => ({
   id: LEAD, pageUrl: "https://www.notion.so/lead1", createdAt: null, name: "Lead 1", stage: null, ownerStaffId: null, ownerName: null, nextAction: null,
   nextActionDue: null, nextActionDueDate: null, attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: "2026-10-01",
   trialAttendedAt: "2026-10-03", closedAt: "2026-10-10", trialTime: "2026-10-03T15:00:00Z", trialTimeDate: null, trialTeacherId: null, trialTeacherName: null, level: null,
-  hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: null, inPeopleCopy: true, ...extra,
+  hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: null, inPeopleCopy: true, dedupeKey: null, grade: null, subjects: [], majorGaps: null, trialSummary: null, ...extra,
 });
 const lesson: TrialLessonRow = {
   id: "c0000000-0000-4000-8000-000000000001", pageUrl: "https://www.notion.so/lesson1", date: "2026-10-03", studentId: LEAD, studentName: null, teacherId: null,
-  teacherName: null, durationHours: 1, hasTopic: false, hasDiagnosis: false, preferredDays: [],
+  teacherName: null, durationHours: 1, hasTopic: false, hasDiagnosis: false, diagnosis: null, preferredDays: [],
 };
 const invoice: InvoiceRow = {
   id: "e0000000-0000-4000-8000-000000000001", pageUrl: "https://www.notion.so/inv1", status: "Paid", paidOn: "2026-10-05", amount: 480, creditApplied: null,

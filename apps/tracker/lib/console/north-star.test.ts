@@ -28,7 +28,7 @@ const lead = (over: Partial<LeadRow>): LeadRow => ({
   id: "l", pageUrl: "u", createdAt: null, name: "Lead", stage: "New", ownerStaffId: null, ownerName: null, nextAction: "Call", nextActionDue: null, nextActionDueDate: null,
   attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: null, trialAttendedAt: null, closedAt: null, trialTime: null,
   trialTimeDate: null, trialTeacherId: null, trialTeacherName: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: null,
-  inPeopleCopy: false, ...over,
+  inPeopleCopy: false, dedupeKey: null, grade: null, subjects: [], majorGaps: null, trialSummary: null, ...over,
 });
 
 function panels(over: Partial<ConsolePanels> = {}): ConsolePanels {

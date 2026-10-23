@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../../../lib/data/client";
 import type { Viewer } from "../../../lib/data/queries";
-import { handleConsoleHealth } from "../../../lib/console/handlers";
+import { handleConsoleHealth, handleConsoleSales } from "../../../lib/console/handlers";
+import { SalesViewSchema } from "../../../lib/console/sales-view";
 import type { FacadeDeps, NotionPorts } from "../../../lib/console/facade";
 import type { OwnerViewer } from "../../../lib/console/guard";
 import { consoleFreshness } from "../../../lib/console/providers";
@@ -25,7 +26,7 @@ const SOURCES = { leads: "fe3d651a", touches: "772939bd", trialLessons: "6300f58
 const ok = <T,>(rows: T[]) => ({ rows, complete: true, skipped: 0, pages: 1 });
 function fakePorts(over: Partial<NotionPorts> = {}): NotionPorts {
   return {
-    leads: async () => ok([{ id: S1, createdAt: null, name: SENTINEL, stage: "New", ownerStaffId: null, nextAction: null, nextActionDue: null, attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: null, trialAttendedAt: null, closedAt: null, trialTime: null, trialTeacherId: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: "Parent Sentinel" }]),
+    leads: async () => ok([{ id: S1, createdAt: null, name: SENTINEL, stage: "New", ownerStaffId: null, nextAction: null, nextActionDue: null, attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: null, trialAttendedAt: null, closedAt: null, trialTime: null, trialTeacherId: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: "Parent Sentinel", leadId: null, grade: null, subjects: [], majorGaps: null, trialSummary: null }]),
     touches: async () => ok([]),
     trialLessons: async () => ok([]),
     work: async () => ok([{ id: S1, name: "Work Sentinel", area: null, state: "Next", type: null, dueReview: null, owner: null, taskTypeIds: [] }]),
@@ -175,7 +176,53 @@ describe("console routes", () => {
     }
   });
 
-  it("the health route passes createConsoleDeps", () => {
+  it("the health and sales routes pass createConsoleDeps", () => {
     expect(readFileSync(join(root, "health", "route.ts"), "utf8")).toMatch(/deps: createConsoleDeps/);
+    expect(readFileSync(join(root, "sales", "route.ts"), "utf8")).toMatch(/handleConsoleSales\(\{ viewer: getViewer, deps: createConsoleDeps \}\)/);
+  });
+});
+
+// REQ-57 AC11: the sales route behind the same owner gate.
+describe("GET /api/console/sales", () => {
+  const sales = async (viewer: Viewer, deps = fakeDeps()) => {
+    const res = await handleConsoleSales({ viewer: async () => viewer, now: () => NOW, deps });
+    return { res, text: await res.text(), deps };
+  };
+  const owner = (db: Db): Viewer => ({ kind: "staff", ...base, orgId: ORG, role: "owner", db });
+
+  it("the owner gets 200, no-store, a body that parses with the schema and has no other key", async () => {
+    const f = fakeDb({ data: true, error: null });
+    const { res, text } = await sales(owner(f.db));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const body = JSON.parse(text);
+    expect(SalesViewSchema.parse(body)).toEqual(body);
+    expect(Object.keys(body).sort()).toEqual(["queue", "radar"]);
+    expect(body.queue.data.items.map((i: { name: string }) => i.name)).toEqual([SENTINEL]);
+    expect(text).not.toMatch(/Parent Sentinel|parentName/);
+    expect(f.rpc).toHaveBeenCalledWith("is_org_owner", { target_org: ORG });
+  });
+
+  const denied: [string, (db: Db) => Viewer][] = [
+    ["grade teacher", (db) => ({ kind: "staff", ...base, orgId: ORG, role: "teacher", db })],
+    ["student", (db) => ({ kind: "student", ...base, studentId: "s1", db })],
+    ["parent", (db) => ({ kind: "parent", ...base, db })],
+    ["role-less user", () => ({ kind: "none", ...base })],
+  ];
+  for (const [who, make] of denied) {
+    it(`a ${who} gets 403 and nothing is read`, async () => {
+      const f = fakeDb({ data: true, error: null });
+      const { res, text, deps } = await sales(make(f.db));
+      expect([res.status, text]).toEqual([403, '{"error":"forbidden"}']);
+      expect(f.rpc).not.toHaveBeenCalled();
+      expect(deps).not.toHaveBeenCalled();
+    });
+  }
+
+  it("is_org_owner false is 403, an rpc error or a throwing viewer is 503", async () => {
+    expect((await sales(owner(fakeDb({ data: false, error: null }).db))).res.status).toBe(403);
+    expect((await sales(owner(fakeDb({ data: null, error: { message: "x" } }).db))).text).toBe('{"error":"console_unavailable"}');
+    const res = await handleConsoleSales({ viewer: async () => { throw new Error("x"); }, now: () => NOW, deps: fakeDeps() });
+    expect(res.status).toBe(503);
   });
 });
