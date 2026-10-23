@@ -2771,12 +2771,13 @@ try {
       check("REQ-45: the latest run table shows the type", await teacher.locator('[data-eval-type="cancellation"]').isVisible());
 
       await teacher.goto(`${BASE}/iris/settings`);
-      const readiness = section(teacher, "Auto-send readiness");
+      const readiness = section(teacher, "Auto-send");
       check("REQ-45: the settings page shows the readiness card for the six candidate types",
         (await readiness.locator("[data-readiness-type]").count()) === 6 && (await readiness.locator('[data-readiness-type="cancellation"] [data-gate-condition="labelled_count"]').innerText()).includes("not met"));
       check("REQ-45: the never-sent line names pause_or_stop", (await readiness.locator("[data-readiness-never]").innerText()).includes("pause_or_stop"));
-      check("REQ-45: no switch or toggle in the readiness card",
-        (await readiness.locator('input, [role="switch"], [role="checkbox"]').count()) === 0);
+      // REQ-49: no type is eligible yet, so no type has a switch (the card's only control is Sending enabled).
+      check("REQ-45: no type switch in the readiness card while no type is eligible",
+        (await readiness.locator("[data-auto-send-switch]").count()) === 0 && (await readiness.locator("[data-no-switch]").count()) === 6);
 
       await ryan.goto(`${BASE}/iris/eval`);
       check("REQ-45: Ryan opening /iris/eval lands on /", /\/tracker\/?$/.test(new URL(ryan.url()).pathname), ryan.url());
@@ -2784,6 +2785,113 @@ try {
       check("REQ-45: Ryan gets 403 from the eval import", ryanImport.status() === 403, String(ryanImport.status()));
       const evilImport = await teacher.context().request.post(`${BASE}/api/iris/eval/import`, { headers: { Origin: "https://evil.example" } });
       check("REQ-45: a cross-site eval import is 403", evilImport.status() === 403, String(evilImport.status()));
+    }
+
+    // REQ-49: Iris 9/9. Auto-send behind Sending enabled and a per-type switch, quiet hours and the fail-safes.
+    // general_question is made eligible by hand (a recorded eval run that passes, and a streak of 20); the
+    // quiet hours are set around the real clock so the result never depends on when the suite runs.
+    {
+      const LINE = "This reply was sent automatically from AP Academy's written policy. If anything here is not right, reply to this email and Charlie will pick it up personally.";
+      const sentMail = () => gmail("/__gmail/sent", "GET");
+      const rt = (type, cols) => psql(`select ${cols} from iris.reply_types where type = '${type}'`);
+      const draftOf = (gid, cols) => psql(`select ${cols} from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = '${gid}' order by d.version desc limit 1`);
+      const sendOf = (gid, cols) => psql(`select ${cols} from iris.sends s join iris.messages m on m.id = s.message_id where m.gmail_message_id = '${gid}'`);
+      const ask = (id, subject, text) => gmail("/__gmail/add", "POST", {
+        id, threadId: `thread-${id}`, internalDate: String(Date.now()), snippet: subject,
+        payload: { mimeType: "text/plain", headers: [{ name: "From", value: "sam.parent@example.com" }, { name: "Subject", value: subject }], body: { data: Buffer.from(text).toString("base64url") } },
+      });
+      psql(`insert into iris.eval_runs (org_id, policy_version, model, labelled_count, per_type, sensitive_recall, mean_rating_per_type)
+        select org_id, 5, model, 22, jsonb_build_object('general_question', jsonb_build_object('precision', 1, 'recall', 1, 'count', 22)), 1,
+               jsonb_build_object('general_question', 4.6)
+          from iris.eval_runs order by ran_at desc limit 1`);
+      psql("update iris.reply_types set unedited_streak = 20, streak_policy_version = 5, auto_send_eligible = true where type = 'general_question'");
+      // No quiet hours for the daytime send (start = end means none).
+      psql("update iris.settings set quiet_start = '00:00', quiet_end = '00:00', paused = false");
+
+      await teacher.goto(`${BASE}/iris/settings`);
+      const card = section(teacher, "Auto-send");
+      check("REQ-49: Sending enabled starts off and every type starts off",
+        (await card.locator('[data-sending-enabled="off"]').count()) === 1 && (await card.locator('[data-auto-send-state="on"]').count()) === 0);
+      check("REQ-49: only the eligible type has a switch", (await card.locator("[data-auto-send-switch]").count()) === 1
+        && await card.locator('[data-auto-send-switch="general_question"]').isVisible() && await card.locator('[data-readiness-type="late_cancel"] [data-no-switch]').isVisible());
+      check("REQ-49: Turn on for Sending waits for the tick", await card.locator("[data-sending-on]").isDisabled());
+      await card.locator("[data-sending-tick]").check();
+      await card.locator("[data-sending-on]").click();
+      await card.locator('[data-sending-enabled="on"]').waitFor({ timeout: 15000 });
+      await card.locator('[data-auto-send-switch="general_question"]').click();
+      await card.locator('[data-readiness-type="general_question"][data-auto-send-state="on"]').waitFor({ timeout: 15000 });
+      check("REQ-49: both switches are on in the database, with enabled_by set and audit rows",
+        psql("select sending_enabled from iris.settings") === "t" && rt("general_question", "auto_send_enabled || '|' || (enabled_by is not null)") === "true|true"
+          && Number(psql("select count(*) from tracker.audit_log where table_name = 'reply_types' and after ->> 'auto_send_enabled' = 'true'")) >= 1
+          && Number(psql("select count(*) from tracker.audit_log where table_name = 'settings' and after ->> 'sending_enabled' = 'true'")) >= 1);
+
+      // Who may switch, and what the gate refuses.
+      const below = await teacher.context().request.post(`${BASE}/api/iris/reply-types/late_cancel/auto-send`, { data: { enabled: true } });
+      const belowBody = await below.json().catch(() => null);
+      check("REQ-49: a crafted enable of a below-gate type is 422 with its conditions", below.status() === 422 && belowBody?.error === "gate_failed" && belowBody.failing.includes("streak"), JSON.stringify(belowBody));
+      const never = await teacher.context().request.post(`${BASE}/api/iris/reply-types/pause_or_stop/auto-send`, { data: { enabled: true } });
+      check("REQ-49: a never-list type is 422 never_auto_send", never.status() === 422, String(never.status()));
+      const evilSwitch = await teacher.context().request.post(`${BASE}/api/iris/reply-types/general_question/auto-send`, { data: { enabled: false }, headers: { Origin: "https://evil.example" } });
+      check("REQ-49: a cross-site switch POST is 403", evilSwitch.status() === 403, String(evilSwitch.status()));
+      const ryanSwitch = await ryan.context().request.post(`${BASE}/api/iris/reply-types/general_question/auto-send`, { data: { enabled: false } });
+      check("REQ-49: Ryan gets 403 from the switch", ryanSwitch.status() === 403, String(ryanSwitch.status()));
+      check("REQ-49: the refused calls changed nothing",
+        rt("general_question", "auto_send_enabled::text") === "true" && psql("select count(*) from iris.reply_types where auto_send_enabled and type <> 'general_question'") === "0");
+
+      // A qualifying message by day: approved by the gate and sent in the same run, with the automated line.
+      const before = (await sentMail()).length;
+      await ask("a1", "Parking", "Is the parking at the centre free on weekends?");
+      const runA = await irisRun();
+      check("REQ-49: the run answers ok and counts the auto send", runA.status === 200 && runA.body?.result === "ok" && runA.body?.sent >= 1, JSON.stringify(runA.body));
+      const mails = await sentMail();
+      const a1Mail = mails.at(-1);
+      check("REQ-49: mock Gmail received one message whose body ends with the automated line",
+        mails.length === before + 1 && a1Mail.body.includes("AP Academy") && a1Mail.body.trimEnd().endsWith(LINE), a1Mail?.body?.slice(-200));
+      check("REQ-49: the draft is auto-approved by the gate and sent once",
+        draftOf("a1", "d.state || '|' || d.approval_mode || '|' || (d.approved_by is null)") === "sent|auto|true" && sendOf("a1", "s.mode || '|' || s.state") === "auto|sent"
+          && psql("select count(*) from iris.events e join iris.messages m on m.id = e.message_id where m.gmail_message_id = 'a1' and e.kind = 'auto_approved' and e.actor = 'gate'") === "1");
+      check("REQ-49: the stored outbound row matches what was sent",
+        psql("select count(*) from iris.messages o join iris.messages m on m.thread_id = o.thread_id where m.gmail_message_id = 'a1' and o.direction = 'outbound' and o.source = 'iris' and o.body_text like '%reply to this email and Charlie will pick it up personally.'") === "1");
+      check("REQ-49: an auto approval does not count in the streak", rt("general_question", "unedited_streak") === "20");
+      await teacher.goto(`${BASE}/iris/messages/${msg("a1", "id")}`);
+      check("REQ-49: the message page says Approved automatically", (await teacher.locator("[data-auto-approved]").innerText()).includes("Approved automatically"));
+
+      // Quiet hours around now: the next one is held, the page says when, and nothing reaches Gmail.
+      psql("update iris.settings set quiet_start = ((now() at time zone 'America/Toronto') - interval '1 hour')::time, quiet_end = ((now() at time zone 'America/Toronto') + interval '1 hour')::time");
+      await ask("a2", "Snacks", "Can Sam bring a snack to class?");
+      await irisRun();
+      check("REQ-49: inside quiet hours the send waits on its lease with no attempt",
+        sendOf("a2", "s.mode || '|' || s.state || '|' || s.attempts || '|' || (s.lease_until > now() + interval '50 minutes')") === "auto|sending|0|true" && (await sentMail()).length === before + 1,
+        sendOf("a2", "s.state || '|' || s.attempts || '|' || s.lease_until"));
+      await teacher.goto(`${BASE}/iris/messages/${msg("a2", "id")}`);
+      check("REQ-49: the page says when it sends", (await teacher.locator("[data-auto-approved]").innerText()).includes("Sends at"));
+
+      // Charlie turns the type off; at its next attempt the held send is withdrawn back to his queue.
+      await teacher.goto(`${BASE}/iris/settings`);
+      await section(teacher, "Auto-send").locator('[data-auto-send-switch="general_question"]').click();
+      await section(teacher, "Auto-send").locator('[data-readiness-type="general_question"][data-auto-send-state="off"]').waitFor({ timeout: 15000 });
+      check("REQ-49: Turn off records the owner as the reason", rt("general_question", "auto_send_enabled || '|' || disabled_reason") === "false|owner");
+      psql("update iris.sends set lease_until = now() - interval '1 minute' where draft_id in (select d.id from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = 'a2')");
+      await irisRun();
+      check("REQ-49: the held send of a type turned off is withdrawn, not sent",
+        sendOf("a2", "count(*)") === "0" && draftOf("a2", "d.state || '|' || coalesce(d.approval_mode, '-')") === "proposed|-" && msg("a2", "state") === "drafted"
+          && (await sentMail()).length === before + 1
+          && psql("select count(*) from iris.events e join iris.messages m on m.id = e.message_id where m.gmail_message_id = 'a2' and e.kind = 'auto_send_withdrawn'") === "1");
+
+      // Back on; then Charlie rejects a draft of the enabled type: it is off on reload, with the reason.
+      const back = await teacher.context().request.post(`${BASE}/api/iris/reply-types/general_question/auto-send`, { data: { enabled: true } });
+      check("REQ-49: the owner switches the type back on", back.status() === 200, String(back.status()));
+      const reject = await teacher.context().request.post(`${BASE}/api/iris/drafts/${draftOf("a2", "d.id")}/reject`, { data: { reason: "Not this one" } });
+      check("REQ-49: the reject is accepted", reject.status() === 200, String(reject.status()));
+      await teacher.goto(`${BASE}/iris/settings`);
+      const after = section(teacher, "Auto-send");
+      check("REQ-49: after the reject the type is off on reload, with its streak reset and the reason shown",
+        (await after.locator('[data-readiness-type="general_question"][data-auto-send-state="off"]').count()) === 1
+          && await after.locator('[data-readiness-type="general_question"] [data-disabled-reason="edited_after_enable"]').isVisible()
+          && rt("general_question", "unedited_streak || '|' || auto_send_eligible") === "0|false");
+
+      // Leave Iris as the rest of the suite expects it.
+      psql("update iris.settings set sending_enabled = false, quiet_start = '21:00', quiet_end = '07:00'");
     }
 
     // 12. A Gmail list failure: Run now shows it, the run is 502, and the settings page shows the short error.
