@@ -24,7 +24,7 @@ export const maxDuration = 120;
  * Notion once per run. With ANTHROPIC_API_KEY set it then classifies matched
  * mail with Claude (REQ-43) and drafts replies (REQ-44), reading the matched
  * student's classes from the tracker scheduler for cancellations (REQ-46,
- * select only); with Notion Work set up it pushes the phone copies to
+ * select only) and the teacher's calendar for make-up offers (REQ-47); with Notion Work set up it pushes the phone copies to
  * Charlie's day page.
  */
 export async function POST(request: Request) {
@@ -37,6 +37,7 @@ export async function POST(request: Request) {
       const students = readStudentsConfig();
       const work = readWorkConfig();
       if (!client || !gmail || !students) return null;
+      const reader = createIrisScheduleReader(client.schema("tracker"), orgId);
       return {
         store: createIrisStore(client.schema("iris"), orgId),
         gmail: gmailPort(gmail),
@@ -44,7 +45,8 @@ export async function POST(request: Request) {
         mailbox: gmail.mailbox,
         classify: aiConfigured() ? classifyMessage : null,
         draft: aiConfigured() ? draftReply : null,
-        schedule: createIrisScheduleReader(client.schema("tracker"), orgId).forStudent,
+        schedule: reader.forStudent,
+        availability: reader.forTeacher,
         push: work
           ? ({ store, directory, now }) =>
               runPush({ store, config: work, charlieUserId: readCharlieUserId(), siteUrl: SITE_URL, mailbox: gmail.mailbox, directory, now })

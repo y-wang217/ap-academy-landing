@@ -1920,6 +1920,11 @@ try {
     const NINA_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0005";
     const ninaStart = isoIn(2);
     psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009', '${NINA_ID}', 'MPM2D', 'weekly', '${ninaStart}', '17:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
+    // REQ-47: Nina's teacher (not a linked staff member, so the REQ-33 setup counts are untouched) is free 15:00 to
+    // 19:00 every weekday from today. Omar's teacher has entered no availability at all. Both before the snapshot.
+    const OMAR_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0006";
+    psql(`insert into tracker.availability_windows (org_id, request_id, notion_staff_id, weekday, start_time, end_time, effective_from, created_by) select '10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009', d, '15:00', '19:00', '${isoIn(0)}', '00000000-0000-0000-0000-00000000aaaa' from generate_series(1, 5) d`);
+    psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0010', '${OMAR_ID}', 'SCH4U', 'weekly', '${isoIn(3)}', '16:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
     // The insert queues the daily-task export; an admin page's background drain settles it before the snapshot,
     // so a later drain never changes the daily-task tables inside the Iris section.
     await teacher.goto(`${BASE}/schedule`);
@@ -1928,7 +1933,7 @@ try {
       exportsDue = psql("select count(*) from tracker.notion_outbox where status in ('pending', 'running') and next_attempt_at <= now() + interval '15 minutes'");
       if (exportsDue !== "0") await teacher.waitForTimeout(250);
     }
-    check("REQ-46: the export queued by Nina's series settles before the Iris section", exportsDue === "0", exportsDue);
+    check("REQ-46: the exports queued by Nina's and Omar's series settle before the Iris section", exportsDue === "0", exportsDue);
     const trackerBefore = trackerSnapshot();
     const notionStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
     await gmail("/__gmail/reset");
@@ -1982,7 +1987,7 @@ try {
     check("REQ-42: m5 is cut to 20,000 characters", msg("m5", "length(body_text) || '|' || body_truncated::text") === "20000|true");
     check("REQ-42: m6 is stored outbound in Sam's thread", msg("m6", "direction || '|' || source") === "outbound|charlie_manual");
     check("REQ-42: m7 (the mailbox in a new thread) is not stored", msg("m7", "count(*)") === "0");
-    check("REQ-42: every inbound row has policy version 4 (REQ-46)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 4") === "0");
+    check("REQ-42: every inbound row has policy version 5 (REQ-47)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 5") === "0");
     check("REQ-42: Sam's thread carries his Notion page id", psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm1'") === SAM_ID);
 
     // 7. The owner's inbox: m3 needs him, m4 does not.
@@ -2031,7 +2036,7 @@ try {
       writes.every((j) => (j.method === "POST" && ["/v1/pages", "/v1/comments"].includes(j.path)) || (j.method === "PATCH" && /^\/v1\/(blocks\/[0-9a-f-]{36}\/children|pages\/[0-9a-f-]{36})$/.test(j.path))),
       writes.map((j) => `${j.method} ${j.path}`).join(" "));
     check("REQ-44: no Notion request carries a parent's message or address",
-      !writes.some((j) => /Sam is sick today|Running late today|sam\.parent@example\.com|notice\.parent|lead@example\.org|afzal\.family/i.test(JSON.stringify(j.body ?? {}))));
+      !writes.some((j) => /Sam is sick today|Running late today|sam\.parent@example\.com|notice\.parent|offer\.parent|lead@example\.org|afzal\.family/i.test(JSON.stringify(j.body ?? {}))));
 
     // REQ-43: Iris 3/9. A cancellation and a "charged twice" message from Sam's parent, classified through the
     // mock Anthropic (54332); then the message page, Mark handled, and who may use them.
@@ -2044,7 +2049,7 @@ try {
     await add("m10", "October invoice", "We were charged twice this month. Please check.");
     const run43 = await irisRun();
     check("REQ-43: the run answers ok and counts classified", run43.status === 200 && run43.body?.result === "ok" && run43.body?.classified >= 1, JSON.stringify(run43.body));
-    check("REQ-43: the cancellation is classified at 0.95, then drafted", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "drafted|cancellation|0.95|4", msg("m9", "state"));
+    check("REQ-43: the cancellation is classified at 0.95, then drafted", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "drafted|cancellation|0.95|5", msg("m9", "state"));
     check("REQ-43: charged twice is escalated flagged with money_dispute", msg("m10", "state || '|' || escalation_reason || '|' || array_to_string(flags, ',')") === "escalated|flagged|money_dispute", msg("m10", "state || '|' || coalesce(escalation_reason, '')"));
     check("REQ-43: one ok classify ai_calls row each",
       psql("select count(*) from iris.ai_calls a join iris.messages m on m.id = a.message_id where m.gmail_message_id in ('m9', 'm10') and a.purpose = 'classify' and a.outcome = 'ok' and a.input_tokens = 300") === "2");
@@ -2068,6 +2073,52 @@ try {
     check("REQ-46: m9 is not flagged schedule unknown", msg("m9", "array_to_string(flags, ',')") === "", msg("m9", "array_to_string(flags, ',')"));
     await teacher.locator("[data-policy-used]").waitFor({ timeout: 15000 });
     check("REQ-46: the message page names the policy used: Cancellation with notice", (await teacher.locator("[data-policy-used]").innerText()).includes("Cancellation with notice"));
+
+    // REQ-47: Iris 7/9. Nina's family asks to move her class: the draft offers make-up times from her teacher's
+    // availability, written in by the tracker. Omar's teacher has entered none: the plain reply, flagged. Nothing
+    // in the tracker changes (the snapshot check at the end of this block).
+    {
+      await add("m12", "Next class", "Could we move Nina's next class? Something came up.", "notice.parent@example.com");
+      await add("m13", "Next class", "Could we move Omar's next class this week?", "offer.parent@example.com");
+      const run47 = await irisRun();
+      check("REQ-47: the run answers ok", run47.status === 200 && run47.body?.result === "ok", JSON.stringify(run47.body));
+      const m12 = msg("m12", "id");
+      const m13 = msg("m13", "id");
+      check("REQ-47: both are classified reschedule_request and drafted", msg("m12", "intent || '|' || state") === "reschedule_request|drafted" && msg("m13", "intent || '|' || state") === "reschedule_request|drafted",
+        `${msg("m12", "intent || '|' || state")} ${msg("m13", "intent || '|' || state")}`);
+      const m12Draft = psql(`select reply_type from iris.drafts where message_id = '${m12}' order by version limit 1`);
+      check("REQ-47: Nina's draft is reschedule_offer", m12Draft === "reschedule_offer", m12Draft);
+      const body12 = psql(`select body_text from iris.drafts where message_id = '${m12}' order by version limit 1`);
+      const lines = body12.split("\n").filter((l) => l.startsWith("- "));
+      const LINE = /^- (\w+) (\d{1,2}) (\w+), (\d{1,2}):(\d{2}) (am|pm) to (\d{1,2}):(\d{2}) (am|pm)$/;
+      const h24 = (h, ap) => (Number(h) % 12) + (ap === "pm" ? 12 : 0);
+      check("REQ-47: 1 to 3 option lines, each inside 15:00 to 19:00, one per date",
+        lines.length >= 1 && lines.length <= 3 && !body12.includes("[OPTIONS]")
+          && lines.every((l) => { const m = LINE.exec(l); return m && h24(m[4], m[6]) >= 15 && h24(m[7], m[9]) * 60 + Number(m[8]) <= 19 * 60; })
+          && new Set(lines.map((l) => l.split(",")[0])).size === lines.length,
+        body12);
+      const ninaNext = isoIn(9);
+      const slotCheck = psql(`select count(*) || '|' || count(distinct (s::timestamptz at time zone 'America/Toronto')::date) || '|' || coalesce(bool_and(s::timestamptz >= ('${ninaStart} 18:00'::timestamp at time zone 'America/Toronto') and s::timestamptz + interval '60 minutes' <= ('${ninaNext} 17:00'::timestamp at time zone 'America/Toronto')), false) || '|' || (e.detail->>'class_date') from iris.events e, jsonb_array_elements_text(e.detail->'offered_slots') s where e.message_id = '${m12}' and e.kind = 'drafted' group by e.detail->>'class_date'`);
+      check("REQ-47: the event's offered_slots match the lines, after her next class and before the one after it",
+        slotCheck === `${lines.length}|${lines.length}|true|${ninaStart}`, `${slotCheck} want ${lines.length}|${lines.length}|true|${ninaStart}`);
+      check("REQ-47: Nina's message has no schedule flag", msg("m12", "array_to_string(flags, ',')") === "", msg("m12", "array_to_string(flags, ',')"));
+      const m13Draft = psql(`select reply_type || '|' || body_text from iris.drafts where message_id = '${m13}' order by version limit 1`);
+      check("REQ-47: Omar's draft is reschedule_request with no clock time", m13Draft.startsWith("reschedule_request|") && !/\d{1,2}:\d{2}|\d\s?(am|pm)\b/i.test(m13Draft), m13Draft);
+      check("REQ-47: Omar's message is flagged availability_not_entered and not escalated", msg("m13", "array_to_string(flags, ',') || '|' || state") === "availability_not_entered|drafted", msg("m13", "array_to_string(flags, ',') || '|' || state"));
+      check("REQ-47: Omar's drafted event has no offered_slots", psql(`select count(*) from iris.events where message_id = '${m13}' and kind = 'drafted' and detail ? 'offered_slots'`) === "0");
+
+      await teacher.goto(`${BASE}/iris/messages/${m12}`);
+      await teacher.locator("[data-offer-note]").waitFor({ timeout: 15000 });
+      const note = teacher.locator("[data-offer-note]");
+      check("REQ-47: the offer's message page says nothing is booked and links to Schedule",
+        (await note.innerText()).includes("Nothing is booked") && /\/tracker\/schedule$/.test((await note.getByRole("link", { name: "Open Schedule" }).getAttribute("href")) ?? ""),
+        await note.innerText());
+      check("REQ-47: the policy used is Reschedule offer", (await teacher.locator("[data-policy-used]").innerText()).includes("Reschedule offer"));
+      await teacher.goto(`${BASE}/iris/messages/${m13}`);
+      await teacher.locator('[data-flag="availability_not_entered"]').waitFor({ timeout: 15000 });
+      check("REQ-47: Omar's page shows the flag and no offer note",
+        (await teacher.locator('[data-flag="availability_not_entered"]').innerText()) === "teacher availability not entered" && (await teacher.locator("[data-offer-note]").count()) === 0);
+    }
 
     await teacher.goto(`${BASE}/iris`);
     await teacher.getByRole("heading", { name: "Needs you", exact: true }).waitFor({ timeout: 15000 });
@@ -2101,7 +2152,7 @@ try {
       const draftCount = (gid) => psql(`select count(*) from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = '${gid}'`);
       const streak = (type) => psql(`select unedited_streak || '|' || edited_total || '|' || rejected_total from iris.reply_types where type = '${type}'`);
       check("REQ-44: the cancellation has version 1, proposed, by iris, unedited, without a signature",
-        draftOf("m9", "d.version || '|' || d.state || '|' || d.created_by || '|' || d.edited || '|' || d.policy_version || '|' || (d.body_text like '%AP Academy%')") === "1|proposed|iris|false|4|false",
+        draftOf("m9", "d.version || '|' || d.state || '|' || d.created_by || '|' || d.edited || '|' || d.policy_version || '|' || (d.body_text like '%AP Academy%')") === "1|proposed|iris|false|5|false",
         draftOf("m9", "d.state"));
       check("REQ-44: one draft ai_calls row for it", psql(`select count(*) from iris.ai_calls where purpose = 'draft' and outcome = 'ok' and message_id = '${idOf("m9")}'`) === "1");
       check("REQ-44: the flagged billing message gets no draft", draftCount("m10") === "0");
@@ -2202,7 +2253,7 @@ try {
     // REQ-46: no request to Missed Sessions & Credits and no write to a family's page during the Iris section.
     {
       const irisJournal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(notionStart);
-      const familyIds = ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004", NINA_ID, "dddddddd-dddd-4ddd-8ddd-dddddddd0001"];
+      const familyIds = ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004", NINA_ID, OMAR_ID, "dddddddd-dddd-4ddd-8ddd-dddddddd0001"];
       check("REQ-46: Iris makes no Missed Sessions & Credits request", !irisJournal.some((j) => j.path.replace(/-/g, "").includes("38cdcded9bef4e68bceba56920f098bd")));
       check("REQ-46: Iris writes no family page", !irisJournal.some((j) => j.method === "PATCH" && familyIds.some((id) => j.path.replace(/-/g, "").includes(id.replace(/-/g, "")))));
     }

@@ -1,3 +1,4 @@
+import type { Slot } from "./makeup";
 import { SIGNATURE } from "./policy";
 
 /**
@@ -6,7 +7,7 @@ import { SIGNATURE } from "./policy";
  * Charlie instead. The regexes can over-escalate (a "5 pm" echoed back); that
  * only costs Charlie a reply.
  */
-export type DraftRule = "money" | "ai_line" | "time" | "forfeit";
+export type DraftRule = "money" | "ai_line" | "time" | "forfeit" | "options";
 
 const RULES: [DraftRule, RegExp][] = [
   ["money", /\$\s?\d|\b\d[\d,.]*\s*(?:dollars?|cad|usd)\b/i],
@@ -18,6 +19,27 @@ const RULES: [DraftRule, RegExp][] = [
 /** Every rule the body breaks, in a fixed order; empty when it is clean. */
 export function checkDraft(body: string): DraftRule[] {
   return RULES.filter(([, re]) => re.test(body)).map(([code]) => code);
+}
+
+/** Every clock time the time rule can see, with its meridiem when one follows. */
+const CLOCK = /\b(\d{1,2})(?::(\d{2}))?\s?(am|pm|a\.m\.|p\.m\.)(?![a-z])|\b(\d{1,2}):(\d{2})\b/gi;
+
+/**
+ * REQ-47 AC5: every clock time in a filled offer that is not the start or end
+ * of a supplied slot. "4:00 pm", "4 pm" and "16:00" all read as 16:00; a bare
+ * "4:00" reads as 04:00, so an unclear time is held back.
+ */
+export function timesOutsideSlots(body: string, slots: Slot[]): string[] {
+  const allowed = new Set(slots.flatMap((s) => [s.startTime, s.endTime]).map((t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))));
+  const out: string[] = [];
+  for (const m of body.matchAll(CLOCK)) {
+    let h = Number(m[1] ?? m[4]);
+    const min = Number(m[2] ?? m[5] ?? 0);
+    const meridiem = m[3]?.toLowerCase().replace(/\./g, "");
+    if (meridiem) h = (h % 12) + (meridiem === "pm" ? 12 : 0);
+    if (!allowed.has(h * 60 + min)) out.push(m[0]);
+  }
+  return out;
 }
 
 const SIGN_OFF = /^(?:charlie|ap academy|thanks,?|thank you,?|best,?|regards,?|best regards,?|cheers,?|-+)$/i;

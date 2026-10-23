@@ -9,6 +9,8 @@
 // general question, all at 0.95 or more. They never replace /__last.
 // Iris draft calls (REQ-44) are recognised by the draft system prompt's first line: a message with "forfeit"
 // gets a body that breaks the draft rules (a clock time and "forfeited"); anything else a clean body.
+// REQ-47: "move" classifies as a reschedule request; a reschedule_offer prompt (it says how many make-up times
+// are offered) gets a body with the [OPTIONS] line, which the tracker fills in.
 import http from "node:http";
 
 const IRIS_FIRST_LINE = "You are Iris, the inbox classifier for AP Academy, a tutoring business.";
@@ -16,6 +18,10 @@ const DRAFT_FIRST_LINE = "You draft one email reply for Charlie, who runs AP Aca
 
 function draftAnswer(user) {
   const body = (/<message>\n([\s\S]*)\n<\/message>/.exec(user)?.[1] ?? "").toLowerCase();
+  if (user.includes("Make-up times offered:")) {
+    return { body: "Hi,\n\nWe can move the class. These times work:\n[OPTIONS]\nLet me know which suits you and I will confirm it.", needs_charlie: false, reason: "" };
+  }
+  if (body.includes("move")) return { body: "Hi,\n\nNo problem. Charlie will send options.", needs_charlie: false, reason: "" };
   return body.includes("forfeit")
     ? { body: "Hi,\n\nThat class is forfeited. Come at 5:30 instead.", needs_charlie: false, reason: "" }
     : { body: "Hi,\n\nThanks for letting me know. I will follow up with some options soon.", needs_charlie: false, reason: "" };
@@ -27,7 +33,9 @@ function irisAnswer(user) {
     ? { intents: ["billing_question"], primary: "billing_question", confidence: 0.97, flags: ["money_dispute"] }
     : body.includes("cancel")
       ? { intents: ["cancellation"], primary: "cancellation", confidence: 0.95, flags: [] }
-      : { intents: ["general_question"], primary: "general_question", confidence: 0.95, flags: [] };
+      : body.includes("move")
+        ? { intents: ["reschedule_request"], primary: "reschedule_request", confidence: 0.95, flags: [] }
+        : { intents: ["general_question"], primary: "general_question", confidence: 0.95, flags: [] };
   return { ...pick, child_name: "", summary: "A synthetic mock summary." };
 }
 

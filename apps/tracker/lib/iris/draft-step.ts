@@ -2,8 +2,9 @@ import { TUNING } from "../domain/tuning";
 import type { FamilyEntry } from "../notion/parents";
 import type { DraftPort } from "./draft";
 import { buildDraftPrompt } from "./draft-prompt";
-import { checkDraft } from "./draft-rules";
+import { checkDraft, timesOutsideSlots, type DraftRule } from "./draft-rules";
 import { shortError } from "./intake";
+import { fillOptions, findMakeupSlots, resolveRescheduleTarget, type Slot, type TeacherCalendar } from "./makeup";
 import { resolveCancellation, type NoticeResult, type StudentSchedule } from "./notice";
 import { DRAFTABLE_ESCALATIONS, DRAFTABLE_INTENTS, POLICY_VERSION, type DraftableType } from "./policy";
 import type { DraftableMessage, EventDetail, IrisStore } from "./store";
@@ -22,6 +23,12 @@ export type { StudentSchedule } from "./notice";
  * the matched student's schedule and becomes cancel_with_notice, late_cancel,
  * a schedule no-show for Charlie, or the plain cancellation flagged
  * schedule_unknown. Iris writes nothing outside the iris schema.
+ *
+ * Rung 5 (REQ-47, tracker ADR 0075): a classified reschedule request reads
+ * the teacher's calendar too. With free time it becomes reschedule_offer, and
+ * code writes the slots in at the model's [OPTIONS] line; otherwise it stays
+ * reschedule_request, flagged availability_not_entered, no_free_slot or
+ * schedule_unknown. The model never sees a time, and nothing is booked.
  */
 export type DraftStepDeps = {
   store: IrisStore;
@@ -31,6 +38,8 @@ export type DraftStepDeps = {
   directory: () => Promise<FamilyEntry[]>;
   /** One student's classes from the scheduler (REQ-46). Null or absent: cancellations draft as before. */
   schedule?: ((studentId: string) => Promise<StudentSchedule>) | null;
+  /** One teacher's whole calendar and availability (REQ-47). Null or absent: reschedule requests draft as before. */
+  availability?: ((staffId: string) => Promise<TeacherCalendar>) | null;
   now: () => Date;
   startedAtMs: number;
   signal?: AbortSignal;
@@ -74,6 +83,13 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
     if (!p) schedules.set(studentId, (p = read(studentId)));
     return p;
   };
+  // Each teacher's whole calendar is read at most once per run, whatever the message's dates.
+  const calendars = new Map<string, Promise<TeacherCalendar>>();
+  const calendarOf = (staffId: string, read: (id: string) => Promise<TeacherCalendar>) => {
+    let p = calendars.get(staffId);
+    if (!p) calendars.set(staffId, (p = read(staffId)));
+    return p;
+  };
 
   const one = async (m: DraftableMessage) => {
     let replyType = m.intent as DraftableType;
@@ -81,6 +97,7 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
     let reason: string | null = m.state === "escalated" ? (m.escalationReason ?? "escalate_only") : null;
     let flags: string[] | undefined;
     let schedule: { missedDate: string; nextDate: string | null } | undefined;
+    let slots: Slot[] = [];
     const facts: EventDetail = {};
     const ctx = await store.threadContext(m.threadId, m.receivedAt, HISTORY_LINES);
 
@@ -120,6 +137,43 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
       }
     }
 
+    if (m.intent === "reschedule_request" && m.state === "classified" && deps.schedule && deps.availability) {
+      let flag: string | null = "schedule_unknown";
+      // No matched student: Iris does not know whose class it is, and does not guess.
+      if (m.notionStudentId) {
+        let classes: StudentSchedule;
+        try {
+          classes = await scheduleOf(m.notionStudentId, deps.schedule);
+        } catch {
+          // The message waits for the next run as it was, with no retry spent.
+          out.error ??= "Could not read the schedule";
+          return;
+        }
+        const resolved = resolveRescheduleTarget({ receivedAt: m.receivedAt, ...classes });
+        if (resolved) {
+          let teacher: TeacherCalendar;
+          try {
+            teacher = await calendarOf(resolved.target.staffId, deps.availability);
+          } catch {
+            out.error ??= "Could not read the schedule";
+            return;
+          }
+          const found = findMakeupSlots({ ...resolved, student: classes, teacher, now: deps.now() });
+          if (found.kind === "slots") {
+            flag = null;
+            replyType = "reschedule_offer";
+            slots = found.slots;
+            schedule = { missedDate: resolved.target.date, nextDate: resolved.next?.date ?? null };
+            facts.class_date = resolved.target.date;
+            facts.offered_slots = slots.map((x) => x.startsAt);
+          } else {
+            flag = found.kind === "not_entered" ? "availability_not_entered" : "no_free_slot";
+          }
+        }
+      }
+      if (flag) flags = [...m.flags.filter((f) => f !== flag), flag];
+    }
+
     const family = ctx.studentIds.map((id) => byStudent.get(id)).filter((e): e is FamilyEntry => e !== undefined);
     const child = (m.notionStudentId ? byStudent.get(m.notionStudentId) : undefined) ?? (family.length === 1 ? family[0] : undefined);
     const parent = family[0]?.parentName ?? "";
@@ -131,6 +185,7 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
       history: ctx.history,
       body: m.bodyText ?? "",
       schedule,
+      ...(replyType === "reschedule_offer" && { optionCount: slots.length }),
     });
 
     const answer = await draft(prompt, deps.signal);
@@ -160,15 +215,19 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
       return;
     }
 
-    const rules = checkDraft(answer.output.body);
-    if (rules.length > 0) {
+    const holdBack = async (rules: DraftRule[]) => {
       await store.updateMessage(m.id, { state: "escalated", escalationReason: "draft_rule", stateChangedAt: at(), handledAt: null, lastError: null, ...(flags && { flags }) });
       await store.insertEvent({ kind: "escalated", messageId: m.id, detail: { state: "escalated", reason: "draft_rule", rules } });
       out.escalated += 1;
-      return;
-    }
+    };
+    const rules = checkDraft(answer.output.body);
+    if (rules.length > 0) return holdBack(rules);
+    // REQ-47: the times are written in by code, then checked again: a time only a slot supplied may stay.
+    const body = replyType === "reschedule_offer" ? fillOptions(answer.output.body, slots) : answer.output.body;
+    if (body === null) return holdBack(["options"]);
+    if (timesOutsideSlots(body, slots).length > 0) return holdBack(["time"]);
 
-    const draftId = await store.insertDraft({ messageId: m.id, replyType, bodyText: answer.output.body, policyVersion: POLICY_VERSION });
+    const draftId = await store.insertDraft({ messageId: m.id, replyType, bodyText: body, policyVersion: POLICY_VERSION });
     const now = at();
     if (state === "escalated") {
       // The no-show stays escalated (escalate_only or schedule_no_show) and carries its draft.

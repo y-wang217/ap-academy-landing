@@ -1,16 +1,30 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CHILD_SCOPED, CLASSIFIER_INTENTS, ESCALATE_ONLY, FLAG_HINTS, FLAGS, HARD_RULES, INTENT_HINTS, NEVER_AUTO_SEND, NOTICE_HOURS, POLICY, POLICY_VERSION, REPLY_TYPES, SCHEDULE_FLAGS, SCHEDULE_REPLY_TYPES, SENSITIVE_TRIGGERS } from "./policy";
+import {
+  CHILD_SCOPED, CLASSIFIER_INTENTS, ESCALATE_ONLY, FLAG_HINTS, FLAGS, HARD_RULES, INTENT_HINTS, MAKEUP_LEAD_HOURS, MAKEUP_MAX_SLOTS, NEVER_AUTO_SEND, NOTICE_HOURS,
+  OFFER_REPLY_TYPES, OPTIONS_TOKEN, POLICY, POLICY_VERSION, REPLY_TYPES, SCHEDULE_FLAGS, SCHEDULE_REPLY_TYPES, SENSITIVE_TRIGGERS,
+} from "./policy";
 
 // REQ-42 AC7: the versioned policy file, with the founder values of Oct 16, 2026.
 const ROOT = join(__dirname, "..", "..");
 const SOURCE = readFileSync(join(__dirname, "policy.ts"), "utf8");
 
 describe("policy.ts", () => {
-  it("is version 4 (REQ-46) with a 12-hour notice window", () => {
-    expect(POLICY_VERSION).toBe(4);
+  it("is version 5 (REQ-47) with a 12-hour notice window and the make-up constants", () => {
+    expect(POLICY_VERSION).toBe(5);
     expect(NOTICE_HOURS).toBe(12);
+    expect([OPTIONS_TOKEN, MAKEUP_MAX_SLOTS, MAKEUP_LEAD_HOURS]).toEqual(["[OPTIONS]", 3, 24]);
+  });
+
+  // REQ-47 AC9: the two reschedule texts.
+  it("the reschedule request never names a time and the offer asks for the placeholder line", () => {
+    expect(POLICY.reschedule_request.text).toContain("Charlie will send options");
+    expect(POLICY.reschedule_request.text).not.toMatch(/\d/);
+    expect(POLICY.reschedule_offer.text).toContain(`Write the line ${OPTIONS_TOKEN} on its own line`);
+    expect(POLICY.reschedule_offer.text).toContain("Never say a time is booked");
+    expect([...OFFER_REPLY_TYPES]).toEqual(["reschedule_offer"]);
+    expect(CLASSIFIER_INTENTS as readonly string[]).not.toContain("reschedule_offer");
   });
 
   it("has a section for every reply type and escalate-only intent", () => {
@@ -91,9 +105,11 @@ describe("policy.ts", () => {
     }
   });
 
-  it("keeps schedule_unknown out of the sensitive flags, so it never escalates", () => {
-    expect([...SCHEDULE_FLAGS]).toEqual(["schedule_unknown"]);
-    expect(FLAGS as readonly string[]).not.toContain("schedule_unknown");
-    expect(SENSITIVE_TRIGGERS).not.toHaveProperty("schedule_unknown");
+  it("keeps the schedule flags out of the sensitive flags, so they never escalate", () => {
+    expect([...SCHEDULE_FLAGS]).toEqual(["schedule_unknown", "availability_not_entered", "no_free_slot"]);
+    for (const f of SCHEDULE_FLAGS) {
+      expect(FLAGS as readonly string[], f).not.toContain(f);
+      expect(SENSITIVE_TRIGGERS, f).not.toHaveProperty(f);
+    }
   });
 });
