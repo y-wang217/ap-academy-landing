@@ -272,11 +272,24 @@ export function createEvalReader(iris: IrisClient, orgId: string, uid: () => Pro
     },
 
     async gateInputs() {
-      const [run, rt] = await Promise.all([latestRun(), iris.from("reply_types").select("type, unedited_streak, streak_policy_version").eq("org_id", orgId)]);
+      const [run, rt] = await Promise.all([
+        latestRun(),
+        iris
+          .from("reply_types")
+          .select("type, unedited_streak, streak_policy_version, auto_send_eligible, auto_send_enabled, approved_unedited_total, edited_total, rejected_total, disabled_reason, disabled_at")
+          .eq("org_id", orgId),
+      ]);
       if (rt.error) fail();
       const replyTypes: GateInputs["replyTypes"] = {};
-      for (const r of z.array(z.object({ type: z.string(), unedited_streak: z.number().int(), streak_policy_version: z.number().int().nullable() })).parse(rt.data ?? [])) {
-        replyTypes[r.type] = { uneditedStreak: r.unedited_streak, streakPolicyVersion: r.streak_policy_version };
+      const Row = z.object({
+        type: z.string(), unedited_streak: z.number().int(), streak_policy_version: z.number().int().nullable(), auto_send_eligible: z.boolean(), auto_send_enabled: z.boolean(),
+        approved_unedited_total: z.number().int(), edited_total: z.number().int(), rejected_total: z.number().int(), disabled_reason: z.string().nullable(), disabled_at: z.string().nullable(),
+      });
+      for (const r of z.array(Row).parse(rt.data ?? [])) {
+        replyTypes[r.type] = {
+          uneditedStreak: r.unedited_streak, streakPolicyVersion: r.streak_policy_version, autoSendEligible: r.auto_send_eligible, autoSendEnabled: r.auto_send_enabled,
+          approvedUneditedTotal: r.approved_unedited_total, editedTotal: r.edited_total, rejectedTotal: r.rejected_total, disabledReason: r.disabled_reason, disabledAt: r.disabled_at,
+        };
       }
       return { run, replyTypes };
     },

@@ -30,6 +30,8 @@ export function realIrisAdminDeps(): IrisAdminDeps {
       listNeedsYou: async (limit) => (await get()).listNeedsYou(limit),
       listRecent: async (limit) => (await get()).listRecent(limit),
       updatePaused: async (paused) => (await get()).updatePaused(paused),
+      updateSendingEnabled: async (on) => (await get()).updateSendingEnabled(on),
+      setAutoSend: async (type, enabled, version) => (await get()).setAutoSend(type, enabled, version),
       getMessage: async (id) => (await get()).getMessage(id),
       markHandled: async (id) => (await get()).markHandled(id),
       listDraftsWaiting: async (limit) => (await get()).listDraftsWaiting(limit),

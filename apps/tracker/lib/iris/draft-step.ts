@@ -45,7 +45,11 @@ export type DraftStepDeps = {
   signal?: AbortSignal;
 };
 
-export type DraftOutcome = { result: "ok" | "failed"; drafted: number; escalated: number; failed: number; error: string | null };
+export type DraftOutcome = {
+  result: "ok" | "failed"; drafted: number; escalated: number; failed: number; error: string | null;
+  /** REQ-49: the drafts whose message ended drafted, for the auto-send gate. Escalated drafts are left out. */
+  draftedIds: { messageId: string; draftId: string }[];
+};
 
 const CONCURRENCY = 2;
 const HISTORY_LINES = 5;
@@ -79,7 +83,7 @@ export function prepareDraftPrompt(
 }
 
 export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
-  const out: DraftOutcome = { result: "ok", drafted: 0, escalated: 0, failed: 0, error: null };
+  const out: DraftOutcome = { result: "ok", drafted: 0, escalated: 0, failed: 0, error: null, draftedIds: [] };
   const { store, draft } = deps;
   if (!draft) return out;
   const at = () => deps.now().toISOString();
@@ -254,6 +258,7 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
     const finalReason = state === "escalated" ? reason : answer.output.needsCharlie ? "needs_charlie" : null;
     await store.insertEvent({ kind: "drafted", messageId: m.id, draftId, detail: { state: finalState, reason: finalReason, reply_type: replyType, version: 1, ...facts } });
     out.drafted += 1;
+    if (finalState === "drafted") out.draftedIds.push({ messageId: m.id, draftId });
   };
 
   // Concurrency 2. A store error stops new work and fails the run, like classify.

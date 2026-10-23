@@ -243,7 +243,6 @@ export const EVAL_TEXT = {
   notMet: "not met",
   noRecordedRun: "no recorded run",
   staleRun: "the recorded run is out of date",
-  noSwitchNote: "No type can be switched on yet. That comes with a later card.",
 } as const;
 
 export const evalCountsText = (s: { storedInbound: number; storedReplies: number; skipped: number }) =>
@@ -282,3 +281,65 @@ export const neverLineText = (types: readonly string[]) => `${EVAL_TEXT.never}: 
 
 /** A ratio as two decimals, or "-". */
 export const ratioText = (v: number | null | undefined) => (v === null || v === undefined ? "-" : v.toFixed(2));
+
+/** Auto-send (REQ-49): the switches on /iris/settings and the message page. */
+export const AUTO_TEXT = {
+  title: "Auto-send",
+  sending: "Sending enabled",
+  on: "On",
+  off: "Off",
+  turnOn: "Turn on",
+  turnOff: "Turn off",
+  sendingTick: "I have read which types are on and the automated line",
+  quietHours: (start: string, end: string) => `Quiet hours: ${start} to ${end} Toronto. Auto-sends wait until ${end}.`,
+  notEligible: "No switch: not eligible yet",
+  lastOff: "Last turned off",
+  totals: (approved: number, edited: number, rejected: number) => `approved ${approved} · edited ${edited} · rejected ${rejected}`,
+  streak: (n: number) => `streak ${n}`,
+  gateFailed: "Not switched on. Still missing",
+  saveFailed: "Could not save. Nothing changed.",
+  approvedAutomatically: "Approved automatically",
+  sendsAt: (hhmm: string) => `Sends at ${hhmm}`,
+} as const;
+
+const SKIP_WORDS: Record<string, string> = {
+  paused: "Iris is paused",
+  sending_disabled: "Sending is off",
+  type_disabled: "this type is off",
+  never_auto_send: "this type is never sent automatically",
+  needs_charlie: "needs Charlie",
+  intent: "no single intent",
+  flags: "flagged",
+  confidence: "confidence below the threshold",
+  student: "no single student",
+  policy_version: "drafted under another policy",
+  edited: "edited by you",
+  conflict: "already handled",
+};
+
+/** One auto-send skip condition (REQ-49 AC2), in words. */
+export const skipConditionText = (code: string) => SKIP_WORDS[code] ?? code;
+
+const DISABLED_WORDS: Record<string, string> = {
+  edited_after_enable: "edited or rejected after it was on",
+  send_failed: "an automatic send failed",
+  policy_changed: "the policy changed",
+  owner: "turned off by you",
+};
+
+/** Why a type was last switched off (REQ-49 AC13), in words. */
+export const disabledReasonText = (reason: string | null) => (reason === null ? null : (DISABLED_WORDS[reason] ?? reason));
+
+const GATE_FAIL_WORDS: Record<string, string> = {
+  never_auto_send: SKIP_WORDS.never_auto_send,
+  no_run: EVAL_TEXT.noRecordedRun,
+  stale_run: EVAL_TEXT.staleRun,
+  labelled_count: "enough labelled messages",
+  precision: EVAL_TEXT.precision,
+  sensitive_recall: EVAL_TEXT.sensitiveRecall,
+  mean_rating: EVAL_TEXT.meanRating,
+  streak: "the unedited streak",
+};
+
+/** A refused switch's failing conditions (REQ-49 AC10, AC13), in words. */
+export const gateFailText = (codes: readonly string[]) => codes.map((c) => GATE_FAIL_WORDS[c] ?? c).join(", ");

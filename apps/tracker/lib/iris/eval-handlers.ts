@@ -161,16 +161,28 @@ export async function loadEval(
   }
 }
 
-export type ReadinessRow = { type: string; pass: boolean; failing: GateCondition[]; count: number; streak: number };
+export type ReadinessRow = {
+  type: string; pass: boolean; failing: GateCondition[]; count: number; streak: number;
+  /** REQ-49: the switch state and totals. A type gets a switch only when eligible and not on the never list. */
+  enabled: boolean; eligible: boolean; switchable: boolean; approvedTotal: number; editedTotal: number; rejectedTotal: number;
+  disabledReason: string | null; disabledAt: string | null;
+};
 export type ReadinessResult = { kind: "ok"; runAt: string | null; runPolicyVersion: number | null; rows: ReadinessRow[]; never: string[] } | { kind: "error" };
 
-/** The settings page's Auto-send readiness card (AC11). Called after the page's own owner check. */
+/** The settings page's Auto-send card (REQ-45 AC11, REQ-49 AC13). Called after the page's own owner check. */
 export async function loadReadiness(reader: EvalReader, model: string): Promise<ReadinessResult> {
   try {
     const { run, replyTypes } = await reader.gateInputs();
     const rows = AUTO_SEND_CANDIDATES.map((type) => {
-      const r = evaluateGate({ type, run, replyType: replyTypes[type] ?? null, policyVersion: POLICY_VERSION, model });
-      return { type, ...r, count: run?.perType[type]?.count ?? 0, streak: replyTypes[type]?.uneditedStreak ?? 0 };
+      const rt = replyTypes[type];
+      const r = evaluateGate({ type, run, replyType: rt ?? null, policyVersion: POLICY_VERSION, model });
+      const eligible = rt?.autoSendEligible ?? false;
+      return {
+        type, ...r, count: run?.perType[type]?.count ?? 0, streak: rt?.uneditedStreak ?? 0,
+        enabled: rt?.autoSendEnabled ?? false, eligible, switchable: eligible && !(NEVER_AUTO_SEND as readonly string[]).includes(type),
+        approvedTotal: rt?.approvedUneditedTotal ?? 0, editedTotal: rt?.editedTotal ?? 0, rejectedTotal: rt?.rejectedTotal ?? 0,
+        disabledReason: rt?.disabledReason ?? null, disabledAt: rt?.disabledAt ?? null,
+      };
     });
     return { kind: "ok", runAt: run?.ranAt ?? null, runPolicyVersion: run?.policyVersion ?? null, rows, never: [...NEVER_AUTO_SEND] };
   } catch {

@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { IrisReader } from "../iris/handlers";
 import type { SendStore } from "../iris/send";
-import { ApproveSendResult, ClaimResultValue, ClassifiableRow, DraftRow, FailResultValue, FinishResultValue, RetrySendResult, SendContextRow, SendViewRow, DraftableRow, HistoryRow, InboxMessageRow, InboxThreadRow, MessageDetailRow, OwnerSettingsRow, PurgeCounts, PushRow, PushCandidateRow, PushDayRow, ReviewResult, RetryRow, RunRow, SettingsRow, ThreadMessageRow, ThreadRow, type InboxMessage } from "../iris/schemas";
+import { ApproveSendResult, AutoApproveRow, ClaimResultValue, ClassifiableRow, DraftRow, FailResultValue, FinishResultValue, RetrySendResult, SendContextRow, SendViewRow, DraftableRow, HistoryRow, InboxMessageRow, InboxThreadRow, MessageDetailRow, OwnerSettingsRow, PurgeCounts, PushRow, PushCandidateRow, PushDayRow, ReviewResult, RetryRow, RunRow, SetAutoSendResult, SettingsRow, ThreadMessageRow, ThreadRow, type InboxMessage } from "../iris/schemas";
 import { EventRow } from "../iris/eval-schemas";
-import type { EvalPendingMessage, IrisStore, MessageInsert, MessagePatch, ThreadPatch } from "../iris/store";
+import type { AutoSendCandidate, EvalPendingMessage, IrisStore, MessageInsert, MessagePatch, ThreadPatch } from "../iris/store";
 import { TUNING } from "../domain/tuning";
 import type { Db } from "./client";
 
@@ -76,9 +76,9 @@ function threadColumns(p: ThreadPatch): Record<string, unknown> {
 
 const THREAD_SELECT = "id, gmail_thread_id, first_received_at, last_inbound_at, purge_at";
 const PUSH_SELECT = "id, message_id, draft_id, day, notion_block_id, comment_done, state, attempts, last_error, purge_at";
-const DRAFT_SELECT = "id, version, reply_type, body_text, policy_version, state, created_by, edited, approved_at, rejected_reason, created_at";
+const DRAFT_SELECT = "id, version, reply_type, body_text, policy_version, state, created_by, edited, approved_at, rejected_reason, created_at, approval_mode, send_after";
 
-const SEND_CONTEXT = "id, state, attempts, rfc_message_id, draft:drafts(body_text), message:messages(from_email, rfc_message_id, thread:threads(gmail_thread_id, subject))";
+const SEND_CONTEXT = "id, state, attempts, rfc_message_id, mode, draft:drafts(body_text), message:messages(from_email, rfc_message_id, thread:threads(gmail_thread_id, subject))";
 
 /**
  * The send rows (REQ-48, migration 0028), through whichever client is passed:
@@ -110,9 +110,54 @@ function sendStore(iris: IrisClient, orgId: string): SendStore {
   };
 }
 
+/** The gate's read of one draft (REQ-49): ids, states and codes, never a body. */
+const CandidateRow = z.object({
+  id: z.guid(), message_id: z.guid(), reply_type: z.string(), version: z.number().int(), created_by: z.enum(["iris", "owner"]), edited: z.boolean(), policy_version: z.number().int(),
+  message: z.object({
+    state: z.string().nullable(), intent: z.string().nullable(), flags: z.array(z.string()), confidence: z.union([z.number(), z.string()]).transform(Number).nullable(),
+    notion_student_id: z.guid().nullable(), thread: z.object({ notion_student_ids: z.array(z.guid()) }),
+  }),
+});
+const SwitchRow = z.object({ type: z.string(), auto_send_enabled: z.boolean(), streak_policy_version: z.number().int().nullable() });
+
 export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
   return {
     ...sendStore(iris, orgId),
+    async resetForPolicy(policyVersion) {
+      const { data, error } = await iris.rpc("reset_for_policy", { p_org: orgId, p_policy_version: policyVersion });
+      if (error) fail();
+      return z.number().int().parse(data);
+    },
+    async autoSendCandidates(draftIds) {
+      if (draftIds.length === 0) return [];
+      const d = await iris
+        .from("drafts")
+        .select("id, message_id, reply_type, version, created_by, edited, policy_version, message:messages(state, intent, flags, confidence, notion_student_id, thread:threads(notion_student_ids))")
+        .eq("org_id", orgId)
+        .in("id", draftIds);
+      if (d.error) fail();
+      const rows = z.array(CandidateRow).parse(d.data ?? []);
+      const types = [...new Set(rows.map((r) => r.reply_type))];
+      const t = types.length > 0 ? await iris.from("reply_types").select("type, auto_send_enabled, streak_policy_version").eq("org_id", orgId).in("type", types) : { data: [], error: null };
+      if (t.error) fail();
+      const switches = new Map(z.array(SwitchRow).parse(t.data ?? []).map((r) => [r.type, r]));
+      return rows.map((r): AutoSendCandidate => {
+        const sw = switches.get(r.reply_type);
+        return {
+          draftId: r.id, messageId: r.message_id, replyType: r.reply_type, version: r.version, createdBy: r.created_by, edited: r.edited, policyVersion: r.policy_version,
+          message: {
+            state: r.message.state as AutoSendCandidate["message"]["state"], intent: r.message.intent, flags: r.message.flags, confidence: r.message.confidence,
+            notionStudentId: r.message.notion_student_id, notionStudentIds: r.message.thread.notion_student_ids,
+          },
+          typeSwitch: sw ? { autoSendEnabled: sw.auto_send_enabled, streakPolicyVersion: sw.streak_policy_version } : null,
+        };
+      });
+    },
+    async autoApprove(draftId, sendAfter) {
+      const { data, error } = await iris.rpc("auto_approve_draft", { p_draft: draftId, p_send_after: sendAfter });
+      if (error) fail();
+      return AutoApproveRow.parse(data);
+    },
     async listStuckSends(limit) {
       const { data, error } = await iris
         .from("sends")
@@ -531,7 +576,11 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
       return RetrySendResult.parse(data);
     },
     async getSettings() {
-      const { data, error } = await iris.from("settings").select("paused, mailbox, last_poll_at, last_poll_result, last_error, confidence_threshold").eq("org_id", orgId).maybeSingle();
+      const { data, error } = await iris
+        .from("settings")
+        .select("paused, mailbox, last_poll_at, last_poll_result, last_error, confidence_threshold, sending_enabled, quiet_start, quiet_end")
+        .eq("org_id", orgId)
+        .maybeSingle();
       if (error) fail();
       return data ? OwnerSettingsRow.parse(data) : null;
     },
@@ -582,6 +631,16 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
       const { data, error } = await iris.from("settings").update({ paused }).eq("org_id", orgId).select("id");
       if (error) fail();
       return z.array(z.unknown()).parse(data ?? []).length;
+    },
+    async updateSendingEnabled(on) {
+      const { data, error } = await iris.from("settings").update({ sending_enabled: on }).eq("org_id", orgId).select("id");
+      if (error) fail();
+      return z.array(z.unknown()).parse(data ?? []).length;
+    },
+    async setAutoSend(type, enabled, policyVersion) {
+      const { data, error } = await iris.rpc("set_auto_send", { p_org: orgId, p_type: type, p_enabled: enabled, p_policy_version: policyVersion });
+      if (error) fail();
+      return SetAutoSendResult.parse(data);
     },
     async getMessage(id) {
       const { data, error } = await iris

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TUNING } from "../domain/tuning";
 import { GmailError, type GmailSendPort } from "./gmail";
+import { AUTOMATED_LINE, SIGNATURE } from "./policy";
 import { attemptSend, runSends } from "./send";
 import { fakeIrisStore } from "./store.fake";
 
@@ -161,5 +162,43 @@ describe("runSends", () => {
     w.db.settings.paused = true;
     expect(await runSends({ store: w.db.store, gmail: w.gmail.port, mailbox: MAILBOX, now, startedAtMs: NOW })).toEqual({ sent: 0, failed: 0, error: null });
     expect(w.gmail.calls).toEqual([]);
+  });
+});
+
+// REQ-49 AC3, AC7, AC9: the automated line, the failed-send fail-safe and a withdrawn send.
+describe("auto sends", () => {
+  it("an auto body is the draft, the signature, a blank line and the automated line; a manual body has no line", async () => {
+    const auto = world({}, { mode: "auto" });
+    expect(await auto.attempt(false)).toEqual({ state: "sent", error: null });
+    expect(auto.outbound()[0].bodyText).toBe(`Hi Ann,\n\nThanks for letting me know.\n\n${SIGNATURE}\n\n${AUTOMATED_LINE}`);
+    const manual = world();
+    await manual.attempt(false);
+    expect(manual.outbound()[0].bodyText).toBe(`Hi Ann,\n\nThanks for letting me know.\n\n${SIGNATURE}`);
+    expect(manual.outbound()[0].bodyText).not.toContain(AUTOMATED_LINE);
+  });
+
+  it("a failed auto send switches its type off and keeps the streak; a failed manual send changes no type", async () => {
+    const auto = world({ send: [500] }, { mode: "auto", attempts: 3 });
+    auto.db.replyType("cancellation");
+    expect(await auto.attempt(false)).toEqual({ state: "failed", error: "Gmail returned 500" });
+    expect(auto.db.replyTypes.get("cancellation")).toMatchObject({ autoSendEnabled: false, disabledReason: "send_failed", uneditedStreak: 20 });
+    expect(auto.db.events.filter((e) => e.kind === "auto_send_disabled")).toHaveLength(1);
+    const manual = world({ send: [500] }, { attempts: 3 });
+    manual.db.replyType("cancellation");
+    await manual.attempt(false);
+    expect(manual.db.replyTypes.get("cancellation")!.autoSendEnabled).toBe(true);
+  });
+
+  it("runSends skips a withdrawn send like a busy one, with no Gmail call", async () => {
+    const db = fakeIrisStore({ sendingEnabled: true });
+    db.setNow(() => NOW);
+    db.replyType("cancellation", { autoSendEnabled: false });
+    const a = db.approved({ mode: "auto", attempts: 0, leaseUntil: null });
+    const gmail = scriptedGmail();
+    expect(await runSends({ store: db.store, gmail: gmail.port, mailbox: MAILBOX, now, startedAtMs: NOW })).toEqual({ sent: 0, failed: 0, error: null });
+    expect(gmail.calls).toEqual([]);
+    expect(db.sends.has(a.sendId)).toBe(false);
+    expect(db.drafts.get(a.draftId)!.state).toBe("proposed");
+    expect(db.events.filter((e) => e.kind === "auto_send_withdrawn")).toHaveLength(1);
   });
 });

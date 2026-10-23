@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IRIS_TEXT, ageText, confidenceText, flagLabel, gmailThreadUrl, intentLabel, notSetUpText, reasonLabel, runSummaryText, stateLabel } from "./iris-text";
+import { AUTO_TEXT, IRIS_TEXT, ageText, disabledReasonText, skipConditionText, confidenceText, flagLabel, gmailThreadUrl, intentLabel, notSetUpText, reasonLabel, runSummaryText, stateLabel } from "./iris-text";
 
 // REQ-42 AC26, AC27: the Iris page copy.
 describe("iris-text", () => {
@@ -149,5 +149,35 @@ describe("iris-text: make-up offers", () => {
     expect(IRIS_TEXT.offerNote).toBe("Times come from the teacher's availability. Nothing is booked: book the time the family picks in Schedule.");
     expect(IRIS_TEXT.bookInSchedule).toBe("Open Schedule");
     expect([IRIS_TEXT.offerNote, IRIS_TEXT.bookInSchedule, flagLabel("availability_not_entered"), flagLabel("no_free_slot")].join("\n")).not.toMatch(/[–—]/);
+  });
+});
+
+// REQ-49 AC13: the auto-send switches, skip conditions and disabled reasons.
+describe("iris-text: auto-send", () => {
+  it("words every skip condition and every disabled reason", async () => {
+    const { AUTO_SKIP_CONDITIONS } = await import("../iris/auto-send");
+    for (const c of AUTO_SKIP_CONDITIONS) expect(skipConditionText(c), c).not.toBe(c);
+    expect(skipConditionText("conflict")).toBe("already handled");
+    for (const r of ["edited_after_enable", "send_failed", "policy_changed", "owner"]) expect(disabledReasonText(r), r).not.toBe(r);
+    expect(disabledReasonText(null)).toBeNull();
+    expect(AUTO_TEXT.sendsAt("07:00")).toBe("Sends at 07:00");
+  });
+
+  it("has no em or en dashes", () => {
+    const all = [
+      ...Object.values(AUTO_TEXT).map((v) => (typeof v === "function" ? (v as (...a: unknown[]) => string)("07:00", "21:00", 1) : v)),
+      ...["paused", "sending_disabled", "type_disabled", "never_auto_send", "needs_charlie", "intent", "flags", "confidence", "student", "policy_version", "edited"].map(skipConditionText),
+      ...["edited_after_enable", "send_failed", "policy_changed", "owner"].map((r) => disabledReasonText(r)),
+    ].join("\n");
+    expect(all).not.toMatch(/[–—]/);
+  });
+});
+
+describe("iris-text: refused switch", () => {
+  it("words every gate condition", async () => {
+    const { gateFailText } = await import("./iris-text");
+    expect(gateFailText(["never_auto_send"])).toBe("this type is never sent automatically");
+    expect(gateFailText(["sensitive_recall", "streak"])).toBe("sensitive recall, the unedited streak");
+    for (const c of ["no_run", "stale_run", "labelled_count", "mean_rating"]) expect(gateFailText([c]), c).not.toBe(c);
   });
 });

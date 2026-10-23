@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  handleApproveDraft, handleEditDraft, handleIrisSettings, handleMarkHandled, handleRejectDraft, handleRetrySend, handleRunNow, loadInbox, loadIrisSettings, loadMessage, torontoMidnight,
+  handleApproveDraft, handleAutoSendSwitch, handleEditDraft, handleIrisSettings, handleMarkHandled, handleRejectDraft, handleRetrySend, handleRunNow, loadInbox, loadIrisSettings, loadMessage, torontoMidnight,
   type IrisAdminDeps, type IrisReader,
 } from "../../../lib/iris/handlers";
 import { GmailError, type GmailSendPort } from "../../../lib/iris/gmail";
 import { POLICY_VERSION } from "../../../lib/iris/policy";
 import { attemptSend } from "../../../lib/iris/send";
 import { fakeIrisStore } from "../../../lib/iris/store.fake";
+import type { EvalReader } from "../../../lib/data/iris-eval";
+import type { EvalAdminDeps } from "../../../lib/iris/eval-handlers";
+import type { GateInputs } from "../../../lib/iris/eval-schemas";
 import type { MessageDetail, ThreadView } from "../../../lib/iris/schemas";
 import type { SchedulerIdentity } from "../../../lib/scheduler/identity";
 
@@ -33,7 +36,7 @@ const D1 = "44444444-4444-4444-8444-444444444444";
 const D2 = "55555555-5555-4555-8555-555555555555";
 const VIEW: ThreadView = {
   thread: [],
-  drafts: [{ id: D1, version: 1, replyType: "cancellation", bodyText: "Hi", policyVersion: POLICY_VERSION, state: "proposed", createdBy: "iris", edited: false, approvedAt: null, rejectedReason: null, createdAt: "2026-10-20T10:01:00Z" }],
+  drafts: [{ id: D1, version: 1, replyType: "cancellation", bodyText: "Hi", policyVersion: POLICY_VERSION, state: "proposed", createdBy: "iris", edited: false, approvedAt: null, rejectedReason: null, createdAt: "2026-10-20T10:01:00Z", approvalMode: null, sendAfter: null }],
   send: null,
 };
 
@@ -41,7 +44,7 @@ function fakeReader(over: Partial<IrisReader> = {}) {
   const calls: string[] = [];
   const spy = <T,>(name: string, v: T) => async () => (calls.push(name), v);
   const reader: IrisReader = {
-    getSettings: spy("getSettings", { paused: true, mailbox: null, lastPollAt: null, lastPollResult: null, lastError: null, confidenceThreshold: 0.85 }),
+    getSettings: spy("getSettings", { paused: true, mailbox: null, lastPollAt: null, lastPollResult: null, lastError: null, confidenceThreshold: 0.85, sendingEnabled: false, quietStart: "21:00", quietEnd: "07:00" }),
     lastRun: spy("lastRun", null),
     listNeedsYou: spy("listNeedsYou", [
       { id: "m1", gmailThreadId: "g1", fromEmail: "ann@example.com", subject: "Question", snippet: "Hi", receivedAt: "2026-10-20T10:00:00Z", state: "escalated" as const, escalationReason: "unknown_sender", intent: null, confidence: null, flags: [], notionStudentIds: [], notionStudentId: null, pushFailed: false },
@@ -64,6 +67,8 @@ function fakeReader(over: Partial<IrisReader> = {}) {
     saveDraftEdit: spy("saveDraftEdit", { result: "ok" as const, draftId: D2 }),
     rejectDraft: spy("rejectDraft", "ok" as const),
     updatePaused: spy("updatePaused", 1),
+    updateSendingEnabled: spy("updateSendingEnabled", 1),
+    setAutoSend: spy("setAutoSend", { result: "ok" as "ok" | "gate_failed" | "not_found", failing: [] as string[] }),
     getMessage: spy("getMessage", DETAIL as MessageDetail | null),
     markHandled: spy("markHandled", "ok" as const),
     ...over,
@@ -248,7 +253,7 @@ describe("page loaders", () => {
   it("settings carry the state, the last run and the missing env names", async () => {
     const w = deps(ADMIN);
     const s = await loadIrisSettings(w.d, ["IRIS_GMAIL_PRIVATE_KEY"]);
-    expect(s).toEqual({ kind: "ok", paused: true, lastRun: null, lastError: null, missing: ["IRIS_GMAIL_PRIVATE_KEY"], aiConfigured: true, confidenceThreshold: 0.85, phoneAlertsOff: false });
+    expect(s).toEqual({ kind: "ok", paused: true, lastRun: null, lastError: null, missing: ["IRIS_GMAIL_PRIVATE_KEY"], aiConfigured: true, confidenceThreshold: 0.85, phoneAlertsOff: false, sendingEnabled: false, quietStart: "21:00", quietEnd: "07:00" });
   });
 });
 
@@ -550,5 +555,111 @@ describe("POST /api/iris/sends/[id]/retry (REQ-48 AC6)", () => {
     const res = await handleRetrySend(w.d, w.a.sendId);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "paused" });
+  });
+});
+
+// REQ-49 AC12: the global Sending switch.
+describe("PATCH /api/iris/settings sendingEnabled (REQ-49)", () => {
+  it("on needs confirmed: true; with it 200; off 200; 0 rows 403", async () => {
+    const w = deps(ADMIN);
+    const refused = await handleIrisSettings(w.d, { sendingEnabled: true });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: "confirm_required" });
+    expect(w.calls).not.toContain("updateSendingEnabled");
+    const on = await handleIrisSettings(w.d, { sendingEnabled: true, confirmed: true });
+    expect(on.status).toBe(200);
+    expect(await on.json()).toEqual({ sendingEnabled: true });
+    const off = await handleIrisSettings(w.d, { sendingEnabled: false });
+    expect(await off.json()).toEqual({ sendingEnabled: false });
+    expect(w.calls.filter((c) => c === "updateSendingEnabled")).toHaveLength(2);
+    expect(w.calls).not.toContain("updatePaused");
+    expect((await handleIrisSettings(deps(ADMIN, { updateSendingEnabled: async () => 0 }).d, { sendingEnabled: false })).status).toBe(403);
+  });
+
+  it("one switch per call: both together is 400", async () => {
+    expect((await handleIrisSettings(deps(ADMIN).d, { paused: true, sendingEnabled: false })).status).toBe(400);
+  });
+
+  for (const [who, identity] of NOT_OWNERS) {
+    it(`a ${who} gets 403 and nothing is read`, async () => {
+      const w = deps(identity);
+      expect((await handleIrisSettings(w.d, { sendingEnabled: false })).status).toBe(403);
+      expect(w.readerFor).not.toHaveBeenCalled();
+    });
+  }
+});
+
+// REQ-49 AC10: the per-type switch.
+describe("POST /api/iris/reply-types/[type]/auto-send (REQ-49)", () => {
+  const RUN = { ranAt: "2026-10-21T14:05:00Z", policyVersion: POLICY_VERSION, model: "claude-test", perType: { late_cancel: { precision: 1, recall: 1, count: 22 } }, sensitiveRecall: 1, meanRatingPerType: { late_cancel: 4.5 } };
+  function evalDeps(identity: SchedulerIdentity, gate: Partial<GateInputs> | (() => Promise<GateInputs>) = {}) {
+    const gateInputs = vi.fn(typeof gate === "function" ? gate : async (): Promise<GateInputs> => ({
+      run: RUN, replyTypes: { late_cancel: { uneditedStreak: 20, streakPolicyVersion: POLICY_VERSION } }, ...gate,
+    }));
+    const reader = vi.fn(() => ({ gateInputs }) as unknown as EvalReader);
+    const d: EvalAdminDeps = { identity: async () => identity, reader, model: "claude-test" };
+    return { d, reader, gateInputs };
+  }
+
+  for (const [who, identity] of NOT_OWNERS) {
+    it(`a ${who} is denied before the body or any reader is touched`, async () => {
+      const w = deps(identity);
+      const e = evalDeps(identity);
+      const res = await handleAutoSendSwitch(w.d, e.d, "late_cancel", { enabled: true });
+      expect(res.status).toBe(403);
+      expect(w.readerFor).not.toHaveBeenCalled();
+      expect(e.reader).not.toHaveBeenCalled();
+    });
+  }
+
+  it("an unknown type is 404, a never-list type 422, a bad body 400", async () => {
+    const w = deps(ADMIN);
+    const e = evalDeps(ADMIN);
+    expect((await handleAutoSendSwitch(w.d, e.d, "no_reply_needed", { enabled: true })).status).toBe(404);
+    expect((await handleAutoSendSwitch(w.d, e.d, "nonsense", { enabled: true })).status).toBe(404);
+    const never = await handleAutoSendSwitch(w.d, e.d, "pause_or_stop", { enabled: true });
+    expect(never.status).toBe(422);
+    expect(await never.json()).toEqual({ error: "gate_failed", failing: ["never_auto_send"] });
+    expect((await handleAutoSendSwitch(w.d, e.d, "late_cancel", { enabled: "yes" })).status).toBe(400);
+    expect(w.calls).not.toContain("setAutoSend");
+  });
+
+  it("a gate fail is 422 with every failing condition and changes nothing", async () => {
+    const w = deps(ADMIN);
+    const e = evalDeps(ADMIN, { replyTypes: { late_cancel: { uneditedStreak: 12, streakPolicyVersion: POLICY_VERSION } }, run: { ...RUN, sensitiveRecall: 0.5 } });
+    const res = await handleAutoSendSwitch(w.d, e.d, "late_cancel", { enabled: true });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: "gate_failed", failing: ["sensitive_recall", "streak"] });
+    expect(w.calls).not.toContain("setAutoSend");
+  });
+
+  it("a pass is 200 through set_auto_send at the current policy version", async () => {
+    const setAutoSend = vi.fn(async () => ({ result: "ok" as const, failing: [] }));
+    const w = deps(ADMIN, { setAutoSend });
+    const res = await handleAutoSendSwitch(w.d, evalDeps(ADMIN).d, "late_cancel", { enabled: true });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ type: "late_cancel", enabled: true });
+    expect(setAutoSend).toHaveBeenCalledWith("late_cancel", true, POLICY_VERSION);
+  });
+
+  it("a SQL gate_failed is 422; not_found is 403; a store error 500; a gate read error 503", async () => {
+    const sql = await handleAutoSendSwitch(deps(ADMIN, { setAutoSend: async () => ({ result: "gate_failed", failing: ["streak"] }) }).d, evalDeps(ADMIN).d, "late_cancel", { enabled: true });
+    expect(sql.status).toBe(422);
+    expect(await sql.json()).toEqual({ error: "gate_failed", failing: ["streak"] });
+    expect((await handleAutoSendSwitch(deps(ADMIN, { setAutoSend: async () => ({ result: "not_found", failing: [] }) }).d, evalDeps(ADMIN).d, "late_cancel", { enabled: false })).status).toBe(403);
+    const broken = await handleAutoSendSwitch(deps(ADMIN, { setAutoSend: async () => { throw new Error("x"); } }).d, evalDeps(ADMIN).d, "late_cancel", { enabled: true });
+    expect(broken.status).toBe(500);
+    expect(await broken.json()).toEqual({ error: "save_failed" });
+    const unread = await handleAutoSendSwitch(deps(ADMIN).d, evalDeps(ADMIN, async () => { throw new Error("x"); }).d, "late_cancel", { enabled: true });
+    expect(unread.status).toBe(503);
+  });
+
+  it("switching off skips the gate and always reaches set_auto_send", async () => {
+    const setAutoSend = vi.fn(async () => ({ result: "ok" as const, failing: [] }));
+    const e = evalDeps(ADMIN, { run: null });
+    const res = await handleAutoSendSwitch(deps(ADMIN, { setAutoSend }).d, e.d, "late_cancel", { enabled: false });
+    expect(res.status).toBe(200);
+    expect(e.gateInputs).not.toHaveBeenCalled();
+    expect(setAutoSend).toHaveBeenCalledWith("late_cancel", false, POLICY_VERSION);
   });
 });

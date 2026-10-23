@@ -14,9 +14,10 @@ import { irisMailbox } from "@/lib/iris/config";
 import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { withSignature } from "@/lib/iris/draft-rules";
 import { loadMessage } from "@/lib/iris/handlers";
-import { POLICY, SIGNATURE } from "@/lib/iris/policy";
+import { AUTOMATED_LINE, POLICY, SIGNATURE } from "@/lib/iris/policy";
 import type { DraftView, SendView } from "@/lib/iris/schemas";
-import { DRAFT_STATE_LABELS, IRIS_TEXT, confidenceText, flagLabel, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
+import { localHhmm } from "@/lib/time";
+import { AUTO_TEXT, DRAFT_STATE_LABELS, IRIS_TEXT, confidenceText, flagLabel, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
 
@@ -52,8 +53,9 @@ function SendBlock({ send, text, gmailUrl }: { send: SendView; text: string; gma
 }
 
 /**
- * The Draft card (REQ-44 AC14, REQ-48): the policy used, the editor on the
- * latest proposed version, the send block after Approve (Copy only for a
+ * The Draft card (REQ-44 AC14, REQ-48, REQ-49): the policy used, the editor on the
+ * latest proposed version, "Approved automatically" and the 07:00 hold for a
+ * gate approval, the send block after Approve (Copy only for a
  * draft approved before sending existed, which has no send), and earlier versions.
  */
 function DraftCard({ drafts, current, editable, send, gmailUrl }: { drafts: DraftView[]; current: number; editable: boolean; send: SendView | null; gmailUrl: string }) {
@@ -79,7 +81,15 @@ function DraftCard({ drafts, current, editable, send, gmailUrl }: { drafts: Draf
       {latest.state === "proposed" && editable && (
         <DraftEditor key={latest.id} id={latest.id} version={latest.version} body={latest.bodyText} signature={SIGNATURE} />
       )}
-      {send && latest.state !== "proposed" && <SendBlock send={send} text={withSignature(latest.bodyText)} gmailUrl={gmailUrl} />}
+      {latest.approvalMode === "auto" && latest.state !== "proposed" && (
+        <p className="text-sm font-medium" data-auto-approved>
+          {AUTO_TEXT.approvedAutomatically}
+          {send?.state === "sending" && send.attempts === 0 && latest.sendAfter ? ` · ${AUTO_TEXT.sendsAt(localHhmm(new Date(latest.sendAfter)))}` : ""}
+        </p>
+      )}
+      {send && latest.state !== "proposed" && (
+        <SendBlock send={send} text={latest.approvalMode === "auto" ? `${withSignature(latest.bodyText)}\n\n${AUTOMATED_LINE}` : withSignature(latest.bodyText)} gmailUrl={gmailUrl} />
+      )}
       {!send && (latest.state === "approved" || latest.state === "sent") && <CopyReply text={withSignature(latest.bodyText)} />}
       {!send && latest.state !== "proposed" && latest.state !== "approved" && latest.state !== "sent" && (
         <p className="text-sm" data-draft-state={latest.state}>
