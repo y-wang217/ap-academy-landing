@@ -181,6 +181,14 @@ insert into tracker.sync_runs (org_id, trigger, started_at, finished_at, result)
   ('10000000-0000-0000-0000-000000000001', 'schedule', now(), now(), 'ok'),
   ('10000000-0000-0000-0000-000000000002', 'schedule', now(), now(), 'ok');
 
+-- One logged outcome in each org (0029), open, so a probe insert for the same
+-- lead hits the one-open-per-lead index.
+insert into tracker.console_transitions (org_id, request_id, notion_page_id, outcome, patch, touch, expected, lease_until, created_by) values
+  ('10000000-0000-0000-0000-000000000001', '9b000000-0000-4000-8000-000000000001', '6a000000-0000-4000-8000-00000000000a', 'no_answer',
+   '{"attempts": 1}', '{"type": "Call"}', '{"stage": "New"}', now() + interval '1 hour', 'a0000000-0000-0000-0000-000000000001'),
+  ('10000000-0000-0000-0000-000000000002', '9b000000-0000-4000-8000-000000000002', '6a000000-0000-4000-8000-00000000000f', 'no_answer',
+   '{"attempts": 1}', '{"type": "Call"}', '{"stage": "New"}', now() + interval '1 hour', 'a0000000-0000-0000-0000-000000000002');
+
 -- The matrix -------------------------------------------------------------------
 -- One row per single role and table: rows visible from the fixture above,
 -- whether a direct insert, update and delete get past the grants and RLS, and
@@ -220,6 +228,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('owner', 'student_people',          3, false, false, false, 'apply_people_sync'),
   ('owner', 'sync_runs',               1, false, false, false, 'apply_people_sync'),
   ('owner', 'notion_outbox',        null, false, true,  false, 'enqueue_summary_sync, claim_notion_outbox, retry_notion_outbox'),
+  ('owner', 'console_transitions',      1, true,  true,  false, 'claim_console_transition'),
   -- grade_teacher
   ('grade_teacher', 'orgs',                    1, false, false, false, null),
   ('grade_teacher', 'memberships',             1, false, false, false, null),
@@ -249,6 +258,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('grade_teacher', 'student_people',          0, false, false, false, null),
   ('grade_teacher', 'sync_runs',               0, false, false, false, null),
   ('grade_teacher', 'notion_outbox',           0, false, false, false, null),
+  ('grade_teacher', 'console_transitions',     0, false, false, false, null),
   -- scheduling_teacher
   ('scheduling_teacher', 'orgs',                    0, false, false, false, null),
   ('scheduling_teacher', 'memberships',             0, false, false, false, null),
@@ -278,6 +288,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('scheduling_teacher', 'student_people',          2, false, false, false, null),
   ('scheduling_teacher', 'sync_runs',               0, false, false, false, null),
   ('scheduling_teacher', 'notion_outbox',           0, false, false, false, null),
+  ('scheduling_teacher', 'console_transitions',     0, false, false, false, null),
   -- student
   ('student', 'orgs',                    1, false, false, false, null),
   ('student', 'memberships',             1, false, false, false, null),
@@ -307,6 +318,7 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('student', 'student_people',          0, false, false, false, null),
   ('student', 'sync_runs',               0, false, false, false, null),
   ('student', 'notion_outbox',           0, false, false, false, null),
+  ('student', 'console_transitions',     0, false, false, false, null),
   -- parent
   ('parent', 'orgs',                    1, false, false, false, null),
   ('parent', 'memberships',             1, false, false, false, null),
@@ -335,7 +347,8 @@ insert into matrix.expected (actor, tbl, rows, ins, upd, del, rpc) values
   ('parent', 'staff',                   2, false, false, false, null),
   ('parent', 'student_people',          1, false, false, false, null),
   ('parent', 'sync_runs',               0, false, false, false, null),
-  ('parent', 'notion_outbox',           0, false, false, false, null);
+  ('parent', 'notion_outbox',           0, false, false, false, null),
+  ('parent', 'console_transitions',     0, false, false, false, null);
 
 -- The login that plays each single role, and each combination's parts.
 create table matrix.cast_of (actor text primary key, uid uuid not null);
@@ -625,7 +638,14 @@ begin
     raise exception 'matrix: rolled back' using errcode = 'P0001';
   exception when sqlstate 'P0001' then null;
   end;
-  raise notice 'ok: owner unlink_student remove_parent_link adopt_student_schedule split_class_series claim_daily_task enqueue_summary_sync claim_notion_outbox retry_notion_outbox (AC6)';
+  begin
+    update tracker.console_transitions set state = 'uncertain', lease_until = null where request_id = '9b000000-0000-4000-8000-000000000001';
+    assert (select count(*) from tracker.claim_console_transition('9b000000-0000-4000-8000-000000000001', 30)) = 1,
+      'claim_console_transition took no row';
+    raise exception 'matrix: rolled back' using errcode = 'P0001';
+  exception when sqlstate 'P0001' then null;
+  end;
+  raise notice 'ok: owner unlink_student remove_parent_link adopt_student_schedule split_class_series claim_daily_task enqueue_summary_sync claim_notion_outbox retry_notion_outbox claim_console_transition (AC6)';
 end $$;
 reset role;
 
@@ -770,6 +790,12 @@ begin
         select count(*) into n from tracker.claim_notion_outbox(t.org_id, null, 10, 60); r := to_jsonb(nullif(n, 0));
       when 'retry_notion_outbox' then
         select count(*) into n from tracker.retry_notion_outbox((select o.id from tracker.notion_outbox o where o.org_id = t.org_id limit 1));
+        r := to_jsonb(nullif(n, 0));
+      -- RLS hides the other org's transition; Org One's is the parent's own org, not a family's, and owner-only.
+      when 'claim_console_transition' then
+        select count(*) into n from tracker.claim_console_transition(
+          case when t.org_id = '10000000-0000-0000-0000-000000000001' then '9b000000-0000-4000-8000-000000000001'::uuid
+               else '9b000000-0000-4000-8000-000000000002'::uuid end, 30);
         r := to_jsonb(nullif(n, 0));
       else raise exception 'matrix: % is granted to authenticated but not classified here', fn;
     end case;
