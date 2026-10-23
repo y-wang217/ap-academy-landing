@@ -1,7 +1,8 @@
 // Mock of the Gmail calls Iris makes (REQ-42), on 127.0.0.1:54334. The tracker
 // reaches it through IRIS_GMAIL_API_BASE: POST /token for the service account
 // JWT, GET /gmail/v1/users/me/messages (list, newest first; REQ-44: q "in:sent ..." lists only messages
-// labelled SENT, and any other q leaves them out) and
+// labelled SENT, and any other q leaves them out; REQ-45: newer_than:Nd, older_than:Nd, from:(a OR b)
+// and to:(a OR b) filter by age and by the From or To address) and
 // GET /gmail/v1/users/me/messages/:id (format=full). REQ-48 adds POST /gmail/v1/users/me/messages/send
 // (stores the decoded message, labelled SENT, in its thread), q "rfc822msgid:<id>" on the list call, and
 // GET /gmail/v1/users/me/threads/:id?format=metadata. Test helpers:
@@ -20,7 +21,7 @@ const MAILBOX = "charlie@apacademy.ca";
 const NOW = Date.now();
 const b64 = (s) => Buffer.from(s).toString("base64url");
 let seq = 0;
-function message(id, { thread, from, subject, plain, html, headers = {}, minutesAgo, snippet }) {
+function message(id, { thread, from, to = MAILBOX, subject, plain, html, headers = {}, minutesAgo, snippet, labelIds }) {
   const parts = [];
   if (plain !== undefined) parts.push({ mimeType: "text/plain", headers: [{ name: "Content-Type", value: "text/plain; charset=UTF-8" }], body: { data: b64(plain) } });
   if (html !== undefined) parts.push({ mimeType: "text/html", headers: [{ name: "Content-Type", value: "text/html; charset=UTF-8" }], body: { data: b64(html) } });
@@ -28,12 +29,13 @@ function message(id, { thread, from, subject, plain, html, headers = {}, minutes
     id,
     threadId: thread ?? `thread-${id}`,
     internalDate: String(NOW - minutesAgo * 60_000 + ++seq),
+    ...(labelIds ? { labelIds } : {}),
     snippet: snippet ?? (plain ?? html ?? "").replace(/<[^>]+>/g, "").slice(0, 120),
     payload: {
       mimeType: "multipart/alternative",
       headers: [
         { name: "From", value: from },
-        { name: "To", value: MAILBOX },
+        { name: "To", value: to },
         { name: "Subject", value: subject },
         { name: "Message-ID", value: `<${id}@mail.example>` },
         ...Object.entries(headers).map(([name, value]) => ({ name, value })),
@@ -55,8 +57,34 @@ const inbox = new Map(
     message("m5", { from: "sam.parent@example.com", subject: "Long note", plain: "L".repeat(25000), minutesAgo: 80 }),
     message("m6", { thread: "thread-sam", from: "Charlie <charlie@apacademy.ca>", subject: "Re: Sam is sick", plain: "Thanks, feel better Sam.", minutesAgo: 70 }),
     message("m7", { from: "charlie@apacademy.ca", subject: "Hello", plain: "A note I wrote.", minutesAgo: 60 }),
+    // REQ-45 history, older than the 3-day poll window: h1 Sam's parent with Charlie's reply h2 in its thread,
+    // h3 an unknown sender. Only an eval import reads them.
+    message("h1", { thread: "thread-hist", from: "Pat Student <sam.parent@example.com>", subject: "Sam has a fever", plain: "Hi Charlie, Sam has a fever and cannot come on Thursday.", minutesAgo: 30 * 1440 }),
+    message("h2", { thread: "thread-hist", from: "Charlie <charlie@apacademy.ca>", to: "sam.parent@example.com", subject: "Re: Sam has a fever", plain: "Thanks for letting me know. I hope Sam feels better soon.", minutesAgo: 30 * 1440 - 60, labelIds: ["SENT"] }),
+    message("h3", { thread: "thread-stranger", from: "Stranger <someone@unknown.example>", subject: "Old question", plain: "An old question from someone we do not know.", minutesAgo: 20 * 1440 }),
   ].map((m) => [m.id, m]),
 );
+
+const DAY_MS = 86_400_000;
+const header = (m, name) => (m.payload.headers ?? []).find((h) => h.name.toLowerCase() === name)?.value ?? "";
+const address = (v) => (/<([^>]+)>/.exec(v)?.[1] ?? v).trim().toLowerCase();
+/** The q filters the mock honours (REQ-45). Anything else in q is ignored, as before. */
+function matchesQuery(m, q) {
+  const age = NOW - Number(m.internalDate);
+  const newer = /newer_than:(\d+)d/.exec(q);
+  const older = /older_than:(\d+)d/.exec(q);
+  if (newer && age > Number(newer[1]) * DAY_MS) return false;
+  if (older && age < Number(older[1]) * DAY_MS) return false;
+  const list = (key) => {
+    const hit = new RegExp(`${key}:\\(([^)]*)\\)`).exec(q);
+    return hit ? hit[1].split(/\s+OR\s+/).map((a) => a.trim().toLowerCase()) : null;
+  };
+  const from = list("from");
+  const to = list("to");
+  if (from && !from.includes(address(header(m, "from")))) return false;
+  if (to && !to.includes(address(header(m, "to")))) return false;
+  return true;
+}
 
 const calls = [];
 const sent = [];
@@ -120,7 +148,7 @@ http.createServer(async (req, res) => {
     }
     const sentOnly = q.startsWith("in:sent");
     const ids = [...inbox.values()]
-      .filter((m) => (m.labelIds ?? []).includes("SENT") === sentOnly)
+      .filter((m) => (m.labelIds ?? []).includes("SENT") === sentOnly && matchesQuery(m, q))
       .sort((a, b) => Number(b.internalDate) - Number(a.internalDate))
       .map((m) => ({ id: m.id, threadId: m.threadId }));
     return send(res, 200, { messages: ids, resultSizeEstimate: ids.length });

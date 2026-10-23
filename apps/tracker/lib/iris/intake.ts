@@ -20,6 +20,8 @@ const DAY_MS = 86_400_000;
 export type GmailPort = {
   token(): Promise<string>;
   list(token: string, q: string): Promise<string[]>;
+  /** The same messages.list call, keeping each message's thread id (REQ-45 history import). */
+  listRefs(token: string, q: string): Promise<{ id: string; threadId: string }[]>;
   get(token: string, id: string): Promise<GmailMessage>;
 };
 
@@ -48,7 +50,7 @@ export function shortError(e: unknown, fallback: string): string {
  * on, so one bad message never blocks the newer ones behind it. Store errors
  * are not caught here and still fail the run.
  */
-function readMessage(msg: GmailMessage) {
+export function readMessage(msg: GmailMessage) {
   const headers = headerMap(msg.payload);
   return { headers, from: parseFrom(headers.From ?? ""), snippet: snippetOf(msg.snippet), body: capBody(bodyText(msg.payload)) };
 }
@@ -58,7 +60,7 @@ const UNREADABLE = "Could not read the message";
  * Charlie's own reply in a known thread, as an outbound charlie_manual record.
  * Shared with supersede.ts. Throws on a message it cannot read.
  */
-export function charlieManualRow(msg: GmailMessage, threadId: string, retentionMs: number): MessageInsert {
+export function charlieManualRow(msg: GmailMessage, threadId: string, retentionMs: number, purgeAt?: string): MessageInsert {
   const { headers, from, body, snippet } = readMessage(msg);
   const receivedMs = Number(msg.internalDate);
   return {
@@ -80,7 +82,38 @@ export function charlieManualRow(msg: GmailMessage, threadId: string, retentionM
     handledAt: null,
     retryCount: 0,
     lastError: null,
-    purgeAt: new Date(receivedMs + retentionMs).toISOString(),
+    purgeAt: purgeAt ?? new Date(receivedMs + retentionMs).toISOString(),
+  };
+}
+
+/**
+ * An imported history message (REQ-45 AC2): handled and escalated with reason
+ * history_import, so no live step, inbox section or phone copy ever picks it
+ * up. Its purge date is given (import time plus retention), not derived from
+ * when it arrived. Throws on a message it cannot read.
+ */
+export function historyInboundRow(msg: GmailMessage, threadId: string, purgeAt: string, importedAt: string): MessageInsert {
+  const { headers, from, body, snippet } = readMessage(msg);
+  return {
+    threadId,
+    gmailMessageId: msg.id,
+    rfcMessageId: headers["Message-ID"] ?? null,
+    direction: "inbound",
+    source: "external",
+    fromEmail: from.email,
+    fromName: from.name?.slice(0, 200) ?? null,
+    receivedAt: new Date(Number(msg.internalDate)).toISOString(),
+    bodyText: body.text,
+    bodyTruncated: body.truncated,
+    snippet,
+    state: "escalated",
+    stateChangedAt: importedAt,
+    escalationReason: "history_import",
+    policyVersion: null,
+    handledAt: importedAt,
+    retryCount: 0,
+    lastError: null,
+    purgeAt,
   };
 }
 

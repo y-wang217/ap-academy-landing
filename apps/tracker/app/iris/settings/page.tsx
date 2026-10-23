@@ -6,26 +6,69 @@ import { Card, Notice, Page, secondaryButtonClass } from "@/components/ui";
 import { aiConfigured } from "@/lib/ai/config";
 import { getViewer } from "@/lib/data/queries";
 import { missingIrisEnv, readCharlieUserId } from "@/lib/iris/config";
-import { realIrisAdminDeps } from "@/lib/iris/deps";
+import { realEvalAdminDeps, realIrisAdminDeps } from "@/lib/iris/deps";
+import { loadReadiness, type ReadinessResult } from "@/lib/iris/eval-handlers";
 import { loadIrisSettings } from "@/lib/iris/handlers";
-import { IRIS_TEXT, confidenceText, notSetUpText, runSummaryText } from "@/lib/view/iris-text";
+import { TUNING } from "@/lib/domain/tuning";
+import { EVAL_TEXT, IRIS_TEXT, READINESS_CONDITIONS, confidenceText, gateConditionText, neverLineText, notSetUpText, runSummaryText } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-CA", { timeZone: "America/Toronto", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 
-/** Iris settings (REQ-42 AC27, REQ-44 AC18): Paused or Running, the last run, its error, which env vars are missing, and whether phone alerts are off. Owner only. */
+const THRESHOLDS: Record<string, number> = { labelled_count: TUNING.irisGateMinLabelled, streak: TUNING.irisAutoSendStreak };
+
+/** Auto-send readiness (REQ-45 AC11): each candidate type's gate conditions as met or not met. No switch is rendered. */
+function Readiness({ r }: { r: ReadinessResult }) {
+  if (r.kind === "error") return <Card title={EVAL_TEXT.readiness}><Notice tone="error">{EVAL_TEXT.loadError}</Notice></Card>;
+  return (
+    <Card title={EVAL_TEXT.readiness}>
+      <p className="text-sm text-text-muted" data-readiness-run>
+        {r.runAt ? `${EVAL_TEXT.latestRun}: ${when(r.runAt)}, policy ${r.runPolicyVersion}` : EVAL_TEXT.noRun}
+      </p>
+      <ul className="flex flex-col divide-y divide-border">
+        {r.rows.map((row) => {
+          const extra = row.failing.filter((c) => c === "no_run" || c === "stale_run");
+          return (
+            <li key={row.type} className="flex flex-col gap-1 py-2 text-sm" data-readiness-type={row.type}>
+              <span className="font-medium">{row.type}</span>
+              <span className="flex flex-wrap gap-x-3">
+                {[...extra, ...READINESS_CONDITIONS].map((c) => {
+                  const met = !row.failing.includes(c);
+                  const text = gateConditionText(c, { count: row.count, streak: row.streak, threshold: THRESHOLDS[c] ?? 0 });
+                  return (
+                    <span key={c} data-gate-condition={c} data-met={met ? "yes" : "no"}>
+                      {text}: {met ? EVAL_TEXT.met : EVAL_TEXT.notMet}
+                    </span>
+                  );
+                })}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-sm" data-readiness-never>{neverLineText(r.never)}</p>
+      <p className="text-sm text-text-muted">{EVAL_TEXT.noSwitchNote}</p>
+    </Card>
+  );
+}
+
+/** Iris settings (REQ-42 AC27, REQ-44 AC18, REQ-45 AC11): Paused or Running, the last run, its error, which env vars are missing, whether phone alerts are off, and auto-send readiness. Owner only. */
 export default async function IrisSettingsPage() {
   const s = await loadIrisSettings(realIrisAdminDeps(), missingIrisEnv(), aiConfigured(), readCharlieUserId() === null);
   if (s.kind === "denied") redirect("/");
+  // Read only after the owner check above.
+  const evalDeps = realEvalAdminDeps();
+  const identity = await evalDeps.identity();
+  const readiness: ReadinessResult = s.kind === "ok" && identity.scope === "admin" ? await loadReadiness(evalDeps.reader(identity.orgId), evalDeps.model) : { kind: "error" };
   const viewer = await getViewer();
   const email = viewer.kind === "signed_out" || viewer.kind === "not_configured" ? undefined : viewer.email;
 
   return (
     <>
       {email && <TopBar email={email} />}
-      <Page title={IRIS_TEXT.settingsTitle} back={{ href: "/", label: "Home" }} aside={<Link href="/iris" className={secondaryButtonClass}>Inbox</Link>}>
+      <Page title={IRIS_TEXT.settingsTitle} back={{ href: "/", label: "Home" }} aside={<span className="flex gap-2"><Link href="/iris/eval" className={secondaryButtonClass}>{EVAL_TEXT.link}</Link><Link href="/iris" className={secondaryButtonClass}>Inbox</Link></span>}>
         {s.kind === "error" ? (
           <Notice tone="error">{IRIS_TEXT.loadError}</Notice>
         ) : (
@@ -56,6 +99,7 @@ export default async function IrisSettingsPage() {
               </p>
               {s.missing.length > 0 && <Notice tone="warn">{notSetUpText(s.missing)}</Notice>}
             </Card>
+            <Readiness r={readiness} />
           </>
         )}
       </Page>

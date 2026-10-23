@@ -1,13 +1,13 @@
 import { TUNING } from "../domain/tuning";
 import type { FamilyEntry } from "../notion/parents";
-import type { DraftPort } from "./draft";
-import { buildDraftPrompt } from "./draft-prompt";
+import type { DraftPort, DraftPrompt } from "./draft";
+import { buildDraftPrompt, type DraftInput } from "./draft-prompt";
 import { checkDraft, timesOutsideSlots, type DraftRule } from "./draft-rules";
 import { shortError } from "./intake";
 import { fillOptions, findMakeupSlots, resolveRescheduleTarget, type Slot, type TeacherCalendar } from "./makeup";
 import { resolveCancellation, type NoticeResult, type StudentSchedule } from "./notice";
 import { DRAFTABLE_ESCALATIONS, DRAFTABLE_INTENTS, POLICY_VERSION, type DraftableType } from "./policy";
-import type { DraftableMessage, EventDetail, IrisStore } from "./store";
+import type { DraftableMessage, EventDetail, IrisStore, ThreadHistoryRow } from "./store";
 
 export type { StudentSchedule } from "./notice";
 
@@ -52,6 +52,31 @@ const HISTORY_LINES = 5;
 const firstWord = (s: string) => s.trim().split(/\s+/)[0] ?? "";
 const lastWords = (s: string) => s.trim().split(/\s+/).slice(1);
 const DRAFTABLE: readonly string[] = [...DRAFTABLE_INTENTS, ...DRAFTABLE_ESCALATIONS];
+
+/**
+ * The draft prompt for one message. Pure. The live step and the eval step
+ * (REQ-45) both call it, so their prompts cannot drift.
+ */
+export function prepareDraftPrompt(
+  m: { bodyText: string | null; notionStudentId: string | null },
+  replyType: DraftableType,
+  ctx: { studentIds: string[]; history: ThreadHistoryRow[] },
+  byStudent: Map<string, FamilyEntry>,
+  extra: Pick<Partial<DraftInput>, "schedule" | "optionCount"> = {},
+): DraftPrompt {
+  const family = ctx.studentIds.map((id) => byStudent.get(id)).filter((e): e is FamilyEntry => e !== undefined);
+  const child = (m.notionStudentId ? byStudent.get(m.notionStudentId) : undefined) ?? (family.length === 1 ? family[0] : undefined);
+  const parent = family[0]?.parentName ?? "";
+  return buildDraftPrompt({
+    replyType,
+    parentFirstName: firstWord(parent) || null,
+    childFirstName: child ? firstWord(child.studentName) || null : null,
+    surnames: [...lastWords(parent), ...family.flatMap((e) => lastWords(e.studentName))],
+    history: ctx.history,
+    body: m.bodyText ?? "",
+    ...extra,
+  });
+}
 
 export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
   const out: DraftOutcome = { result: "ok", drafted: 0, escalated: 0, failed: 0, error: null };
@@ -174,19 +199,7 @@ export async function runDraft(deps: DraftStepDeps): Promise<DraftOutcome> {
       if (flag) flags = [...m.flags.filter((f) => f !== flag), flag];
     }
 
-    const family = ctx.studentIds.map((id) => byStudent.get(id)).filter((e): e is FamilyEntry => e !== undefined);
-    const child = (m.notionStudentId ? byStudent.get(m.notionStudentId) : undefined) ?? (family.length === 1 ? family[0] : undefined);
-    const parent = family[0]?.parentName ?? "";
-    const prompt = buildDraftPrompt({
-      replyType,
-      parentFirstName: firstWord(parent) || null,
-      childFirstName: child ? firstWord(child.studentName) || null : null,
-      surnames: [...lastWords(parent), ...family.flatMap((e) => lastWords(e.studentName))],
-      history: ctx.history,
-      body: m.bodyText ?? "",
-      schedule,
-      ...(replyType === "reschedule_offer" && { optionCount: slots.length }),
-    });
+    const prompt = prepareDraftPrompt(m, replyType, ctx, byStudent, { schedule, ...(replyType === "reschedule_offer" && { optionCount: slots.length }) });
 
     const answer = await draft(prompt, deps.signal);
     await store.insertAiCall({

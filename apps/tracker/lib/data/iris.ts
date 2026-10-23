@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { IrisReader } from "../iris/handlers";
 import type { SendStore } from "../iris/send";
 import { ApproveSendResult, ClaimResultValue, ClassifiableRow, DraftRow, FailResultValue, FinishResultValue, RetrySendResult, SendContextRow, SendViewRow, DraftableRow, HistoryRow, InboxMessageRow, InboxThreadRow, MessageDetailRow, OwnerSettingsRow, PurgeCounts, PushRow, PushCandidateRow, PushDayRow, ReviewResult, RetryRow, RunRow, SettingsRow, ThreadMessageRow, ThreadRow, type InboxMessage } from "../iris/schemas";
-import type { IrisStore, MessageInsert, MessagePatch, ThreadPatch } from "../iris/store";
+import { EventRow } from "../iris/eval-schemas";
+import type { EvalPendingMessage, IrisStore, MessageInsert, MessagePatch, ThreadPatch } from "../iris/store";
 import { TUNING } from "../domain/tuning";
 import type { Db } from "./client";
 
@@ -384,8 +385,84 @@ export function createIrisStore(iris: IrisClient, orgId: string): IrisStore {
       if (error) fail();
       return Object.values(PurgeCounts.parse(data ?? {})).reduce((a, b) => a + b, 0);
     },
+    async pendingRequest(kind) {
+      const { data, error } = await iris.from("events").select("id, at, kind, detail").eq("org_id", orgId).eq("kind", kind).order("id", { ascending: false }).limit(1);
+      if (error) fail();
+      const newest = z.array(EventRow).parse(data ?? [])[0];
+      if (!newest) return null;
+      const done = await iris.from("events").select("id").eq("org_id", orgId).eq("kind", FINISHED_KIND[kind]).eq("detail->>request_id", String(newest.id)).limit(1);
+      if (done.error) fail();
+      return z.array(z.unknown()).parse(done.data ?? []).length > 0 ? null : { id: newest.id, at: newest.at, detail: newest.detail };
+    },
+    async requestBatches(requestId) {
+      const { data, error } = await iris
+        .from("events")
+        .select("id, at, kind, detail")
+        .eq("org_id", orgId)
+        .eq("kind", "eval_import_batch")
+        .eq("detail->>request_id", String(requestId))
+        .order("id", { ascending: true });
+      if (error) fail();
+      return z.array(EventRow).parse(data ?? []).map((e) => BatchDetail.parse(e.detail));
+    },
+    async storedThreadIds(gmailThreadIds) {
+      const out = new Map<string, string>();
+      for (let i = 0; i < gmailThreadIds.length; i += KNOWN_CHUNK) {
+        const { data, error } = await iris.from("threads").select("id, gmail_thread_id").eq("org_id", orgId).in("gmail_thread_id", gmailThreadIds.slice(i, i + KNOWN_CHUNK));
+        if (error) fail();
+        for (const r of z.array(z.object({ id: z.guid(), gmail_thread_id: z.string() })).parse(data ?? [])) out.set(r.gmail_thread_id, r.id);
+      }
+      return out;
+    },
+    async listEvalPending(requestId, limit) {
+      const [l, r] = await Promise.all([
+        iris.from("eval_labels").select("message_id").eq("org_id", orgId).not("gold_intent", "is", null).not("gold_escalate", "is", null),
+        iris.from("eval_results").select("message_id").eq("org_id", orgId).eq("request_event_id", requestId),
+      ]);
+      if (l.error || r.error) fail();
+      const done = new Set(z.array(z.object({ message_id: z.guid() })).parse(r.data ?? []).map((x) => x.message_id));
+      const ids = z.array(z.object({ message_id: z.guid() })).parse(l.data ?? []).map((x) => x.message_id).filter((id) => !done.has(id));
+      const rows: EvalPendingMessage[] = [];
+      for (let i = 0; i < ids.length; i += KNOWN_CHUNK) {
+        const { data, error } = await iris
+          .from("messages")
+          .select("id, thread_id, received_at, body_text")
+          .eq("org_id", orgId)
+          .eq("escalation_reason", "history_import")
+          .in("id", ids.slice(i, i + KNOWN_CHUNK));
+        if (error) fail();
+        for (const m of z.array(z.object({ id: z.guid(), thread_id: z.guid(), received_at: z.string(), body_text: z.string().nullable() })).parse(data ?? [])) {
+          rows.push({ id: m.id, threadId: m.thread_id, receivedAt: m.received_at, bodyText: m.body_text });
+        }
+      }
+      return rows.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)).slice(0, limit);
+    },
+    async insertEvalResult(r) {
+      const { error } = await iris.from("eval_results").upsert(
+        {
+          org_id: orgId, request_event_id: r.requestEventId, message_id: r.messageId, policy_version: r.policyVersion, model: r.model,
+          predicted_intent: r.predictedIntent, predicted_reply_type: r.predictedReplyType, predicted_escalate: r.predictedEscalate,
+          escalation_reason: r.escalationReason, flags: r.flags, draft_body: r.draftBody, outcome: r.outcome, error: r.error?.slice(0, 300) ?? null,
+        },
+        { onConflict: "request_event_id,message_id", ignoreDuplicates: true },
+      );
+      if (error) fail();
+    },
+    async evalResultCounts(requestId) {
+      const { data, error } = await iris.from("eval_results").select("outcome").eq("org_id", orgId).eq("request_event_id", requestId);
+      if (error) fail();
+      const rows = z.array(z.object({ outcome: z.enum(["ok", "error"]) })).parse(data ?? []);
+      return { ok: rows.filter((r) => r.outcome === "ok").length, error: rows.filter((r) => r.outcome === "error").length };
+    },
   };
 }
+
+/** Each eval request kind and the event that finishes it (REQ-45). */
+export const FINISHED_KIND = { eval_import_requested: "eval_import_finished", eval_run_requested: "eval_run_finished" } as const;
+
+const BatchDetail = z
+  .object({ stored_inbound: z.number().int().default(0), stored_replies: z.number().int().default(0), skipped: z.array(z.string()).default([]), capped: z.boolean().default(false) })
+  .transform((d) => ({ storedInbound: d.stored_inbound, storedReplies: d.stored_replies, skipped: d.skipped, capped: d.capped }));
 
 /**
  * The owner's reads and writes (pause, Mark handled), on the owner's own
@@ -403,6 +480,8 @@ export function createIrisReader(iris: IrisClient, orgId: string, uid: () => Pro
     if (section === "drafts") q = q.eq("state", "drafted");
     if (section === "sent_today") q = q.in("state", ["approved", "sent"]).gte("state_changed_at", since ?? new Date().toISOString());
     if (section === "failed") q = q.eq("state", "failed");
+    // History imported for the eval (REQ-45) is never part of the inbox.
+    if (section === "recent") q = q.or("escalation_reason.is.null,escalation_reason.neq.history_import");
     const { data, error } = await q.order("received_at", { ascending: false }).limit(limit);
     if (error) fail();
     const rows = z.array(InboxMessageRow).parse(data ?? []);

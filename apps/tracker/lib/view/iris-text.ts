@@ -186,3 +186,99 @@ export function gmailThreadUrl(mailbox: string | null, threadId: string): string
   const user = mailbox ? `?authuser=${encodeURIComponent(mailbox)}` : "";
   return `https://mail.google.com/mail/${user}#all/${encodeURIComponent(threadId)}`;
 }
+
+/** The eval page and the readiness card (REQ-45). Plain, short, no em dashes. */
+export const EVAL_TEXT = {
+  title: "Evaluation",
+  link: "Evaluation",
+  paused: "Iris is paused: import and evaluation wait until it runs",
+  empty: "No history imported yet. Import history reads the last 365 days of family mail.",
+  loadError: "Could not load evaluation. Try again.",
+  importLabel: "Import",
+  runLabel: "Run",
+  importHistory: "Import history",
+  runEvaluation: "Run evaluation",
+  recordResults: "Record results",
+  runNow: "Run now",
+  requested: "Requested. It runs with the next poll.",
+  pending: "Waiting for the next poll",
+  notStarted: "Not started",
+  capped: "Some older mail was not imported",
+  stale: "Stopped: the policy or model changed. Run it again.",
+  latestRun: "Latest recorded run",
+  noRun: "No run recorded yet.",
+  detailsPurged: "Details purged; aggregates kept",
+  confusion: "Confusion (gold rows, predicted columns)",
+  sensitiveRecall: "sensitive recall",
+  type: "type",
+  count: "count",
+  precision: "precision",
+  recall: "recall",
+  meanRating: "mean rating",
+  filterUnlabelled: "Unlabelled",
+  filterLabelled: "Labelled",
+  filterAll: "All",
+  message: "Message",
+  charlieReplied: "Charlie replied",
+  noReply: "No reply found",
+  goldIntent: "Gold intent",
+  goldReplyType: "Gold reply type",
+  escalate: "Escalate",
+  yes: "yes",
+  no: "no",
+  note: "Note",
+  none: "None",
+  save: "Save",
+  saved: "Saved",
+  irisDraft: (policy: number) => `Iris draft (policy ${policy})`,
+  irisEscalated: "Iris would escalate this one.",
+  evalError: "The AI call failed for this message.",
+  rating: "Rating",
+  ratingHint: "5 means you would send it as is.",
+  saveRating: "Save rating",
+  escalateWithType: "Escalate yes needs reply type None.",
+  readiness: "Auto-send readiness",
+  never: "Never sent automatically",
+  met: "met",
+  notMet: "not met",
+  noRecordedRun: "no recorded run",
+  staleRun: "the recorded run is out of date",
+  noSwitchNote: "No type can be switched on yet. That comes with a later card.",
+} as const;
+
+export const evalCountsText = (s: { storedInbound: number; storedReplies: number; skipped: number }) =>
+  `${s.storedInbound} messages, ${s.storedReplies} replies, ${s.skipped} skipped`;
+
+export const evalProgressText = (done: number, total: number, unrated: number) => `${done} of ${total} · ${unrated} drafts unrated`;
+
+export const pageText = (page: number, pages: number) => `Page ${page} of ${Math.max(1, pages)}`;
+
+/** One gate condition, in words, for the readiness card (REQ-45 AC11). */
+export function gateConditionText(condition: string, ctx: { count: number; streak: number; threshold: number }): string {
+  switch (condition) {
+    case "labelled_count":
+      return `${ctx.count}/${ctx.threshold} labelled`;
+    case "precision":
+      return EVAL_TEXT.precision;
+    case "sensitive_recall":
+      return EVAL_TEXT.sensitiveRecall;
+    case "mean_rating":
+      return EVAL_TEXT.meanRating;
+    case "streak":
+      return `streak ${ctx.streak}/${ctx.threshold}`;
+    case "no_run":
+      return EVAL_TEXT.noRecordedRun;
+    case "stale_run":
+      return EVAL_TEXT.staleRun;
+    default:
+      return condition;
+  }
+}
+
+/** The conditions the card lists for every candidate type, in order. */
+export const READINESS_CONDITIONS = ["labelled_count", "precision", "sensitive_recall", "mean_rating", "streak"] as const;
+
+export const neverLineText = (types: readonly string[]) => `${EVAL_TEXT.never}: ${types.join(", ")}`;
+
+/** A ratio as two decimals, or "-". */
+export const ratioText = (v: number | null | undefined) => (v === null || v === undefined ? "-" : v.toFixed(2));

@@ -1,5 +1,5 @@
 import { getServiceClient } from "@ap-academy/db/service";
-import { aiConfigured } from "@/lib/ai/config";
+import { AI_MODEL, aiConfigured } from "@/lib/ai/config";
 import { createIrisStore } from "@/lib/data/iris";
 import { createIrisScheduleReader } from "@/lib/data/iris-schedule";
 import { classifyMessage } from "@/lib/iris/classify";
@@ -26,7 +26,8 @@ export const maxDuration = 120;
  * student's classes from the tracker scheduler for cancellations (REQ-46,
  * select only) and the teacher's calendar for make-up offers (REQ-47); with
  * Notion Work set up it pushes the phone copies to Charlie's day page. It
- * also retries approved replies whose send did not finish (REQ-48).
+ * also retries approved replies whose send did not finish (REQ-48). The
+ * owner's eval history import and eval run (REQ-45) ride the same run.
  */
 export async function POST(request: Request) {
   return handleIrisRun({
@@ -48,6 +49,9 @@ export async function POST(request: Request) {
         draft: aiConfigured() ? draftReply : null,
         schedule: reader.forStudent,
         availability: reader.forTeacher,
+        evalClassify: aiConfigured() ? classifyMessage : null,
+        evalDraft: aiConfigured() ? draftReply : null,
+        model: AI_MODEL,
         push: work
           ? ({ store, directory, now }) =>
               runPush({ store, config: work, charlieUserId: readCharlieUserId(), siteUrl: SITE_URL, mailbox: gmail.mailbox, directory, now })

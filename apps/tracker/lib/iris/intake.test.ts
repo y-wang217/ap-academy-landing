@@ -41,6 +41,7 @@ function fakeGmail(initial: GmailMessage[] = []) {
   let failList = false;
   const port: GmailPort = {
     token: async () => "tok",
+    listRefs: async () => [],
     list: async (_t, q) => {
       calls.push({ op: "list", arg: q });
       if (failList) throw new GmailError("Gmail returned 500", 500);

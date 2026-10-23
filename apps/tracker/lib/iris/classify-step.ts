@@ -1,12 +1,12 @@
 import { TUNING } from "../domain/tuning";
 import type { FamilyEntry } from "../notion/parents";
-import type { ClassifyPort } from "./classify";
+import type { ClassifyPort, ClassifyPrompt } from "./classify";
 import { buildClassifyPrompt } from "./classify-prompt";
 import { shortError } from "./intake";
 import { POLICY_VERSION } from "./policy";
 import { stripQuoted } from "./quote";
 import { routeClassification, type Child } from "./route";
-import type { ClassifiableMessage, IrisSettings, IrisStore } from "./store";
+import type { ClassifiableMessage, IrisSettings, IrisStore, ThreadHistoryRow } from "./store";
 
 /**
  * The second half of rung 1 (REQ-43, tracker ADR 0061): each matched message
@@ -34,6 +34,32 @@ const HISTORY_LINES = 5;
 const firstWord = (s: string) => s.trim().split(/\s+/)[0] ?? "";
 const lastWords = (s: string) => s.trim().split(/\s+/).slice(1);
 
+/** Thread lines each classify prompt carries. Shared with the eval step (REQ-45). */
+export const CLASSIFY_HISTORY_LINES = HISTORY_LINES;
+
+/**
+ * The classify prompt for one message, its children for routing and the text
+ * the keyword backstop reads. Pure. The live step and the eval step (REQ-45)
+ * both call it, so their prompts cannot drift.
+ */
+export function prepareClassifyPrompt(
+  m: { bodyText: string | null },
+  ctx: { studentIds: string[]; history: ThreadHistoryRow[] },
+  byStudent: Map<string, FamilyEntry>,
+): { prompt: ClassifyPrompt; children: Child[]; text: string } {
+  const family = ctx.studentIds.map((id) => byStudent.get(id)).filter((e): e is FamilyEntry => e !== undefined);
+  const children: Child[] = family.map((e) => ({ studentId: e.studentId, firstName: firstWord(e.studentName) }));
+  const parent = family[0]?.parentName ?? "";
+  const prompt = buildClassifyPrompt({
+    parentFirstName: firstWord(parent) || null,
+    childFirstNames: children.map((c) => c.firstName),
+    surnames: [...lastWords(parent), ...family.flatMap((e) => lastWords(e.studentName))],
+    history: ctx.history,
+    body: m.bodyText ?? "",
+  });
+  return { prompt, children, text: stripQuoted(m.bodyText ?? "") };
+}
+
 export async function runClassify(deps: ClassifyStepDeps): Promise<ClassifyOutcome> {
   const out: ClassifyOutcome = { result: "ok", classified: 0, escalated: 0, failed: 0, error: null };
   const { store, classify } = deps;
@@ -59,17 +85,7 @@ export async function runClassify(deps: ClassifyStepDeps): Promise<ClassifyOutco
 
   const one = async (m: ClassifiableMessage) => {
     const ctx = await store.threadContext(m.threadId, m.receivedAt, HISTORY_LINES);
-    const family = ctx.studentIds.map((id) => byStudent.get(id)).filter((e): e is FamilyEntry => e !== undefined);
-    const children: Child[] = family.map((e) => ({ studentId: e.studentId, firstName: firstWord(e.studentName) }));
-    const parent = family[0]?.parentName ?? "";
-    const text = stripQuoted(m.bodyText ?? "");
-    const prompt = buildClassifyPrompt({
-      parentFirstName: firstWord(parent) || null,
-      childFirstNames: children.map((c) => c.firstName),
-      surnames: [...lastWords(parent), ...family.flatMap((e) => lastWords(e.studentName))],
-      history: ctx.history,
-      body: m.bodyText ?? "",
-    });
+    const { prompt, children, text } = prepareClassifyPrompt(m, ctx, byStudent);
 
     const answer = await classify(prompt, deps.signal);
     await store.insertAiCall({

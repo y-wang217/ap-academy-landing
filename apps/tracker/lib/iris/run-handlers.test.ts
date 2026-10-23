@@ -4,6 +4,7 @@ import type { DraftPort } from "./draft";
 import { handleIrisRun, type IrisRunDeps } from "./handlers";
 import { GmailError, type GmailMessage, type GmailSendPort } from "./gmail";
 import type { GmailPort } from "./intake";
+import { POLICY_VERSION } from "./policy";
 import type { ClassifierIntent } from "./policy";
 import { fakeIrisStore } from "./store.fake";
 
@@ -18,7 +19,7 @@ const message = (id: string, from: string): GmailMessage => ({
   payload: { mimeType: "text/plain", headers: [{ name: "From", value: from }, { name: "Subject", value: "Hi" }], body: { data: Buffer.from("hello").toString("base64url") } },
 });
 
-function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null; draft?: DraftPort | null; push?: IrisRunDeps["push"]; sender?: GmailSendPort | null } = {}) {
+function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null; draft?: DraftPort | null; push?: IrisRunDeps["push"]; sender?: GmailSendPort | null; history?: GmailMessage[] } = {}) {
   const db = fakeIrisStore({ paused: opts.paused ?? false });
   const gmailCalls: string[] = [];
   const gmail: GmailPort = {
@@ -28,10 +29,13 @@ function world(opts: { paused?: boolean; listFails?: boolean; classify?: Classif
       if (opts.listFails) throw new GmailError("Gmail returned 403", 403);
       return ["m1"];
     },
-    get: async (_t, id) => (gmailCalls.push(`get:${id}`), message(id, "who@z.com")),
+    listRefs: async (_t, q) => (gmailCalls.push(`listRefs:${q.split(" ")[0]}`), q.startsWith("in:sent") ? [] : (opts.history ?? []).map((m) => ({ id: m.id, threadId: m.threadId }))),
+    get: async (_t, id) => (gmailCalls.push(`get:${id}`), opts.history?.find((m) => m.id === id) ?? message(id, "who@z.com")),
   };
   const directoryCalls: number[] = [];
-  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, sender: opts.sender ?? null, schedule: null, availability: null };
+  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, sender: opts.sender ?? null, schedule: null, availability: null,
+    evalClassify: opts.classify ?? null, evalDraft: opts.draft ?? null, model: "m",
+  };
   const build = vi.fn((org: string) => (org ? deps : null));
   const run = (authorization: string | null = AUTH, env = { secret: SECRET as string | undefined, orgId: ORG as string | undefined }) =>
     handleIrisRun({ authorization, env, build, now: () => new Date(T0) });
@@ -82,6 +86,16 @@ describe("handleIrisRun: paused and busy", () => {
     expect(w.gmailCalls).toEqual([]);
     expect(w.directoryCalls).toEqual([]);
     expect(w.db.calls).toEqual(["getSettings"]);
+  });
+
+  it("paused with a pending import and eval makes no Gmail or Claude call (REQ-45 AC14)", async () => {
+    const classify = vi.fn<ClassifyPort>();
+    const w = world({ paused: true, classify });
+    w.db.request("eval_import_requested");
+    w.db.request("eval_run_requested", { policy_version: POLICY_VERSION, model: "m" });
+    expect(await (await w.run()).json()).toEqual({ result: "paused" });
+    expect(w.gmailCalls).toEqual([]);
+    expect(classify).not.toHaveBeenCalled();
   });
 
   it("a held lease answers busy with no Gmail call", async () => {
@@ -236,6 +250,85 @@ describe("handleIrisRun: drafting and the phone backup", () => {
     const body = await (await w.run()).json();
     expect(body.result).toBe("ok");
     expect(w.db.settings.lastError).toBe("Notion returned 500");
+  });
+});
+
+// REQ-45 AC3: the history import and the eval run ride the run, after push and before purge, and never feed the live path.
+describe("handleIrisRun: history import and eval", () => {
+  const SAM = "11111111-1111-4111-8111-111111111111";
+  const family = [{ studentId: SAM, studentName: "Sam Lee", stage: "Active", parentEmail: "ann@x.com", parentName: "Ann Lee" }];
+  const old = (id: string): GmailMessage => ({ ...message(id, "ann@x.com"), threadId: `t-${id}`, internalDate: String(T0 - 30 * 86_400_000) });
+
+  function evalWorld() {
+    const order: string[] = [];
+    const classify: ClassifyPort = async () => (order.push("classify"), {
+      ok: true, model: "m", inputTokens: 1, outputTokens: 1,
+      output: { intents: ["cancellation"], primary: "cancellation", confidence: 0.95, flags: [], childName: "", summary: "" },
+    });
+    const draft: DraftPort = async () => (order.push("draft"), { ok: true, model: "m", inputTokens: 1, outputTokens: 1, output: { body: "Hi Ann,\n\nThanks.", needsCharlie: false, reason: "" } });
+    const push: IrisRunDeps["push"] = async ({ store }) => {
+      order.push("push");
+      await store.listPushable(5, 20).then((rows) => order.push(`pushable:${rows.length}`));
+      return { pushed: 0, failed: 0, removed: 0, error: null };
+    };
+    const w = world({ classify, draft, push, history: [old("h1")] });
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.directory = async () => (w.directoryCalls.push(1), family);
+    deps.gmail.list = async () => (order.push("list"), []);
+    const listRefs = deps.gmail.listRefs;
+    deps.gmail.listRefs = async (t, q) => (order.push(`listRefs:${q.split(" ")[0]}`), listRefs(t, q));
+    const purge = w.db.store.purge;
+    w.db.store.purge = async () => (order.push("purge"), purge());
+    return { w, order, deps };
+  }
+
+  it("imports after push and before purge, and the next run leaves the history message alone", async () => {
+    const { w, order } = evalWorld();
+    w.db.request("eval_import_requested");
+    expect((await w.run()).status).toBe(200);
+    expect(order.indexOf("push")).toBeLessThan(order.indexOf("listRefs:newer_than:365d"));
+    expect(order.indexOf("listRefs:in:sent")).toBeLessThan(order.indexOf("purge"));
+    const h = w.db.byGmailId("h1")!;
+    expect(h).toMatchObject({ escalationReason: "history_import", state: "escalated" });
+    expect(w.db.events.some((e) => e.kind === "eval_import_finished")).toBe(true);
+
+    order.length = 0;
+    await w.run();
+    // Not classified, drafted, pushed or listed by any live step.
+    expect(order).not.toContain("classify");
+    expect(order).toContain("pushable:0");
+    expect(w.db.drafts.size).toBe(0);
+    expect(await w.db.store.listRetryable(3, 50)).toEqual([]);
+    expect(await w.db.store.listClassifiable(3, 50)).toEqual([]);
+    expect(await w.db.store.listDraftable(3, 50)).toEqual([]);
+    expect(await w.db.store.listPushable(5, 50)).toEqual([]);
+    expect(await w.db.store.supersedeThread(h.threadId, new Date(T0).toISOString())).toEqual([]);
+    expect(w.directoryCalls).toHaveLength(2);
+  });
+
+  it("evaluates a labelled message after the import, with purpose eval", async () => {
+    const { w, order } = evalWorld();
+    w.db.request("eval_import_requested");
+    await w.run();
+    const h = w.db.byGmailId("h1")!;
+    w.db.labels.set(h.id, { goldIntent: "cancellation", goldReplyType: "cancellation", goldEscalate: false });
+    w.db.request("eval_run_requested", { policy_version: POLICY_VERSION, model: "m" });
+    order.length = 0;
+    await w.run();
+    expect(order.slice(-3)).toEqual(["classify", "draft", "purge"]);
+    expect(w.db.aiCalls.map((c) => c.purpose)).toEqual(["eval", "eval"]);
+    expect(w.db.evalResults).toHaveLength(1);
+    expect(w.db.events.some((e) => e.kind === "eval_run_finished")).toBe(true);
+  });
+
+  it("no import or eval when intake failed", async () => {
+    const { w, order, deps } = evalWorld();
+    deps.gmail.list = async () => {
+      throw new GmailError("Gmail returned 500", 500);
+    };
+    w.db.request("eval_import_requested");
+    expect((await w.run()).status).toBe(502);
+    expect(order.some((o) => o.startsWith("listRefs"))).toBe(false);
   });
 });
 

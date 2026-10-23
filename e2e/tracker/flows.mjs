@@ -2691,6 +2691,101 @@ try {
       check("REQ-44: a cross-site approve is 403", evilApprove.status() === 403, String(evilApprove.status()));
     }
 
+    // REQ-45: Iris 5/9. The eval harness: import history older than the poll window, label it, run Iris over it,
+    // rate the draft, record the run, and see the readiness card. History never reaches the live inbox.
+    {
+      await teacher.goto(`${BASE}/iris/eval`);
+      check("REQ-45: before any import the eval page shows the empty state",
+        await teacher.getByText("No history imported yet. Import history reads the last 365 days of family mail.", { exact: true }).isVisible());
+      await teacher.locator("[data-eval-import]").click();
+      await teacher.locator("[data-eval-requested]").waitFor({ timeout: 15000 });
+      const importRun = await irisRun();
+      check("REQ-45: the run with a pending import answers ok", importRun.status === 200 && importRun.body?.result === "ok", JSON.stringify(importRun));
+      check("REQ-45: the family message is stored as handled history",
+        msg("h1", "state || '|' || escalation_reason || '|' || (handled_at is not null)::text || '|' || coalesce(policy_version::text, 'NULL')") === "escalated|history_import|true|NULL",
+        msg("h1", "coalesce(state, '') || '|' || coalesce(escalation_reason, '')"));
+      check("REQ-45: Charlie's reply in that thread is stored as charlie_manual", msg("h2", "direction || '|' || source") === "outbound|charlie_manual");
+      check("REQ-45: the unknown sender is not stored at all",
+        msg("h3", "count(*)") === "0" && psql("select count(*) from iris.threads where gmail_thread_id = 'thread-stranger'") === "0");
+      check("REQ-45: purge_at runs from the import, about 90 days ahead",
+        msg("h1", "(purge_at > now() + interval '89 days')::text") === "true");
+      check("REQ-45: the import finished with one event",
+        psql("select count(*) from iris.events where kind = 'eval_import_finished'") === "1");
+      check("REQ-45: the import made no draft and no ai call",
+        psql(`select count(*) from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = 'h1'`) === "0"
+        && psql(`select count(*) from iris.ai_calls a join iris.messages m on m.id = a.message_id where m.gmail_message_id = 'h1'`) === "0");
+      const liveQueries = (await gmail("/__gmail/calls", "GET")).map((c) => c.q ?? "");
+      check("REQ-45: the import queries mail older than 3 days from the directory, and in:sent to it",
+        liveQueries.some((q) => q.startsWith("newer_than:365d older_than:3d from:(") && q.includes("sam.parent@example.com"))
+        && liveQueries.some((q) => q.startsWith("in:sent newer_than:365d older_than:3d to:(")));
+
+      await teacher.goto(`${BASE}/iris`);
+      check("REQ-45: the inbox's Recent section does not show the history message", !(await section(teacher, "Recent mail").innerText()).includes("Sam has a fever"));
+
+      await teacher.goto(`${BASE}/iris/eval?filter=all`);
+      const h1Id = msg("h1", "id");
+      const item = teacher.locator(`[data-eval-item="${h1Id}"]`);
+      check("REQ-45: the eval page lists the family message with Charlie's reply",
+        (await item.locator("[data-eval-body]").innerText()).includes("Sam has a fever") && (await item.locator("[data-eval-reply]").innerText()).includes("I hope Sam feels better soon"));
+      check("REQ-45: the eval page does not list the unknown sender", !(await teacher.content()).includes("An old question from someone we do not know"));
+
+      await item.locator("[data-gold-intent]").selectOption("cancellation");
+      await item.locator("[data-gold-reply-type]").selectOption("cancellation");
+      await item.locator('[data-gold-escalate="no"]').check();
+      await item.locator("[data-eval-save-label]").click();
+      await item.locator("[data-eval-saved]").waitFor({ timeout: 15000 });
+      await teacher.reload();
+      const kept = teacher.locator(`[data-eval-item="${h1Id}"]`);
+      check("REQ-45: the label is kept after a reload",
+        (await kept.locator("[data-gold-intent]").inputValue()) === "cancellation" && (await kept.locator('[data-gold-escalate="no"]').isChecked()));
+      check("REQ-45: one eval_labels row for the message",
+        psql(`select count(*) || '|' || string_agg(gold_intent || '|' || gold_escalate::text, ',') from iris.eval_labels where message_id = '${h1Id}'`) === "1|cancellation|false");
+      const badLabel = await teacher.context().request.put(`${BASE}/api/iris/eval/labels/${h1Id}`, { data: { goldIntent: "cancellation", goldReplyType: "cancellation", goldEscalate: true } });
+      check("REQ-45: escalate yes with a reply type is 400", badLabel.status() === 400, String(badLabel.status()));
+
+      await teacher.locator("[data-eval-run]").click();
+      await teacher.locator("[data-eval-requested]").waitFor({ timeout: 15000 });
+      const evalRun = await irisRun();
+      check("REQ-45: the run with a pending eval answers ok", evalRun.status === 200 && evalRun.body?.result === "ok", JSON.stringify(evalRun));
+      check("REQ-45: one eval result with a draft, and the eval finished",
+        psql(`select count(*) || '|' || bool_and(draft_body is not null)::text from iris.eval_results where message_id = '${h1Id}'`) === "1|true"
+        && psql("select count(*) from iris.events where kind = 'eval_run_finished'") === "1");
+      check("REQ-45: the eval model calls are purpose eval with tokens",
+        psql(`select count(*) from iris.ai_calls where purpose = 'eval' and message_id = '${h1Id}' and input_tokens is not null`) === "2");
+      check("REQ-45: the history message is still handled history with no live draft",
+        msg("h1", "state || '|' || escalation_reason") === "escalated|history_import" && psql(`select count(*) from iris.drafts where message_id = '${h1Id}'`) === "0");
+
+      await teacher.reload();
+      const rated = teacher.locator(`[data-eval-item="${h1Id}"]`);
+      check("REQ-45: the eval draft shows with the signature", (await rated.locator("[data-eval-draft]").innerText()).includes("AP Academy"));
+      await rated.locator('[data-rating="5"]').check();
+      await rated.locator("[data-eval-save-rating]").click();
+      await rated.locator("[data-eval-rating-saved]").waitFor({ timeout: 15000 });
+      check("REQ-45: the rating is saved against the result",
+        psql(`select l.draft_rating || '|' || (l.rated_result_id = r.id)::text from iris.eval_labels l join iris.eval_results r on r.message_id = l.message_id where l.message_id = '${h1Id}'`) === "5|true");
+
+      await teacher.locator("[data-eval-record]").click();
+      await teacher.locator("[data-eval-latest-run]").waitFor({ timeout: 15000 });
+      check("REQ-45: Record results writes one eval run with the labelled count",
+        psql("select count(*) || '|' || max(labelled_count) || '|' || max(policy_version) from iris.eval_runs") === "1|1|5");
+      check("REQ-45: the latest run table shows the type", await teacher.locator('[data-eval-type="cancellation"]').isVisible());
+
+      await teacher.goto(`${BASE}/iris/settings`);
+      const readiness = section(teacher, "Auto-send readiness");
+      check("REQ-45: the settings page shows the readiness card for the six candidate types",
+        (await readiness.locator("[data-readiness-type]").count()) === 6 && (await readiness.locator('[data-readiness-type="cancellation"] [data-gate-condition="labelled_count"]').innerText()).includes("not met"));
+      check("REQ-45: the never-sent line names pause_or_stop", (await readiness.locator("[data-readiness-never]").innerText()).includes("pause_or_stop"));
+      check("REQ-45: no switch or toggle in the readiness card",
+        (await readiness.locator('input, [role="switch"], [role="checkbox"]').count()) === 0);
+
+      await ryan.goto(`${BASE}/iris/eval`);
+      check("REQ-45: Ryan opening /iris/eval lands on /", /\/tracker\/?$/.test(new URL(ryan.url()).pathname), ryan.url());
+      const ryanImport = await ryan.context().request.post(`${BASE}/api/iris/eval/import`);
+      check("REQ-45: Ryan gets 403 from the eval import", ryanImport.status() === 403, String(ryanImport.status()));
+      const evilImport = await teacher.context().request.post(`${BASE}/api/iris/eval/import`, { headers: { Origin: "https://evil.example" } });
+      check("REQ-45: a cross-site eval import is 403", evilImport.status() === 403, String(evilImport.status()));
+    }
+
     // 12. A Gmail list failure: Run now shows it, the run is 502, and the settings page shows the short error.
     await gmail("/__gmail/fail-list");
     await teacher.goto(`${BASE}/iris/settings`);
