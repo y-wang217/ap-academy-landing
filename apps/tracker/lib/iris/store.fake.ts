@@ -32,6 +32,8 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
   const pushes = new Map<string, PushRecord & { id: string }>();
   const pushDays = new Map<string, PushDay>();
   const runs: (RunRecord & { id: string })[] = [];
+  type FakeSend = { id: string; draftId: string; messageId: string; rfcMessageId: string; gmailMessageId: string | null; state: "sending" | "sent" | "failed"; attempts: number; leaseUntil: number | null; lastError: string | null; sentAt: string | null };
+  const sends = new Map<string, FakeSend>();
   const calls: string[] = [];
   const fail = new Set<string>();
   let now = () => Date.now();
@@ -44,7 +46,82 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
     lastPollAt: settings.lastPollAt, lastPollResult: settings.lastPollResult, lastError: settings.lastError,
   });
 
+  const failSend = (x: FakeSend, error: string) => {
+    Object.assign(x, { state: "failed", leaseUntil: null, lastError: error.slice(0, 300) });
+    const d = drafts.get(x.draftId);
+    if (d) d.state = "failed";
+    const m = messages.get(x.messageId);
+    if (m) Object.assign(m, { state: "failed", lastError: error.slice(0, 300) });
+    events.push({ kind: "send_failed", messageId: x.messageId, draftId: x.draftId, detail: { send_id: x.id, attempts: x.attempts } });
+  };
+
   const store: IrisStore = {
+    async sendContext(sendId) {
+      check("sendContext");
+      const x = sends.get(sendId);
+      if (!x) return null;
+      const m = messages.get(x.messageId)!;
+      const t = [...threads.values()].find((tt) => tt.id === m.threadId);
+      return {
+        sendId: x.id, state: x.state, attempts: x.attempts, rfcMessageId: x.rfcMessageId, draftText: drafts.get(x.draftId)!.bodyText, to: m.fromEmail,
+        subject: t?.subject ?? null, inReplyTo: m.rfcMessageId, gmailThreadId: t?.gmailThreadId ?? null,
+      };
+    },
+    async claimSend(sendId, leaseSeconds, maxAttempts) {
+      check("claimSend");
+      const x = sends.get(sendId);
+      if (!x) return "not_found";
+      if (x.state !== "sending") return "done";
+      if (settings.paused) return "paused";
+      if (x.leaseUntil !== null && x.leaseUntil > now()) return "busy";
+      if (x.attempts >= maxAttempts) {
+        failSend(x, x.lastError ?? "Send did not finish");
+        return "exhausted";
+      }
+      x.attempts += 1;
+      x.leaseUntil = now() + leaseSeconds * 1000;
+      return "claimed";
+    },
+    async finishSend(sendId, r) {
+      check("finishSend");
+      const x = sends.get(sendId);
+      if (!x) throw new Error("not_found");
+      if (x.state === "sent") return;
+      Object.assign(x, { state: "sent", gmailMessageId: r.gmailMessageId, sentAt: r.sentAt, leaseUntil: null, lastError: null });
+      const d = drafts.get(x.draftId);
+      if (d) d.state = "sent";
+      const m = messages.get(x.messageId)!;
+      Object.assign(m, { state: "sent", lastError: null });
+      const copy = [...messages.values()].find((o) => o.gmailMessageId === r.gmailMessageId);
+      if (copy) copy.source = "iris";
+      else {
+        const id = randomUUID();
+        messages.set(id, {
+          id, threadId: m.threadId, gmailMessageId: r.gmailMessageId, rfcMessageId: x.rfcMessageId, direction: "outbound", source: "iris",
+          fromEmail: r.from, fromName: null, receivedAt: r.sentAt, bodyText: r.body, bodyTruncated: false, snippet: r.body.slice(0, 200), state: null, stateChangedAt: null,
+          escalationReason: null, policyVersion: null, handledAt: null, retryCount: 0, lastError: null, purgeAt: m.purgeAt,
+        });
+      }
+      for (const t of threads.values()) if (t.id === m.threadId) t.lastOutboundAt = r.sentAt;
+      events.push({ kind: "sent", messageId: m.id, draftId: x.draftId, detail: { send_id: x.id, attempts: x.attempts } });
+    },
+    async failSendAttempt(sendId, error, maxAttempts) {
+      check("failSendAttempt");
+      const x = sends.get(sendId);
+      if (!x) return "not_found";
+      if (x.state !== "sending") return "done";
+      if (x.attempts >= maxAttempts) {
+        failSend(x, error);
+        return "failed";
+      }
+      Object.assign(x, { leaseUntil: null, lastError: error.slice(0, 300) });
+      events.push({ kind: "send_attempt_failed", messageId: x.messageId, draftId: x.draftId, detail: { send_id: x.id, attempt: x.attempts, error } });
+      return "retrying";
+    },
+    async listStuckSends(limit) {
+      check("listStuckSends");
+      return [...sends.values()].filter((x) => x.state === "sending" && (x.leaseUntil === null || x.leaseUntil < now())).slice(0, limit).map((x) => x.id);
+    },
     async getSettings() {
       check("getSettings");
       return pub();
@@ -125,10 +202,10 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
       const hasDraft = new Set([...drafts.values()].map((d) => d.messageId));
       return [...messages.values()]
         .filter((m) => m.direction === "inbound" && m.retryCount < maxRetries && !hasDraft.has(m.id))
-        .filter((m) => m.state === "classified" || (m.state === "escalated" && m.escalationReason === "escalate_only" && m.intent === "no_show" && !m.handledAt))
+        .filter((m) => m.state === "classified" || (m.state === "escalated" && (m.escalationReason === "escalate_only" || m.escalationReason === "schedule_no_show") && m.intent === "no_show" && !m.handledAt))
         .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
         .slice(0, limit)
-        .map((m) => ({ id: m.id, threadId: m.threadId, receivedAt: m.receivedAt, bodyText: m.bodyText, retryCount: m.retryCount, state: m.state as "classified" | "escalated", intent: m.intent ?? null, notionStudentId: m.notionStudentId ?? null }));
+        .map((m) => ({ id: m.id, threadId: m.threadId, receivedAt: m.receivedAt, bodyText: m.bodyText, retryCount: m.retryCount, state: m.state as "classified" | "escalated", intent: m.intent ?? null, notionStudentId: m.notionStudentId ?? null, escalationReason: m.escalationReason ?? null, flags: m.flags ?? [] }));
     },
     async insertDraft(d) {
       check("insertDraft");
@@ -278,6 +355,35 @@ export function fakeIrisStore(init: Partial<IrisSettings> = {}) {
     events,
     runs,
     drafts,
+    sends,
+    /**
+     * An approved draft with its send, as iris.approve_draft_for_send leaves
+     * them: the inbound message (from `from`, Message-ID `<in@x>`) in a thread
+     * with a subject, the draft approved, the send at attempt 1 with a live
+     * lease unless `leaseUntil` says otherwise.
+     */
+    approved(o: { body?: string; from?: string; subject?: string | null; gmailThreadId?: string; inReplyTo?: string | null; leaseUntil?: number | null; attempts?: number } = {}) {
+      const threadId = randomUUID();
+      const gmailThreadId = o.gmailThreadId ?? `gt-${threadId.slice(0, 8)}`;
+      threads.set(gmailThreadId, {
+        id: threadId, gmailThreadId, firstReceivedAt: "2026-10-20T10:00:00Z", lastInboundAt: "2026-10-20T10:00:00Z", purgeAt: "2027-01-01T00:00:00Z", lastOutboundAt: null,
+        subject: o.subject === undefined ? "Sam is sick" : o.subject,
+      });
+      const messageId = randomUUID();
+      messages.set(messageId, {
+        id: messageId, threadId, gmailMessageId: `in-${messageId.slice(0, 8)}`, rfcMessageId: o.inReplyTo === undefined ? "<in@x>" : o.inReplyTo, direction: "inbound", source: "external",
+        fromEmail: o.from ?? "ann@example.com", fromName: null, receivedAt: "2026-10-20T10:00:00Z", bodyText: "Sam is sick", bodyTruncated: false, snippet: "Sam is sick",
+        state: "approved", stateChangedAt: null, escalationReason: null, policyVersion: 3, handledAt: null, retryCount: 0, lastError: null, purgeAt: "2027-01-01T00:00:00Z",
+      });
+      const draftId = randomUUID();
+      drafts.set(draftId, { id: draftId, messageId, version: 1, replyType: "cancellation", bodyText: o.body ?? "Hi Ann,\n\nThanks for letting me know.", policyVersion: 3, state: "approved", createdBy: "iris", edited: false });
+      const id = randomUUID();
+      sends.set(id, {
+        id, draftId, messageId, rfcMessageId: `<iris-${id}@apacademy.ca>`, gmailMessageId: null, state: "sending", attempts: o.attempts ?? 1,
+        leaseUntil: o.leaseUntil === undefined ? now() + 60_000 : o.leaseUntil, lastError: null, sentAt: null,
+      });
+      return { sendId: id, draftId, messageId, threadId, gmailThreadId };
+    },
     pushes,
     pushDays,
     calls,

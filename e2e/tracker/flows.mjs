@@ -1576,10 +1576,11 @@ try {
       check("REQ-55: the sync line reports the health check and never says online", /^(Sources checked|Some sources failing)/.test(sync) && !/online/i.test(await p.locator("[data-console]").innerText()), sync);
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
-      // REQ-58 wires Sales capacity and three Operations panels; the rest stay Not connected yet.
-      const WIRED = ["northStar", "capacity", "teacherLoad", "lessonGaps", "upcoming"];
+      // REQ-56 wires the north star; REQ-57 the Sales next and radar slots; REQ-58 Sales capacity and three Operations
+      // panels; REQ-59 the trial funnel and cash pulse; REQ-60 three Creation panels. Every other panel is a placeholder.
+      const WIRED = ["northStar", "next", "radar", "capacity", "teacherLoad", "lessonGaps", "upcoming", "conversion", "cashflow", "trials", "finance", "nextAsset", "work", "pipeline"];
       check("REQ-55: production panels other than the wired ones are Not connected yet",
-        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 7
+        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 3
           && (await p.locator(`[data-panel]${WIRED.map((id) => `:not([data-panel="${id}"])`).join("")} [data-panel-value]`).count()) === 0);
 
       // REQ-56 AC5, AC9: the mock Notion serves Invoices, so the north star is a real read of this stack's series.
@@ -1654,6 +1655,166 @@ try {
           && (await p.locator('#console-panel-sales [data-panel="capacity"]').getByText("Not connected yet", { exact: true }).count()) === 0);
       }
 
+      // REQ-60: Creation mode over the mock Notion's seeded Marketing Work rows (mock-notion.mjs, CONSOLE_WORK).
+      {
+        const W = {
+          project: "eeeeeeee-6060-4000-8000-000000000001", childNext: "eeeeeeee-6060-4000-8000-000000000002", childDefined: "eeeeeeee-6060-4000-8000-000000000003",
+          standalone: "eeeeeeee-6060-4000-8000-000000000004", waiting: "eeeeeeee-6060-4000-8000-000000000005", done: "eeeeeeee-6060-4000-8000-000000000006",
+          delivery: "eeeeeeee-6060-4000-8000-000000000007", weekly: "3ead6ae7-3dd7-811e-b525-e3626520b805",
+        };
+        const SEEDED = Object.values(W);
+        const cr = (id) => p.locator(`#console-panel-creation [data-panel="${id}"]`);
+        const shownTask = () => cr("nextAsset").locator("[data-task-id]").getAttribute("data-task-id");
+        const creationAt = async (path = "/console?mode=creation") => {
+          await p.goto(`${BASE}${path}`);
+          await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        };
+        const startAt = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+        await creationAt();
+        const creationText = await p.locator("#console-panel-creation").innerText();
+        check("REQ-60: the next asset is the project's Next child, with its Task Type name and expected result",
+          (await cr("nextAsset").getAttribute("data-status")) === "ready" && (await shownTask()) === W.childNext
+            && /Script/.test(await cr("nextAsset").innerText()) && /One reviewed script/.test(await cr("nextAsset").innerText()),
+          (await cr("nextAsset").innerText()).slice(0, 300));
+        check("REQ-60: neither the Done nor the Delivery task is on the page",
+          !creationText.includes("E2E finished marketing task") && !creationText.includes("E2E delivery task"));
+        const topLevel = await cr("work").locator("ol.console-creation-queue > li").evaluateAll((els) => els.map((e) => e.getAttribute("data-task")));
+        const nested = await cr("work").locator(`li[data-task="${W.project}"] ol li`).evaluateAll((els) => els.map((e) => e.getAttribute("data-task")));
+        check("REQ-60: the queue nests the children under the project and lists Waiting last",
+          JSON.stringify(nested) === JSON.stringify([W.childNext, W.childDefined]) && topLevel[0] === W.project && topLevel.at(-1) === W.waiting
+            && !topLevel.includes(W.childNext) && topLevel.includes(W.standalone) && topLevel.includes(W.weekly),
+          `${topLevel.join(",")} | ${nested.join(",")}`);
+        check("REQ-60: the weekly media review panel shows the pinned row",
+          (await cr("pipeline").locator("h2").textContent()) === "Weekly media review" && (await cr("pipeline").locator("[data-task-id]").getAttribute("data-task-id")) === W.weekly
+            && /Overdue/.test(await cr("pipeline").innerText()));
+        check("REQ-60: each Creation panel links the Work database",
+          (await p.locator('#console-panel-creation [data-canonical]').evaluateAll((els) => els.map((e) => e.textContent))).filter((t) => t === "Open Work in Notion").length === 3);
+
+        // AC6: Select the Defined child, switch to Sales and back with the tabs, reload: the selection holds.
+        await cr("work").getByRole("link", { name: "Select E2E video 02 recording" }).click();
+        await p.waitForURL(/task=/);
+        await p.getByRole("tab", { name: "Sales", exact: true }).click();
+        await p.getByRole("tab", { name: "Creation", exact: true }).click();
+        await p.reload();
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        const url = new URL(p.url());
+        check("REQ-60: a selection survives the mode tabs and a reload, tagged Selected with aria-current",
+          url.searchParams.get("mode") === "creation" && url.searchParams.get("task") === W.childDefined && (await shownTask()) === W.childDefined
+            && /Selected/.test(await cr("nextAsset").innerText()) && (await cr("work").locator(`li[data-task="${W.childDefined}"]`).getAttribute("aria-current")) === "true",
+          p.url());
+
+        // Open gap 2: by keyboard. Tab from the queue panel to the standalone task's Select link and press Enter.
+        await creationAt();
+        await cr("work").focus();
+        let reached = false;
+        for (let i = 0; i < 40 && !reached; i++) {
+          await p.keyboard.press("Tab");
+          reached = (await p.evaluate(() => document.activeElement?.getAttribute("aria-label"))) === "Select E2E course page update";
+        }
+        const ring = reached ? await p.evaluate(() => getComputedStyle(document.activeElement).outlineStyle) : "";
+        await p.keyboard.press("Enter");
+        await p.waitForURL(/task=/).catch(() => {});
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        check("REQ-60: Tab reaches a Select link with a visible focus ring, and Enter selects that task",
+          reached && ring !== "none" && (await shownTask()) === W.standalone && (await cr("work").locator(`li[data-task="${W.standalone}"]`).getAttribute("aria-current")) === "true",
+          `${reached} ${ring} ${await shownTask()}`);
+
+        // AC4: the visits wrote nothing to a console row and created no Marketing page.
+        const visit = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(startAt);
+        const isRead = (j) => j.method === "GET" || (j.method === "POST" && /\/v1\/data_sources\/[^/]+\/query(\?|$)/.test(j.path));
+        const touchesSeeded = (j) => SEEDED.some((id) => j.path.includes(id) || JSON.stringify(j.body ?? {}).includes(id)) || JSON.stringify(j.body ?? {}).includes('"Marketing"');
+        const work = await (await fetch(`${MOCK_NOTION}/__work`, { headers: { "x-e2e-probe": "1" } })).json();
+        check("REQ-60: Creation mode wrote nothing to Notion's Work rows",
+          visit.filter(touchesSeeded).every(isRead) && !work.pages.some((pg) => pg.props?.Area?.select?.name === "Marketing")
+            && visit.some((j) => j.path.startsWith("/v1/data_sources/3031b455-9be0-4f8d-b200-70fcfcf1a0b8/query?")),
+          JSON.stringify(visit.filter((j) => touchesSeeded(j) && !isRead(j)).slice(0, 3)));
+
+        // AC7: a failing Work read is an error on all three Creation panels and changes no Sales panel.
+        const salesStatuses = async () => p.locator("#console-panel-sales [data-panel]").evaluateAll((els) => els.map((e) => `${e.getAttribute("data-panel")}=${e.getAttribute("data-status")}`));
+        const salesBefore = await salesStatuses();
+        await fetch(`${MOCK_NOTION}/__work/fail-console`, { method: "POST" });
+        try {
+          await creationAt();
+          const failed = await Promise.all(["nextAsset", "work", "pipeline"].map(async (id) => [await cr(id).getAttribute("data-status"), (await cr(id).innerText()).includes("Open Work in Notion")]));
+          check("REQ-60: with the Work read failing, the three Creation panels are errors that still link Work, and Sales keeps its statuses",
+            failed.every(([st, link]) => st === "error" && link) && JSON.stringify(await salesStatuses()) === JSON.stringify(salesBefore),
+            JSON.stringify(failed));
+        } finally {
+          await fetch(`${MOCK_NOTION}/__work/heal-console`, { method: "POST" });
+        }
+        const health = await consoleHealth(teacher);
+        check("REQ-60: the health route still lists six providers", Object.keys(JSON.parse(health.body).providers ?? {}).length === 6, health.body.slice(0, 200));
+        await creationAt("/console?mode=operations&gapDays=14");
+      }
+
+      // REQ-59: the trial funnel and cash pulse over the mock's console leads, one trial lesson and the six invoices.
+      {
+        const ops = (id) => p.locator(`#console-panel-operations [data-panel="${id}"]`);
+        const countOf = async (label) => (await ops("trials").locator(`[data-funnel-count="${label}"]`).innerText()).replace(/\s+/g, " ").trim();
+        await p.goto(`${BASE}/console?mode=operations&window=90`);
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        const trialsText = await ops("trials").innerText();
+        const counts = [await countOf("Booked"), await countOf("Delivered"), await countOf("Closed"), await countOf("Verified enrolments"), await countOf("Outcome unknown")];
+        check("REQ-59: trials is ready with Booked 3, Delivered 2, Closed 1, Verified 1 and Outcome unknown 1",
+          (await ops("trials").getAttribute("data-status")) === "ready" && JSON.stringify(counts) === JSON.stringify(["Booked 3", "Delivered 2", "Closed 1", "Verified enrolments 1", "Outcome unknown 1"]),
+          `${await ops("trials").getAttribute("data-status")} ${counts.join("|")}`);
+        check("REQ-59: the count-over-count lines are shown and no percentage",
+          ["Delivered 2 of 3 booked", "Closed 1 of 2 delivered", "Verified 1 of 1 closed"].every((t) => trialsText.includes(t)) && !trialsText.includes("%"), trialsText.slice(0, 300));
+        await ops("trials").locator('[data-funnel-count="Outcome unknown"] summary').click();
+        check("REQ-59: Outcome unknown lists Console Lead Two", (await ops("trials").locator('[data-funnel-count="Outcome unknown"]').innerText()).includes("Console Lead Two"));
+        const financeText = await ops("finance").innerText();
+        const overdue = ops("finance").locator('[data-cash-line="Overdue"]');
+        await overdue.locator("summary").click();
+        const dueCents = async (label) => Number(((await ops("finance").locator(`[data-cash-line="${label}"] summary span`).first().innerText()).replace(/[$,]/g, "")));
+        check("REQ-59: finance is ready: $480.00 collected with paid date not recorded, $60.00 credits, drafts and voids as counts",
+          (await ops("finance").getAttribute("data-status")) === "ready" && financeText.includes("$480.00") && financeText.includes("1 paid date not recorded")
+            && financeText.includes("Drafts 1") && financeText.includes("Voids 1") && financeText.includes("Credits applied $60.00")
+            && financeText.includes("Card payments made through the website's payment links are not recorded in Notion and are not included."),
+          financeText.slice(0, 400));
+        check("REQ-59: the overdue list holds eeee…0001 at $420.00 and due plus overdue is $1,512.00",
+          (await overdue.locator('a[href*="eeeeeeeeeeee4eee8eeeeeeeeeee0001"]').count()) === 1 && (await overdue.innerText()).includes("$420.00")
+            && Math.round(((await dueCents("Outstanding due")) + (await dueCents("Overdue"))) * 100) === 151200,
+          await overdue.innerText());
+        const collectedText = await ops("finance").locator('[data-cash-line="Collected"]').innerText();
+        check("REQ-59: no $999 or $888 in collected", !collectedText.includes("999") && !collectedText.includes("888"), collectedText);
+
+        const billingFail2 = () => fetch(`${MOCK_NOTION}/__billing/fail`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+        let failing2 = (await billingFail2()).billingFails;
+        try {
+          await p.reload();
+          await p.locator("[data-console]").waitFor({ timeout: 15000 });
+          const fin = await ops("finance").innerText();
+          check("REQ-59: with Invoices failing finance is unverifiable, Payment records unavailable, no $ figure",
+            failing2 && (await ops("finance").getAttribute("data-status")) === "unverifiable" && fin.includes("Payment records unavailable") && !fin.includes("$"), fin.slice(0, 200));
+          const counts2 = [await countOf("Booked"), await countOf("Delivered"), await countOf("Closed"), await countOf("Outcome unknown")];
+          const verified = await countOf("Verified enrolments");
+          check("REQ-59: the funnel stays, stale, with only Verified enrolments Unverifiable",
+            (await ops("trials").getAttribute("data-status")) === "stale" && JSON.stringify(counts2) === JSON.stringify(["Booked 3", "Delivered 2", "Closed 1", "Outcome unknown 1"])
+              && verified.startsWith("Verified enrolments Unverifiable"),
+            `${await ops("trials").getAttribute("data-status")} ${counts2.join("|")} ${verified}`);
+        } finally {
+          if (failing2) failing2 = (await billingFail2()).billingFails;
+        }
+        await p.goto(`${BASE}/console?mode=operations&window=12`);
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        check("REQ-59: ?window=12 prints Last 30 days", (await ops("trials").innerText()).includes("Last 30 days"));
+        // The Sales tabpanel is hidden in Operations mode, so the links are read by text, not by role.
+        const headlineLink = (id) => p.locator(`#console-panel-sales [data-panel="${id}"] a`, { hasText: "Details in Operations" }).getAttribute("href");
+        const conversionLink = await headlineLink("conversion");
+        const cashflowLink = await headlineLink("cashflow");
+        check("REQ-59: the Sales headlines link to ?mode=operations&window=30", conversionLink === "?mode=operations&window=30" && cashflowLink === "?mode=operations&window=30", `${conversionLink} ${cashflowLink}`);
+        const SHOTS59 = new URL("../../docs/spec/founder-console/screenshots/req-59/", import.meta.url);
+        mkdirSync(SHOTS59, { recursive: true });
+        for (const [w, hgt] of [[390, 844], [1280, 720]]) {
+          const q = await bridgeAt(w, hgt, "/console?mode=operations");
+          check(`REQ-59: /console?mode=operations at ${w} has no sideways scroll`, await noSideScroll(q));
+          await q.goto(`${BASE}/console/preview?mode=operations`);
+          await q.locator("[data-console]").waitFor({ timeout: 15000 });
+          await q.screenshot({ path: new URL(`preview-operations-${w}x${hgt}.png`, SHOTS59).pathname, fullPage: true });
+          await q.context().close();
+        }
+      }
+
       // AC2: the mode switch by keyboard, in the URL and across a reload.
       await p.getByRole("tab", { name: "Sales", exact: true }).focus();
       await p.keyboard.press("ArrowRight");
@@ -1705,6 +1866,25 @@ try {
       }
     }
     check("REQ-55: screenshots written to docs/spec/founder-console/screenshots/req-55/", true);
+
+    // REQ-60 (Open gap 1): Creation at the four guardrail widths, live and in the preview, with screenshots.
+    {
+      const SHOTS60 = new URL("../../docs/spec/founder-console/screenshots/req-60/", import.meta.url);
+      mkdirSync(SHOTS60, { recursive: true });
+      for (const [w, h] of [[390, 844], [1280, 720], [1440, 900], [1920, 1080]]) {
+        for (const [name, path] of [["preview-creation", "/console/preview?mode=creation"], ["console-creation", "/console?mode=creation"]]) {
+          const p = await bridgeAt(w, h, path);
+          await syncSettled(p);
+          const next = await boxOf(p, "creation", "nextAsset");
+          const work = await boxOf(p, "creation", "work");
+          // 390: one column, next asset first. 1280 to 1439: next asset beside the queue. 1440 and up: next asset spans the left column.
+          const layout = w < 641 ? next.x === work.x && next.y < work.y : next.y === work.y && next.x < work.x;
+          check(`REQ-60: ${path} at ${w}x${h} has no sideways scroll and the expected Creation layout`, (await noSideScroll(p)) && layout, `${JSON.stringify(next)} ${JSON.stringify(work)}`);
+          if (name === "preview-creation") await p.screenshot({ path: new URL(`${name}-${w}x${h}.png`, SHOTS60).pathname, fullPage: true });
+          await p.context().close();
+        }
+      }
+    }
 
     // AC5: no sideways scroll, the mode switch and NEXT reachable, the horizon a strip then gone, one column at 640.
     for (const [w, h] of [[390, 844], [1280, 720]]) {
@@ -1822,6 +2002,101 @@ try {
       check("REQ-55: a hovered panel has no outline and a 1px border", hovered.outline === "none" && hovered.border === "1px", JSON.stringify(hovered));
       await p.context().close();
     }
+
+    // REQ-57: the Sales queue, Rolodex and radar against the mock Notion's console leads.
+    {
+      const SHOTS57 = new URL("../../docs/spec/founder-console/screenshots/req-57/", import.meta.url);
+      mkdirSync(SHOTS57, { recursive: true });
+      const mock = (path) => fetch(`${MOCK_NOTION}${path}`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+      const next = (p) => p.locator('#console-panel-sales [data-panel="next"]');
+      const selectedName = (p) => next(p).locator('[role="option"][aria-selected="true"] .console-row-title').textContent();
+      // The health poller polls at once when the tab shows again, and each new check after the first refreshes the queue.
+      const kick = (p) => p.evaluate(async () => {
+        const set = (state) => {
+          Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+          document.dispatchEvent(new Event("visibilitychange"));
+        };
+        set("hidden");
+        await new Promise((r) => setTimeout(r, 50));
+        set("visible");
+      });
+      const NOVA = "https://www.notion.so/eeeeeeee000040008000000000000001";
+
+      const p = await bridgeAt(1440, 900, "/console?mode=sales");
+      await syncSettled(p);
+      check("REQ-57: NEXT is the New lead, with exactly one selected", (await selectedName(p)) === "Nova New" && (await next(p).locator('[aria-selected="true"]').count()) === 1, await selectedName(p));
+      await next(p).getByRole("listbox").focus();
+      await p.keyboard.press("ArrowDown");
+      check("REQ-57: ArrowDown moves the selection to the overdue callback", (await selectedName(p)) === "Gail Overdue", await selectedName(p));
+      await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      await p.keyboard.press("/");
+      check("REQ-57: / focuses the checked filter", await p.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.type === "radio" && document.activeElement.checked));
+      const exceptionEverywhere = [];
+      for (const label of ["New", "Due", "Post-trial", "Later", "All"]) {
+        await next(p).locator("label", { hasText: new RegExp(`^${label} \\d+$`) }).click();
+        exceptionEverywhere.push((await next(p).getByText("1 exception", { exact: true }).count()) === 1);
+        if (label === "Post-trial") {
+          const names = await next(p).locator('[role="option"] .console-row-title').allTextContents();
+          const rolodex = (await next(p).locator("[data-rolodex]").textContent()) ?? "";
+          check("REQ-57: the Post-trial filter shows only the Awaiting Close lead, with its diagnosis", names.join() === "Ezra Awaiting" && rolodex.includes("Needs factoring practice") && rolodex.includes("Tue"), `${names.join()} ${rolodex.slice(0, 120)}`);
+        }
+      }
+      check("REQ-57: the exception line is under every filter", exceptionEverywhere.every(Boolean), exceptionEverywhere.join());
+      await p.context().route("https://www.notion.so/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<p>notion stub</p>" }));
+      await next(p).getByRole("listbox").focus();
+      await p.keyboard.press("Home");
+      const [popup] = await Promise.all([p.context().waitForEvent("page"), p.keyboard.press("Enter")]);
+      await popup.waitForLoadState().catch(() => {});
+      check("REQ-57: Enter opens the selected lead's Notion page", popup.url() === NOVA, popup.url());
+      await popup.close();
+      const html = await p.content();
+      const salesRes = await p.context().request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+      const salesBody = await salesRes.text();
+      const hidden = ["Lou Lost", "Dee Optout", "E2E-LEAD-77", "e2e-lead-77", "tel:", "555-0177"];
+      check("REQ-57: excluded leads, the Lead ID and any phone are absent from the page and the sales JSON",
+        salesRes.status() === 200 && salesRes.headers()["cache-control"] === "no-store" && hidden.every((t) => !html.includes(t) && !salesBody.includes(t)),
+        hidden.filter((t) => html.includes(t) || salesBody.includes(t)).join());
+
+      await mock("/__console/leads-fail");
+      await kick(p);
+      await next(p).getByText(/^Refresh failed at \d\d:\d\d: /).waitFor({ timeout: 20000 }).catch(() => {});
+      check("REQ-57: a failed refresh keeps the queue with Refresh failed at",
+        (await next(p).getByText(/^Refresh failed at /).count()) === 1 && (await next(p).locator('[role="option"]').count()) === 5 && (await next(p).getAttribute("data-status")) === "stale");
+      await mock("/__console/leads-fail");
+      await next(p).getByRole("button", { name: "Retry" }).click();
+      await next(p).getByText(/^Refresh failed at /).waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
+      check("REQ-57: Retry after recovery clears the line", (await next(p).getByText(/^Refresh failed at /).count()) === 0 && (await next(p).getAttribute("data-status")) === "ready");
+      await mock("/__console/lose");
+      await kick(p);
+      await next(p).getByText("Gail Overdue", { exact: true }).waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
+      check("REQ-57: a lead turned Lost leaves the queue on the next read", (await next(p).getByText("Gail Overdue", { exact: true }).count()) === 0 && (await next(p).locator('[role="option"]').count()) === 4);
+      await p.context().close();
+
+      for (const [label, who] of [["Ryan", ryan], ["teacher2", teacher2], ["the student", student], ["the parent", parent], ["the role-less user", outsider]]) {
+        const res = await who.context().request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+        const body = await res.text();
+        check(`REQ-57: ${label} gets 403 forbidden from the sales route`, res.status() === 403 && body === '{"error":"forbidden"}', `${res.status()} ${body}`);
+      }
+      {
+        const guestContext = await browser.newContext();
+        const res = await guestContext.request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+        check("REQ-57: a guest's sales request gets the health route's 307", res.status() === 307 && res.headers()["location"] === "/login?next=/tracker/api/console/sales", `${res.status()} ${res.headers()["location"]}`);
+        await guestContext.close();
+      }
+
+      for (const [w, h] of [[390, 844], [1280, 720], [1440, 900], [1920, 1080]]) {
+        const q = await bridgeAt(w, h, "/console?mode=sales");
+        await syncSettled(q);
+        if (w === 390 || w === 1280) check(`REQ-57: ?mode=sales at ${w} has no sideways scroll`, await noSideScroll(q));
+        await q.screenshot({ path: new URL(`console-sales-${w}x${h}.png`, SHOTS57).pathname, fullPage: true });
+        await q.context().close();
+      }
+      check("REQ-57: screenshots written to docs/spec/founder-console/screenshots/req-57/", true);
+      const reduced = await bridgeAt(1440, 900, "/console?mode=sales", { reducedMotion: "reduce" });
+      const transition = await next(reduced).locator('[role="option"][aria-selected="true"]').evaluate((e) => getComputedStyle(e).transitionProperty);
+      check("REQ-57: the selection transition is none under reduced motion", transition === "none", transition);
+      await reduced.context().close();
+    }
   }
 
   // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.
@@ -1846,6 +2121,26 @@ try {
     const msg = (gid, cols) => psql(`select ${cols} from iris.messages where gmail_message_id = '${gid}'`);
     const irisTables = () => psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' and table_name not in ('audit_log', 'notion_outbox') order by 1").split("\n").filter(Boolean);
     const trackerSnapshot = () => Object.fromEntries(irisTables().map((t) => [t, psql(`select count(*) || ' ' || coalesce(md5(string_agg(x::text, '' order by x::text)), '') from tracker.${t} x`)]));
+    // REQ-46: Nina's weekly MPM2D class, first held two Toronto days from now at 17:00, so a cancellation sent
+    // during this run always has 41 to 65 hours of notice. Inserted before the snapshot, so the Iris run's
+    // "no tracker table changed" check covers the schedule read too.
+    const NINA_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0005";
+    const ninaStart = isoIn(2);
+    psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009', '${NINA_ID}', 'MPM2D', 'weekly', '${ninaStart}', '17:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
+    // REQ-47: Nina's teacher (not a linked staff member, so the REQ-33 setup counts are untouched) is free 15:00 to
+    // 19:00 every weekday from today. Omar's teacher has entered no availability at all. Both before the snapshot.
+    const OMAR_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0006";
+    psql(`insert into tracker.availability_windows (org_id, request_id, notion_staff_id, weekday, start_time, end_time, effective_from, created_by) select '10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009', d, '15:00', '19:00', '${isoIn(0)}', '00000000-0000-0000-0000-00000000aaaa' from generate_series(1, 5) d`);
+    psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0010', '${OMAR_ID}', 'SCH4U', 'weekly', '${isoIn(3)}', '16:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
+    // The insert queues the daily-task export; an admin page's background drain settles it before the snapshot,
+    // so a later drain never changes the daily-task tables inside the Iris section.
+    await teacher.goto(`${BASE}/schedule`);
+    let exportsDue = "1";
+    for (let i = 0; i < 60 && exportsDue !== "0"; i++) {
+      exportsDue = psql("select count(*) from tracker.notion_outbox where status in ('pending', 'running') and next_attempt_at <= now() + interval '15 minutes'");
+      if (exportsDue !== "0") await teacher.waitForTimeout(250);
+    }
+    check("REQ-46: the exports queued by Nina's and Omar's series settle before the Iris section", exportsDue === "0", exportsDue);
     const trackerBefore = trackerSnapshot();
     const notionStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
     await gmail("/__gmail/reset");
@@ -1899,7 +2194,7 @@ try {
     check("REQ-42: m5 is cut to 20,000 characters", msg("m5", "length(body_text) || '|' || body_truncated::text") === "20000|true");
     check("REQ-42: m6 is stored outbound in Sam's thread", msg("m6", "direction || '|' || source") === "outbound|charlie_manual");
     check("REQ-42: m7 (the mailbox in a new thread) is not stored", msg("m7", "count(*)") === "0");
-    check("REQ-42: every inbound row has policy version 3 (REQ-44)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 3") === "0");
+    check("REQ-42: every inbound row has policy version 5 (REQ-47)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 5") === "0");
     check("REQ-42: Sam's thread carries his Notion page id", psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm1'") === SAM_ID);
 
     // 7. The owner's inbox: m3 needs him, m4 does not.
@@ -1948,19 +2243,20 @@ try {
       writes.every((j) => (j.method === "POST" && ["/v1/pages", "/v1/comments"].includes(j.path)) || (j.method === "PATCH" && /^\/v1\/(blocks\/[0-9a-f-]{36}\/children|pages\/[0-9a-f-]{36})$/.test(j.path))),
       writes.map((j) => `${j.method} ${j.path}`).join(" "));
     check("REQ-44: no Notion request carries a parent's message or address",
-      !writes.some((j) => /Sam is sick today|Running late today|sam\.parent@example\.com|lead@example\.org|afzal\.family/i.test(JSON.stringify(j.body ?? {}))));
+      !writes.some((j) => /Sam is sick today|Running late today|sam\.parent@example\.com|notice\.parent|offer\.parent|lead@example\.org|afzal\.family/i.test(JSON.stringify(j.body ?? {}))));
 
     // REQ-43: Iris 3/9. A cancellation and a "charged twice" message from Sam's parent, classified through the
     // mock Anthropic (54332); then the message page, Mark handled, and who may use them.
-    const add = (id, subject, text) => gmail("/__gmail/add", "POST", {
+    const add = (id, subject, text, from = "sam.parent@example.com") => gmail("/__gmail/add", "POST", {
       id, threadId: `thread-${id}`, internalDate: String(Date.now()), snippet: subject,
-      payload: { mimeType: "text/plain", headers: [{ name: "From", value: "sam.parent@example.com" }, { name: "Subject", value: subject }], body: { data: Buffer.from(text).toString("base64url") } },
+      payload: { mimeType: "text/plain", headers: [{ name: "From", value: from }, { name: "Subject", value: subject }], body: { data: Buffer.from(text).toString("base64url") } },
     });
-    await add("m9", "Thursday", "Please cancel Thursday's class, Sam has a dentist appointment.");
+    // REQ-46: m9 comes from Nina's family, whose only class is two days out, so its result never depends on the clock.
+    await add("m9", "Thursday", "Please cancel Thursday's class, Nina has a dentist appointment.", "notice.parent@example.com");
     await add("m10", "October invoice", "We were charged twice this month. Please check.");
     const run43 = await irisRun();
     check("REQ-43: the run answers ok and counts classified", run43.status === 200 && run43.body?.result === "ok" && run43.body?.classified >= 1, JSON.stringify(run43.body));
-    check("REQ-43: the cancellation is classified at 0.95, then drafted", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "drafted|cancellation|0.95|3", msg("m9", "state"));
+    check("REQ-43: the cancellation is classified at 0.95, then drafted", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "drafted|cancellation|0.95|5", msg("m9", "state"));
     check("REQ-43: charged twice is escalated flagged with money_dispute", msg("m10", "state || '|' || escalation_reason || '|' || array_to_string(flags, ',')") === "escalated|flagged|money_dispute", msg("m10", "state || '|' || coalesce(escalation_reason, '')"));
     check("REQ-43: one ok classify ai_calls row each",
       psql("select count(*) from iris.ai_calls a join iris.messages m on m.id = a.message_id where m.gmail_message_id in ('m9', 'm10') and a.purpose = 'classify' and a.outcome = 'ok' and a.input_tokens = 300") === "2");
@@ -1972,6 +2268,64 @@ try {
     await teacher.locator("[data-intent]").waitFor({ timeout: 15000 });
     const shown = `${await teacher.locator("[data-intent]").innerText()}|${await teacher.locator("[data-confidence]").innerText()}`;
     check("REQ-43: the owner's message page shows intent and 95%", shown === "Cancellation|95%", shown);
+
+    // REQ-46: Iris 6/9. m9 is drafted from the scheduler as a cancellation with notice, and nothing in the
+    // tracker changes (the snapshot check at the end of this block).
+    const m9Draft = psql(`select reply_type from iris.drafts where message_id = '${m9}' order by version limit 1`);
+    check("REQ-46: m9's draft is cancel_with_notice", m9Draft === "cancel_with_notice", m9Draft);
+    const m9Event = psql(`select (detail->>'notice_minutes') || '|' || (detail->>'class_date') from iris.events where message_id = '${m9}' and kind = 'drafted'`);
+    const [noticeMinutes, classDate] = m9Event.split("|");
+    check("REQ-46: its drafted event has at least 40 hours of notice and the series' first class date",
+      Number(noticeMinutes) >= 2400 && classDate === ninaStart, `${m9Event} want ${ninaStart}`);
+    check("REQ-46: m9 is not flagged schedule unknown", msg("m9", "array_to_string(flags, ',')") === "", msg("m9", "array_to_string(flags, ',')"));
+    await teacher.locator("[data-policy-used]").waitFor({ timeout: 15000 });
+    check("REQ-46: the message page names the policy used: Cancellation with notice", (await teacher.locator("[data-policy-used]").innerText()).includes("Cancellation with notice"));
+
+    // REQ-47: Iris 7/9. Nina's family asks to move her class: the draft offers make-up times from her teacher's
+    // availability, written in by the tracker. Omar's teacher has entered none: the plain reply, flagged. Nothing
+    // in the tracker changes (the snapshot check at the end of this block).
+    {
+      await add("m12", "Next class", "Could we move Nina's next class? Something came up.", "notice.parent@example.com");
+      await add("m13", "Next class", "Could we move Omar's next class this week?", "offer.parent@example.com");
+      const run47 = await irisRun();
+      check("REQ-47: the run answers ok", run47.status === 200 && run47.body?.result === "ok", JSON.stringify(run47.body));
+      const m12 = msg("m12", "id");
+      const m13 = msg("m13", "id");
+      check("REQ-47: both are classified reschedule_request and drafted", msg("m12", "intent || '|' || state") === "reschedule_request|drafted" && msg("m13", "intent || '|' || state") === "reschedule_request|drafted",
+        `${msg("m12", "intent || '|' || state")} ${msg("m13", "intent || '|' || state")}`);
+      const m12Draft = psql(`select reply_type from iris.drafts where message_id = '${m12}' order by version limit 1`);
+      check("REQ-47: Nina's draft is reschedule_offer", m12Draft === "reschedule_offer", m12Draft);
+      const body12 = psql(`select body_text from iris.drafts where message_id = '${m12}' order by version limit 1`);
+      const lines = body12.split("\n").filter((l) => l.startsWith("- "));
+      const LINE = /^- (\w+) (\d{1,2}) (\w+), (\d{1,2}):(\d{2}) (am|pm) to (\d{1,2}):(\d{2}) (am|pm)$/;
+      const h24 = (h, ap) => (Number(h) % 12) + (ap === "pm" ? 12 : 0);
+      check("REQ-47: 1 to 3 option lines, each inside 15:00 to 19:00, one per date",
+        lines.length >= 1 && lines.length <= 3 && !body12.includes("[OPTIONS]")
+          && lines.every((l) => { const m = LINE.exec(l); return m && h24(m[4], m[6]) >= 15 && h24(m[7], m[9]) * 60 + Number(m[8]) <= 19 * 60; })
+          && new Set(lines.map((l) => l.split(",")[0])).size === lines.length,
+        body12);
+      const ninaNext = isoIn(9);
+      const slotCheck = psql(`select count(*) || '|' || count(distinct (s::timestamptz at time zone 'America/Toronto')::date) || '|' || coalesce(bool_and(s::timestamptz >= ('${ninaStart} 18:00'::timestamp at time zone 'America/Toronto') and s::timestamptz + interval '60 minutes' <= ('${ninaNext} 17:00'::timestamp at time zone 'America/Toronto')), false) || '|' || (e.detail->>'class_date') from iris.events e, jsonb_array_elements_text(e.detail->'offered_slots') s where e.message_id = '${m12}' and e.kind = 'drafted' group by e.detail->>'class_date'`);
+      check("REQ-47: the event's offered_slots match the lines, after her next class and before the one after it",
+        slotCheck === `${lines.length}|${lines.length}|true|${ninaStart}`, `${slotCheck} want ${lines.length}|${lines.length}|true|${ninaStart}`);
+      check("REQ-47: Nina's message has no schedule flag", msg("m12", "array_to_string(flags, ',')") === "", msg("m12", "array_to_string(flags, ',')"));
+      const m13Draft = psql(`select reply_type || '|' || body_text from iris.drafts where message_id = '${m13}' order by version limit 1`);
+      check("REQ-47: Omar's draft is reschedule_request with no clock time", m13Draft.startsWith("reschedule_request|") && !/\d{1,2}:\d{2}|\d\s?(am|pm)\b/i.test(m13Draft), m13Draft);
+      check("REQ-47: Omar's message is flagged availability_not_entered and not escalated", msg("m13", "array_to_string(flags, ',') || '|' || state") === "availability_not_entered|drafted", msg("m13", "array_to_string(flags, ',') || '|' || state"));
+      check("REQ-47: Omar's drafted event has no offered_slots", psql(`select count(*) from iris.events where message_id = '${m13}' and kind = 'drafted' and detail ? 'offered_slots'`) === "0");
+
+      await teacher.goto(`${BASE}/iris/messages/${m12}`);
+      await teacher.locator("[data-offer-note]").waitFor({ timeout: 15000 });
+      const note = teacher.locator("[data-offer-note]");
+      check("REQ-47: the offer's message page says nothing is booked and links to Schedule",
+        (await note.innerText()).includes("Nothing is booked") && /\/tracker\/schedule$/.test((await note.getByRole("link", { name: "Open Schedule" }).getAttribute("href")) ?? ""),
+        await note.innerText());
+      check("REQ-47: the policy used is Reschedule offer", (await teacher.locator("[data-policy-used]").innerText()).includes("Reschedule offer"));
+      await teacher.goto(`${BASE}/iris/messages/${m13}`);
+      await teacher.locator('[data-flag="availability_not_entered"]').waitFor({ timeout: 15000 });
+      check("REQ-47: Omar's page shows the flag and no offer note",
+        (await teacher.locator('[data-flag="availability_not_entered"]').innerText()) === "teacher availability not entered" && (await teacher.locator("[data-offer-note]").count()) === 0);
+    }
 
     await teacher.goto(`${BASE}/iris`);
     await teacher.getByRole("heading", { name: "Needs you", exact: true }).waitFor({ timeout: 15000 });
@@ -2005,7 +2359,7 @@ try {
       const draftCount = (gid) => psql(`select count(*) from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = '${gid}'`);
       const streak = (type) => psql(`select unedited_streak || '|' || edited_total || '|' || rejected_total from iris.reply_types where type = '${type}'`);
       check("REQ-44: the cancellation has version 1, proposed, by iris, unedited, without a signature",
-        draftOf("m9", "d.version || '|' || d.state || '|' || d.created_by || '|' || d.edited || '|' || d.policy_version || '|' || (d.body_text like '%AP Academy%')") === "1|proposed|iris|false|3|false",
+        draftOf("m9", "d.version || '|' || d.state || '|' || d.created_by || '|' || d.edited || '|' || d.policy_version || '|' || (d.body_text like '%AP Academy%')") === "1|proposed|iris|false|5|false",
         draftOf("m9", "d.state"));
       check("REQ-44: one draft ai_calls row for it", psql(`select count(*) from iris.ai_calls where purpose = 'draft' and outcome = 'ok' and message_id = '${idOf("m9")}'`) === "1");
       check("REQ-44: the flagged billing message gets no draft", draftCount("m10") === "0");
@@ -2021,25 +2375,43 @@ try {
       const m9 = idOf("m9");
       await teacher.goto(`${BASE}/iris/messages/${m9}`);
       await teacher.locator("[data-draft-body]").waitFor({ timeout: 15000 });
-      check("REQ-44: the message page shows the policy used and the signature", (await teacher.locator("[data-policy-used]").innerText()).includes("A cancelled class has no fee") && (await teacher.locator("[data-signature]").innerText()).includes("AP Academy"));
+      check("REQ-44: the message page shows the policy used and the signature", (await teacher.locator("[data-policy-used]").innerText()).includes("is always accommodated") && (await teacher.locator("[data-signature]").innerText()).includes("AP Academy"));
       await teacher.locator("[data-draft-body]").fill("Hi Pat,\n\nNo problem, I hope the dentist goes well.");
       await teacher.getByRole("button", { name: "Save edit", exact: true }).click();
       await teacher.locator('[data-draft-editor="2"]').waitFor({ timeout: 15000 });
       check("REQ-44: Save edit stores version 2 by the owner, edited", draftOf("m9", "d.version || '|' || d.created_by || '|' || d.edited") === "2|owner|true");
-      await teacher.getByRole("button", { name: "Approve", exact: true }).click();
-      await teacher.locator("[data-copy-reply]").waitFor({ timeout: 15000 });
-      check("REQ-44: after Approve the page shows Copy with the signed reply",
-        (await teacher.locator("[data-approved-text]").innerText()).includes("I hope the dentist goes well.") && await teacher.getByRole("button", { name: "Copy", exact: true }).isVisible());
-      check("REQ-44: the draft and the message are approved", draftOf("m9", "d.state || '|' || d.approval_mode") === "approved|manual" && msg("m9", "state") === "approved");
-      check("REQ-44: the cancellation streak is 0 with edited_total 1", streak("cancellation") === "0|1|0", streak("cancellation"));
+      // REQ-48: Approve now sends the reply from the mailbox, once.
+      const sentMail = () => gmail("/__gmail/sent", "GET");
+      const sendOf = (gid, cols) => psql(`select ${cols} from iris.sends s join iris.messages m on m.id = s.message_id where m.gmail_message_id = '${gid}'`);
+      const irisOutbound = (gid) => psql(`select count(*) from iris.messages o join iris.messages m on m.thread_id = o.thread_id where m.gmail_message_id = '${gid}' and o.direction = 'outbound' and o.source = 'iris'`);
+      const sentBefore = (await sentMail()).length;
+      await teacher.getByRole("button", { name: "Approve and send", exact: true }).click();
+      await teacher.locator('[data-send-state="sent"]').waitFor({ timeout: 15000 });
+      check("REQ-48: after Approve the page shows Sent with the signed reply",
+        (await teacher.locator("[data-approved-text]").innerText()).includes("I hope the dentist goes well.") && (await teacher.locator('[data-send-state="sent"]').innerText()).includes("Sent"));
+      check("REQ-48: the draft, the message and the send are sent", draftOf("m9", "d.state || '|' || d.approval_mode") === "sent|manual" && msg("m9", "state") === "sent"
+        && sendOf("m9", "s.state || '|' || s.attempts || '|' || (s.gmail_message_id is not null)") === "sent|1|true", sendOf("m9", "s.state || '|' || coalesce(s.last_error, '')"));
+      check("REQ-44: the cancellation streak is 0 with edited_total 1", streak("cancel_with_notice") === "0|1|0", streak("cancel_with_notice"));
+      check("REQ-46: the edit counted under cancel_with_notice, not cancellation", psql("select count(*) from iris.reply_types where type = 'cancellation'") === "0");
       const again44 = await teacher.context().request.post(`${BASE}/api/iris/drafts/${draftOf("m9", "d.id")}/approve`, { data: { version: 2 } });
-      check("REQ-44: a second Approve is 409", again44.status() === 409, String(again44.status()));
+      check("REQ-48: a second Approve is 200 with the send's state and sends nothing more",
+        again44.status() === 200 && (await again44.json()).state === "sent" && (await sentMail()).length === sentBefore + 1, String(again44.status()));
+      check("REQ-48: one outbound iris row for the cancellation", irisOutbound("m9") === "1", irisOutbound("m9"));
 
       // An unedited approval, then a reject.
       await teacher.goto(`${BASE}/iris/messages/${idOf("m1")}`);
-      await teacher.getByRole("button", { name: "Approve", exact: true }).click();
-      await teacher.locator("[data-copy-reply]").waitFor({ timeout: 15000 });
+      await teacher.getByRole("button", { name: "Approve and send", exact: true }).click();
+      await teacher.locator('[data-send-state="sent"]').waitFor({ timeout: 15000 });
       check("REQ-44: an unedited approval gives the general_question streak 1", streak("general_question") === "1|0|0", streak("general_question"));
+      const m1Mail = (await sentMail()).at(-1);
+      const h = (name) => m1Mail?.headers.find((x) => x.name.toLowerCase() === name.toLowerCase())?.value;
+      const m1SendId = sendOf("m1", "s.id");
+      check("REQ-48: the sent reply carries the thread headers, our ids and the signature, with no automated line",
+        h("To") === "sam.parent@example.com" && h("From") === "charlie@apacademy.ca" && h("Subject") === "Re: Sam is sick"
+          && h("In-Reply-To") === "<m1@mail.example>" && h("References") === "<m1@mail.example>" && h("Message-ID") === `<iris-${m1SendId}@apacademy.ca>`
+          && h("X-Iris-Send-Id") === m1SendId && h("Content-Type") === "text/plain; charset=UTF-8" && m1Mail.threadId === "thread-sam"
+          && m1Mail.body.includes("AP Academy") && !/automat/i.test(m1Mail.body),
+        JSON.stringify(m1Mail?.headers));
       await teacher.goto(`${BASE}/iris/messages/${idOf("m2")}`);
       await teacher.locator("[data-reject-reason]").fill("Too long");
       await teacher.getByRole("button", { name: "Reject", exact: true }).click();
@@ -2049,7 +2421,7 @@ try {
       await teacher.goto(`${BASE}/iris`);
       await teacher.getByRole("heading", { name: "Drafts waiting", exact: true }).waitFor({ timeout: 15000 });
       check("REQ-44: the queue shows Needs you, Drafts waiting, Sent today and Failed",
-        (await section(teacher, "Needs you").innerText()).includes("You rejected the draft") && (await section(teacher, "Sent today").innerText()).includes("Approved, send by hand")
+        (await section(teacher, "Needs you").innerText()).includes("You rejected the draft") && (await section(teacher, "Sent today").innerText()).includes("Sent")
           && await teacher.getByRole("heading", { name: "Failed", exact: true }).isVisible());
 
       // Charlie answers m5 from Gmail: the next run supersedes its draft.
@@ -2063,6 +2435,67 @@ try {
         msg("m5", "state || '|' || escalation_reason || '|' || (handled_at is not null)") === "escalated|answered_by_charlie|true" && draftOf("m5", "d.state") === "superseded",
         msg("m5", "state || '|' || coalesce(escalation_reason, '')"));
       check("REQ-44: the streak is unchanged by a Gmail reply", streak("general_question") === "0|0|1");
+      check("REQ-48: the run never stores Iris's own sent mail as charlie_manual",
+        psql("select count(*) from iris.messages where source = 'charlie_manual' and rfc_message_id like '<iris-%'") === "0"
+          && psql("select count(*) from iris.messages where source = 'iris'") === psql("select count(*) from iris.sends where state = 'sent'"));
+
+      // REQ-48: a crash after Gmail accepted the message is recovered by search, not a second send.
+      const expireLeases = () => psql("update iris.sends set lease_until = now() - interval '1 second' where state = 'sending' returning 1");
+      await gmail("/__gmail/accept-then-fail");
+      const m8Approve = await teacher.context().request.post(`${BASE}/api/iris/drafts/${draftOf("m8", "d.id")}/approve`, { data: { version: 1 } });
+      await gmail("/__gmail/accept-then-fail");
+      const m8Body = await m8Approve.json();
+      check("REQ-48: accepted then 500 leaves the send waiting with the status line", m8Approve.status() === 200 && m8Body.state === "sending" && m8Body.error === "Gmail returned 500", JSON.stringify(m8Body));
+      const sentAfterCrash = (await sentMail()).length;
+      expireLeases();
+      const runRecover = await irisRun();
+      check("REQ-48: the next run finds it by search and records it, with no second send",
+        runRecover.body?.sent === 1 && sendOf("m8", "s.state || '|' || s.attempts") === "sent|2" && (await sentMail()).length === sentAfterCrash && irisOutbound("m8") === "1",
+        `${JSON.stringify(runRecover.body)} ${sendOf("m8", "s.state || '|' || s.attempts")}`);
+
+      // REQ-48: Gmail 500 on every attempt: Approve, then two runs, then Failed with Retry; the rest of the tracker loads.
+      await add("m14", "Homework", "Quick question about this week's homework.");
+      await irisRun();
+      const m14Draft = draftOf("m14", "d.id");
+      psql("update iris.settings set paused = true returning 1");
+      const pausedApprove = await teacher.context().request.post(`${BASE}/api/iris/drafts/${m14Draft}/approve`, { data: { version: 1 } });
+      check("REQ-48: a paused Approve is 409 paused with no send row and no approval",
+        pausedApprove.status() === 409 && (await pausedApprove.json()).error === "paused" && sendOf("m14", "count(*)") === "0" && draftOf("m14", "d.state") === "proposed", String(pausedApprove.status()));
+      psql("update iris.settings set paused = false returning 1");
+      await gmail("/__gmail/fail-send");
+      const sentBeforeFail = (await sentMail()).length;
+      await teacher.goto(`${BASE}/iris/messages/${idOf("m14")}`);
+      await teacher.getByRole("button", { name: "Approve and send", exact: true }).click();
+      await teacher.locator('[data-send-state="sending"]').waitFor({ timeout: 15000 });
+      check("REQ-48: after a failed first attempt the page says not sent yet",
+        (await teacher.locator('[data-send-state="sending"]').innerText()).includes("Not sent yet: Gmail returned 500"));
+      for (let i = 0; i < 2; i++) {
+        expireLeases();
+        await irisRun();
+      }
+      check("REQ-48: after three attempts the send, draft and message are failed with a status-only error",
+        sendOf("m14", "s.state || '|' || s.attempts || '|' || s.last_error") === "failed|3|Gmail returned 500" && draftOf("m14", "d.state") === "failed" && msg("m14", "state") === "failed",
+        sendOf("m14", "s.state || '|' || s.attempts || '|' || coalesce(s.last_error, '')"));
+      await teacher.goto(`${BASE}/iris`);
+      const failedSection = section(teacher, "Failed");
+      await failedSection.locator("[data-retry-send]").first().waitFor({ timeout: 15000 });
+      check("REQ-48: the Failed section lists it with Retry", (await failedSection.innerText()).includes("Homework") && await failedSection.getByRole("button", { name: "Retry", exact: true }).isVisible());
+      const pagesUp = await Promise.all(["/iris", "/iris/settings", "/"].map((p) => teacher.context().request.get(`${BASE}${p}`).then((r) => r.status())));
+      check("REQ-48: /iris, /iris/settings and the tracker home still load", pagesUp.every((st) => st === 200), pagesUp.join(","));
+      const m14Send = sendOf("m14", "s.id");
+      const ryanRetry = await ryan.context().request.post(`${BASE}/api/iris/sends/${m14Send}/retry`);
+      check("REQ-48: Ryan gets 403 from Retry", ryanRetry.status() === 403, String(ryanRetry.status()));
+      const evilRetry = await teacher.context().request.post(`${BASE}/api/iris/sends/${m14Send}/retry`, { headers: { Origin: "https://evil.example" } });
+      check("REQ-48: a cross-site Retry is 403", evilRetry.status() === 403, String(evilRetry.status()));
+      check("REQ-48: no failed attempt reached Gmail's store", (await sentMail()).length === sentBeforeFail);
+      await gmail("/__gmail/fail-send");
+      await teacher.goto(`${BASE}/iris/messages/${idOf("m14")}`);
+      await teacher.getByRole("button", { name: "Retry", exact: true }).click();
+      await teacher.locator('[data-send-state="sent"]').waitFor({ timeout: 15000 });
+      check("REQ-48: Retry sends it once and the page shows Sent",
+        sendOf("m14", "s.state || '|' || s.attempts") === "sent|1" && (await sentMail()).length === sentBeforeFail + 1 && irisOutbound("m14") === "1", sendOf("m14", "s.state || '|' || s.attempts"));
+      const retryAgain = await teacher.context().request.post(`${BASE}/api/iris/sends/${m14Send}/retry`);
+      check("REQ-48: Retry on a sent send is 409", retryAgain.status() === 409, String(retryAgain.status()));
 
       // The phone backup: one page for today, one to-do per pushed item, one comment each.
       const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
@@ -2165,7 +2598,7 @@ try {
       await teacher.locator("[data-eval-record]").click();
       await teacher.locator("[data-eval-latest-run]").waitFor({ timeout: 15000 });
       check("REQ-45: Record results writes one eval run with the labelled count",
-        psql("select count(*) || '|' || max(labelled_count) || '|' || max(policy_version) from iris.eval_runs") === "1|1|3");
+        psql("select count(*) || '|' || max(labelled_count) || '|' || max(policy_version) from iris.eval_runs") === "1|1|5");
       check("REQ-45: the latest run table shows the type", await teacher.locator('[data-eval-type="cancellation"]').isVisible());
 
       await teacher.goto(`${BASE}/iris/settings`);
@@ -2196,6 +2629,14 @@ try {
     const lastError = await teacher.locator("[data-last-error]").innerText();
     check("REQ-42: the settings page shows the short last error", lastError.includes("Gmail returned 500") && !lastError.includes("@"), lastError);
     await gmail("/__gmail/fail-list");
+
+    // REQ-46: no request to Missed Sessions & Credits and no write to a family's page during the Iris section.
+    {
+      const irisJournal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(notionStart);
+      const familyIds = ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004", NINA_ID, OMAR_ID, "dddddddd-dddd-4ddd-8ddd-dddddddd0001"];
+      check("REQ-46: Iris makes no Missed Sessions & Credits request", !irisJournal.some((j) => j.path.replace(/-/g, "").includes("38cdcded9bef4e68bceba56920f098bd")));
+      check("REQ-46: Iris writes no family page", !irisJournal.some((j) => j.method === "PATCH" && familyIds.some((id) => j.path.replace(/-/g, "").includes(id.replace(/-/g, "")))));
+    }
 
     // 13. No tracker table changed (the audit log records the pause changes by design; the outbox drains in the background).
     check("REQ-42: every tracker table is unchanged across the Iris section", JSON.stringify(trackerSnapshot()) === JSON.stringify(trackerBefore));

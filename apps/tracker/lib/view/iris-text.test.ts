@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IRIS_TEXT, ageText, confidenceText, gmailThreadUrl, intentLabel, notSetUpText, reasonLabel, runSummaryText, stateLabel } from "./iris-text";
+import { IRIS_TEXT, ageText, confidenceText, flagLabel, gmailThreadUrl, intentLabel, notSetUpText, reasonLabel, runSummaryText, stateLabel } from "./iris-text";
 
 // REQ-42 AC26, AC27: the Iris page copy.
 describe("iris-text", () => {
@@ -83,7 +83,7 @@ describe("iris-text: classification labels", () => {
 describe("iris-text, drafting", () => {
   it("labels the new states and reasons", () => {
     expect(stateLabel("drafted", null)).toBe("Draft waiting");
-    expect(stateLabel("approved", null)).toBe("Approved, send by hand");
+    expect(stateLabel("approved", null)).toBe("Approved, sending");
     expect(stateLabel("sent", null)).toBe("Sent");
     expect(stateLabel("escalated", "needs_charlie")).toBe("Iris wants you to check");
     expect(stateLabel("escalated", "draft_rule")).toBe("Draft held back");
@@ -128,5 +128,26 @@ describe("eval text", () => {
       evalProgressText(3, 4, 1), pageText(1, 9), neverLineText(["a"]),
     ].join("\n");
     expect(all).not.toMatch(/[–—]/);
+  });
+});
+
+// REQ-46 AC9: the schedule flag and the schedule no-show reason.
+describe("iris-text: schedule-aware cancellations", () => {
+  it("labels schedule_unknown and schedule_no_show, with no em or en dashes", () => {
+    expect(flagLabel("schedule_unknown")).toBe("schedule unknown");
+    expect(reasonLabel("schedule_no_show")).toBe("Wrote after class started");
+    expect(stateLabel("escalated", "schedule_no_show", { intent: "no_show" })).toBe("Wrote after class started");
+    expect([flagLabel("schedule_unknown"), reasonLabel("schedule_no_show")].join("\n")).not.toMatch(/[–—]/);
+  });
+});
+
+// REQ-47 AC11: the two new schedule flags and the offer note.
+describe("iris-text: make-up offers", () => {
+  it("labels the flags and carries the offer note, with no em dash", () => {
+    expect(flagLabel("availability_not_entered")).toBe("teacher availability not entered");
+    expect(flagLabel("no_free_slot")).toBe("no free make-up time");
+    expect(IRIS_TEXT.offerNote).toBe("Times come from the teacher's availability. Nothing is booked: book the time the family picks in Schedule.");
+    expect(IRIS_TEXT.bookInSchedule).toBe("Open Schedule");
+    expect([IRIS_TEXT.offerNote, IRIS_TEXT.bookInSchedule, flagLabel("availability_not_entered"), flagLabel("no_free_slot")].join("\n")).not.toMatch(/[–—]/);
   });
 });

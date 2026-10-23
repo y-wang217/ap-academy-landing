@@ -1,16 +1,22 @@
 import type { GaugeData } from "../../components/console/kit/gauge";
-import type { MetricData } from "../../components/console/kit/metric";
 import type { QueueItem } from "../../components/console/kit/queue-row";
 import type { RadarStage } from "../../components/console/kit/radar";
 import type { PanelResult } from "../../lib/console/contracts";
+import { buildCashPulsePanel, buildTrialFunnelPanel } from "../../lib/console/finance-panels";
 import { buildNorthStar } from "../../lib/console/north-star";
+import { windowOf } from "../../lib/console/trial-funnel";
 import type { ConsolePanels } from "../../lib/console/panel-slots";
+import type { ConsolePanels as ConsolePanelResults } from "../../lib/console/contracts";
 import { todayIso } from "../../lib/time";
 import { addDays } from "../../lib/domain/schedule/wallclock";
 import { weekOf } from "../../lib/domain/schedule/week";
 import { notConnected, type PanelStatus, type PanelView } from "../../lib/console/panel-view";
+import { buildSalesView, type SalesView } from "../../lib/console/sales-view";
+import { fixtureLeads, TRIAL_F } from "./sales-fixtures";
 import type { LessonGapsData, TeacherLoadData } from "../../lib/console/operations";
 import type { WeekLoad } from "../../lib/domain/schedule/operations";
+import type { WorkRow } from "../../lib/console/contracts";
+import { creationPanels } from "../../lib/console/creation";
 
 /**
  * Neutral test values for the kit preview and unit tests (REQ-55). Never imported by
@@ -73,6 +79,38 @@ function demoNorthStar(now: Date) {
   });
 }
 
+/** The funnel and cash pulse over test rows: two leads, one trial lesson, three invoices. */
+function demoFinance(now: Date) {
+  const today = todayIso(now);
+  const window = windowOf(30, today);
+  const day = (n: number) => addDays(today, n);
+  const ok = <T,>(panel: PanelResult<T>["panel"], data: T): PanelResult<T> => ({
+    panel, status: "ready", data, count: null, lastCheckedAt: now.toISOString(), lastSuccessfulFetchAt: now.toISOString(), staleReason: null, errorMessage: null,
+    sourceEvidence: [{ source: "notion", sourceId: `demo-${panel}`, sourceUrl: "#notion", observedAt: now.toISOString() }],
+  });
+  const lead = (n: number, extra: Record<string, string | null>) => ({
+    id: `d0000000-0000-4000-8000-00000000010${n}`, pageUrl: "#lead", createdAt: null, name: `Lead ${n}`, stage: null, ownerStaffId: null, ownerName: null, nextAction: null,
+    nextActionDue: null, nextActionDueDate: null, attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: null,
+    trialAttendedAt: null, closedAt: null, trialTime: null, trialTimeDate: null, trialTeacherId: null, trialTeacherName: null, level: null, hasMajorGaps: false,
+    recommendedPlan: null, hasTrialSummary: false, parentName: null, inPeopleCopy: true, dedupeKey: null, grade: null, subjects: [], majorGaps: null, trialSummary: null, ...extra,
+  });
+  const invoice = (n: number, status: string, amount: number, extra: Record<string, string | number | null> = {}) => ({
+    id: `d0000000-0000-4000-8000-00000000020${n}`, pageUrl: "#invoice", status, paidOn: null, amount, creditApplied: null, issued: day(-10), due: null, month: null,
+    studentIds: [lead(1, {}).id], studentName: "Lead 1", ...extra,
+  });
+  const leads = [
+    lead(1, { trialBookedAt: day(-12), trialAttendedAt: day(-9), closedAt: day(-5), trialTime: `${day(-9)}T20:00:00Z` }),
+    lead(2, { trialBookedAt: day(-6), trialTime: `${day(-3)}T20:00:00Z` }),
+  ];
+  const panels = {
+    leads: ok("leads", leads), touches: ok("touches", []), work: ok("work", []), people: ok("people", { syncedAt: now.toISOString(), students: 2, staff: 1 }),
+    trialLessons: ok("trialLessons", [{ id: "d0000000-0000-4000-8000-000000000301", pageUrl: "#lesson", date: day(-9), studentId: leads[0].id, studentName: null, teacherId: null, teacherName: null, durationHours: 1, hasTopic: false, hasDiagnosis: false, diagnosis: null, preferredDays: [] }]),
+    invoices: ok("invoices", [invoice(1, "Paid", 480, { paidOn: day(-4) }), invoice(2, "Sent", 420, { due: day(-1) }), invoice(3, "Draft", 315)]),
+  };
+  const search = new URLSearchParams({ mode: "operations" });
+  return { funnel: buildTrialFunnelPanel(panels, window, now, search), cash: buildCashPulsePanel(panels, window, now, search) };
+}
+
 const week = (from: string, to: string, w: Partial<WeekLoad>): WeekLoad => ({
   from, to, scheduledMinutes: 0, deliveredMinutes: null, availability: "entered", availableMinutes: null, insideMinutes: null, outsideMinutes: null, utilisation: null, ...w,
 });
@@ -122,6 +160,7 @@ function demoGaps(now: Date): LessonGapsData {
 }
 
 export function demoPanels(now: Date): ConsolePanels {
+  const finance = demoFinance(now);
   return {
     sales: {
       next: result("next", now, "ready", leads),
@@ -129,20 +168,12 @@ export function demoPanels(now: Date): ConsolePanels {
       signals: result<QueueItem[]>("signals", now, "stale", [{ id: "sig-1", title: "Trial with no follow-up", reason: "Lead A, two days" }], { staleReason: "Source slow to answer" }),
       followUps: notConnected("followUps", now),
       radar: result("radar", now, "ready", stages),
-      conversion: result<MetricData>("conversion", now, "loading", null),
+      conversion: finance.funnel,
       capacity: result<GaugeData>("capacity", now, "ready", { value: 18, max: 30, unit: "h" }),
-      cashflow: result<MetricData>("cashflow", now, "error", null, { errorMessage: "Payment records unavailable" }),
+      cashflow: finance.cash,
       dispatch: result<QueueItem[]>("dispatch", now, "empty", null),
     },
-    creation: {
-      nextAsset: result<QueueItem[]>("nextAsset", now, "ready", [
-        { id: "asset-1", title: "Unit 3 worksheet", reason: "Due before Thursday class", due: "Thu", href: "#asset-1" },
-        { id: "asset-2", title: "Trial lesson plan", reason: "Lead B trial", due: "Fri", href: "#asset-2" },
-      ]),
-      work: result<QueueItem[]>("work", now, "ready", [{ id: "work-1", title: "Course outline draft", reason: "In progress", href: "#work-1" }]),
-      pipeline: result<QueueItem[]>("pipeline", now, "empty", null),
-      signals: result<QueueItem[]>("signals", now, "ready", [{ id: "sig-2", title: "Worksheet past its date", reason: "Unit 2 review" }]),
-    },
+    creation: demoCreation(now),
     operations: {
       teacherLoad: result<TeacherLoadData>("teacherLoad", now, "ready", demoLoad(now), { canonical: { href: "#schedule", label: "Open schedule" } }),
       lessonGaps: result<LessonGapsData>("lessonGaps", now, "stale", demoGaps(now), { staleReason: "Lesson candidates unavailable", canonical: { href: "#lessons", label: "Open unlinked lessons" } }),
@@ -150,9 +181,42 @@ export function demoPanels(now: Date): ConsolePanels {
         { id: "up-1", title: "Student A with Teacher A, MHF4U", reason: "Regular", due: "Thu 16:00", href: "#up-1" },
         { id: "up-2", title: "Student B with Teacher B, SPH3U", reason: "Trial, moved from Tue", due: "Fri 17:30", href: "#up-2" },
       ], { canonical: { href: "#schedule", label: "Open schedule" } }),
-      finance: result<MetricData>("finance", now, "stale", { value: 1250, currency: "CAD" }, { staleReason: "Ledger read is 25 minutes old" }),
-      trials: result<MetricData>("trials", now, "ready", { value: 4 }),
+      finance: finance.cash,
+      trials: finance.funnel,
       integrations: result<QueueItem[]>("integrations", now, "ready", [{ id: "int-1", title: "Notion", reason: "Read in time" }]),
     },
   };
+}
+
+/** Creation mode from neutral Work rows (REQ-60): a project with two tasks, a loose task and a weekly review. */
+function demoCreation(now: Date): ConsolePanels["creation"] {
+  const today = todayIso(now);
+  const id = (n: number) => `d0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const row = (n: number, over: Partial<WorkRow> & { name: string }): WorkRow => ({
+    id: id(n), pageUrl: `#work-${n}`, area: "Marketing", state: "Next", type: "Task", dueReview: null, dueReviewDate: null, owner: "Owner A",
+    taskTypes: [], parentProjectIds: [], expectedResult: null, ...over,
+  });
+  const rows: WorkRow[] = [
+    row(1, { name: "Video series A", type: "Project", state: "Doing" }),
+    row(2, { name: "Video A1 script", parentProjectIds: [id(1)], expectedResult: "A reviewed script", taskTypes: [{ id: id(9), name: "Script" }] }),
+    row(3, { name: "Video A2 recording", state: "Defined", parentProjectIds: [id(1)] }),
+    row(4, { name: "Course page update", state: "Inbox", owner: null, dueReview: addDays(today, -1), dueReviewDate: addDays(today, -1) }),
+    row(5, { name: "Weekly review", type: "Recurring", dueReview: addDays(today, 2), dueReviewDate: addDays(today, 2) }),
+  ];
+  const work: PanelResult<WorkRow[]> = {
+    panel: "work", status: "ready", data: rows, count: rows.length, lastCheckedAt: now.toISOString(), lastSuccessfulFetchAt: now.toISOString(),
+    staleReason: null, errorMessage: null, sourceEvidence: [],
+  };
+  const p = creationPanels(work, { today, selectedId: null, search: new URLSearchParams("mode=creation"), workSourceId: "d0000000-0000-4000-8000-0000000000ff", weeklyReviewId: id(5) });
+  return { nextAsset: p.nextAsset, work: p.work, pipeline: p.pipeline, signals: result<QueueItem[]>("signals", now, "ready", [{ id: "sig-2", title: "Worksheet past its date", reason: "Unit 2 review" }]) };
+}
+
+/** REQ-57: a Sales queue and radar from the ranking fixtures, for the preview's NEXT and radar slots. */
+export function demoSales(now: Date): SalesView {
+  const at = now.toISOString();
+  const r = <T,>(panel: string, data: T) => ({ panel, status: "ready", data, count: null, lastCheckedAt: at, lastSuccessfulFetchAt: at, staleReason: null, errorMessage: null, sourceEvidence: [] });
+  return buildSalesView({
+    leads: r("leads", fixtureLeads()), touches: r("touches", []), trialLessons: r("trialLessons", [TRIAL_F]), work: r("work", []), invoices: r("invoices", []),
+    people: r("people", { syncedAt: at, students: 0, staff: 0 }),
+  } as ConsolePanelResults, now);
 }

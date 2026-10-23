@@ -90,6 +90,14 @@ export const TUNING = {
   irisGateMinSensitiveRecall: 1,
   /** The gate's mean draft rating floor, per type. */
   irisGateMinMeanRating: 4,
+  /** Gmail attempts per send before it is failed and waits for Retry (REQ-48). Each Retry allows this many again. */
+  irisSendMaxAttempts: 3,
+  /** An attempt holds its send this long; a crash frees it, and the next attempt checks Gmail first. */
+  irisSendLeaseSeconds: 60,
+  /** Stuck sends one run tries, oldest first. */
+  irisMaxSendsPerRun: 3,
+  /** No new send starts this long after the run's send step began. */
+  irisSendBudgetMs: 30_000,
   /** Founder Console (REQ-54): each provider read is abandoned after this long. */
   consoleProviderTimeoutMs: 8_000,
   /** Notion pages of 100 rows one console panel reads before it reports stale. */
@@ -100,4 +108,6 @@ export const TUNING = {
   consoleTouchesWindowDays: 90,
   /** Rows an Operations list (lesson gaps, no-shows, upcoming classes) shows before an "N more" link (REQ-58). */
   consoleOperationsListCap: 25,
+  /** Rows a console detail list (trial funnel, cash pulse) shows before an "N more in Notion" link (REQ-59). */
+  consoleDetailListCap: 25,
 } as const;

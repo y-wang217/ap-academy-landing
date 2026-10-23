@@ -1,7 +1,7 @@
 import { POLICY } from "../iris/policy";
 import type { MessageState } from "../iris/store";
 
-/** Every line of Iris copy (REQ-42, REQ-43, REQ-44). Plain, short, no em dashes. */
+/** Every line of Iris copy (REQ-42, REQ-43, REQ-44, REQ-47, REQ-48). Plain, short, no em dashes. */
 export const IRIS_TEXT = {
   title: "Iris inbox",
   settingsTitle: "Iris settings",
@@ -57,15 +57,24 @@ export const IRIS_TEXT = {
   draft: "Draft",
   noDraft: "No draft for this message.",
   policyUsed: "Policy used",
+  offerNote: "Times come from the teacher's availability. Nothing is booked: book the time the family picks in Schedule.",
+  bookInSchedule: "Open Schedule",
   policyVersionNote: (drafted: number, current: number) => `Drafted under policy version ${drafted}; current is ${current}.`,
   signatureNote: "Added below your reply:",
-  approve: "Approve",
+  approve: "Approve and send",
   saveEdit: "Save edit",
   reject: "Reject",
   rejectReason: "Why are you rejecting it?",
   copy: "Copy",
   copied: "Copied",
   approvedCopy: "Approved. Paste it into Gmail and send it yourself.",
+  sending: "Sending...",
+  sendingNow: "Approved. Sending now.",
+  sendPending: (error: string) => `Approved. Not sent yet: ${error}. Iris tries again on its next run.`,
+  sentAt: (time: string) => `Sent ${time}`,
+  sendFailed: (error: string) => `Send failed: ${error}`,
+  retry: "Retry",
+  retrying: "Retrying...",
   olderVersions: "Earlier versions",
   versionLine: (version: number, state: string, by: string) => `Version ${version}, ${state}, by ${by}`,
   phoneAlertsOff: "Phone alerts are off (NOTION_CHARLIE_USER_ID is not set).",
@@ -74,6 +83,9 @@ export const IRIS_TEXT = {
 
 const FLAG_LABELS: Record<string, string> = {
   money_dispute: "money dispute",
+  schedule_unknown: "schedule unknown",
+  availability_not_entered: "teacher availability not entered",
+  no_free_slot: "no free make-up time",
   legal_threat: "legal threat",
   crisis: "crisis",
   hardship: "hardship",
@@ -113,6 +125,8 @@ export function reasonLabel(reason: string | null, extra: { flags?: string[]; in
       return "Iris wants you to check";
     case "draft_rule":
       return "Draft held back";
+    case "schedule_no_show":
+      return "Wrote after class started";
     case "draft_rejected":
       return "You rejected the draft";
     case "answered_by_charlie":
@@ -136,7 +150,7 @@ export function stateLabel(state: MessageState, reason: string | null, extra: { 
     case "drafted":
       return "Draft waiting";
     case "approved":
-      return "Approved, send by hand";
+      return "Approved, sending";
     case "sent":
       return "Sent";
     case "matched":

@@ -15,12 +15,12 @@ const TEACHER = "cccccccc-cccc-4ccc-8ccc-cccccccc0002";
 const DESIGN_PROPS = [
   "Student Name", "Stage", "Owner", "Next Action", "Next Action Due", "Attempts", "Last Contact", "Source", "Lost Reason",
   "Contacted At", "Trial Booked At", "Trial Attended At", "Closed At", "Trial Time", "Trial Teacher", "Level", "Major Gaps",
-  "Recommended Plan", "Trial Summary", "Parent Name",
+  "Recommended Plan", "Trial Summary", "Parent Name", "Lead ID", "Grade", "Subjects",
 ];
 // The live schema has more than the reader asks for; the extra ones must never be requested.
 const SCHEMA: Record<string, string> = {
   ...Object.fromEntries(DESIGN_PROPS.map((n, i) => [n, `p${i}`])),
-  "Parent Phone": "ph", "Parent Email": "em", "Lead ID": "li", Notes: "no", "Sales Notes": "sn", "Hourly Rate (CAD)": "hr", "Billing Family": "bf", "Weekly Schedule": "ws",
+  "Parent Phone": "ph", "Parent Email": "em", Notes: "no", "Sales Notes": "sn", "Hourly Rate (CAD)": "hr", "Billing Family": "bf", "Weekly Schedule": "ws",
 };
 
 const page = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
@@ -50,7 +50,9 @@ const page = (id: string, name: string, extra: Record<string, unknown> = {}) => 
     "Parent Name": v.text("Pat Lee"),
     "Parent Phone": v.phone("555-0100"),
     "Parent Email": v.email("pat@example.com"),
-    "Lead ID": v.text("L-77"),
+    "Lead ID": v.text(" L-77 "),
+    Grade: v.select("11"),
+    Subjects: v.multi(["MHF4U", "SPH4U"]),
     Notes: v.text("private notes"),
     ...extra,
   },
@@ -59,7 +61,7 @@ const page = (id: string, name: string, extra: Record<string, unknown> = {}) => 
 const LEAD_SOURCE_KEYS = [
   "attempts", "closedAt", "contactedAt", "createdAt", "hasMajorGaps", "hasTrialSummary", "id", "lastContact", "level", "lostReason", "name",
   "nextAction", "nextActionDue", "ownerStaffId", "parentName", "recommendedPlan", "source", "stage", "trialAttendedAt", "trialBookedAt",
-  "trialTeacherId", "trialTime",
+  "trialTeacherId", "trialTime", "leadId", "grade", "subjects", "majorGaps", "trialSummary",
 ];
 
 describe("fetchLeads", () => {
@@ -81,13 +83,21 @@ describe("fetchLeads", () => {
     expect(r.complete).toBe(true);
     expect(r.skipped).toBe(0);
     const row = r.rows[0];
-    expect(Object.keys(row).sort()).toEqual(LEAD_SOURCE_KEYS);
+    expect(Object.keys(row).sort()).toEqual([...LEAD_SOURCE_KEYS].sort());
     expect(row).toMatchObject({
       id: S1, name: "Sam Lee", stage: "New", ownerStaffId: OWNER, trialTeacherId: TEACHER, attempts: 2,
       nextActionDue: "2026-11-01T04:30:00.000Z", lastContact: "2026-10-19", lostReason: null, hasMajorGaps: true, hasTrialSummary: false,
       parentName: "Pat Lee", createdAt: "2026-10-20T14:00:00.000Z",
+      leadId: "l-77", grade: "11", subjects: ["MHF4U", "SPH4U"], majorGaps: "fractions and factoring", trialSummary: null,
     });
-    expect(JSON.stringify(r)).not.toMatch(/555-0100|pat@example|L-77|private notes|fractions/);
+    expect(JSON.stringify(r)).not.toMatch(/555-0100|pat@example|private notes/);
+  });
+
+  it("REQ-57: free text is cut to 1000 characters and an empty Lead ID is null", async () => {
+    const long = "x".repeat(1200);
+    const f = notionFake({ dataSourceId: DS, schema: SCHEMA, pages: [[page(S1, "Sam Lee", { "Major Gaps": v.text(long), "Trial Summary": v.text(long), "Lead ID": v.text("  ") })]] });
+    const row = (await fetchLeads(cfg, { fetcher: f.fetcher, maxPages: 10 })).rows[0];
+    expect([row.majorGaps?.length, row.trialSummary?.length, row.leadId]).toEqual([1000, 1000, null]);
   });
 
   it("two pages with the same Student Name stay two rows", async () => {
@@ -120,7 +130,7 @@ describe("fetchLeads", () => {
 
   it("leads.ts never names the private Students & Parents properties", () => {
     const src = readFileSync(join(__dirname, "leads.ts"), "utf8");
-    for (const name of ["Parent Phone", "Parent Email", "Lead ID", "Notes", "Sales Notes", "Hourly Rate (CAD)", "Billing Family"]) {
+    for (const name of ["Parent Phone", "Parent Email", "Notes", "Sales Notes", "Hourly Rate (CAD)", "Billing Family"]) {
       expect(src).not.toContain(`"${name}"`);
     }
   });

@@ -1,7 +1,7 @@
 import { generateKeyPairSync, verify } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { gmailBases, readGmailConfig } from "./config";
-import { GMAIL_SCOPE, GmailError, MAX_LIST_IDS, getAccessToken, getMessage, listMessageIds, listMessageRefs, signJwt } from "./gmail";
+import { GMAIL_SCOPE, GMAIL_SEND_SCOPE, GmailError, MAX_LIST_IDS, findSent, getAccessToken, getMessage, gmailPort, gmailSendPort, listMessageIds, listMessageRefs, sendMessage, signJwt } from "./gmail";
 
 // REQ-42 AC8, AC9: the read-only Gmail client.
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -149,5 +149,73 @@ describe("IRIS_GMAIL_API_BASE", () => {
     await listMessageIds("t", "q", r.fetcher);
     expect(r.calls.map((c) => new URL(c.url).origin)).toEqual(["http://127.0.0.1:54334", "http://127.0.0.1:54334"]);
     expect(decode(signJwt(config, new Date()).split(".")[1]).aud).toBe("http://127.0.0.1:54334/token");
+  });
+});
+
+// REQ-48 AC2, AC4, AC9: two tokens with one scope each; send and the verify search.
+describe("send scope", () => {
+  const scopeOf = (body: string | undefined) => decode(new URLSearchParams(body).get("assertion")!.split(".")[1]).scope;
+
+  it("the default token is read-only; the send token carries gmail.send only", async () => {
+    expect(GMAIL_SEND_SCOPE).toBe("https://www.googleapis.com/auth/gmail.send");
+    const r = recorder(() => json({ access_token: "t" }));
+    await getAccessToken(config, r.fetcher);
+    await gmailPort(config, r.fetcher).token();
+    await gmailSendPort(config, r.fetcher).readToken();
+    await gmailSendPort(config, r.fetcher).sendToken();
+    expect(r.calls.map((c) => scopeOf(c.body))).toEqual([GMAIL_SCOPE, GMAIL_SCOPE, GMAIL_SCOPE, GMAIL_SEND_SCOPE]);
+  });
+});
+
+describe("sendMessage", () => {
+  it("posts { raw, threadId } to messages/send and parses the id", async () => {
+    const r = recorder(() => json({ id: "gm-1", threadId: "t1", labelIds: ["SENT"] }));
+    expect(await sendMessage("tok", "cmF3", "t1", r.fetcher)).toEqual({ id: "gm-1", threadId: "t1" });
+    expect(new URL(r.calls[0].url).pathname).toBe("/gmail/v1/users/me/messages/send");
+    expect(r.calls[0].method).toBe("POST");
+    expect(JSON.parse(r.calls[0].body!)).toEqual({ raw: "cmF3", threadId: "t1" });
+    expect(r.calls[0].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("a non-2xx answer is a status-only GmailError", async () => {
+    const r = recorder(() => new Response(`{"error":{"message":"bad for charlie@apacademy.ca"}}`, { status: 500 }));
+    const err = await sendMessage("tok", "cmF3", "t1", r.fetcher).catch((e) => e);
+    expect(err).toBeInstanceOf(GmailError);
+    expect(err.message).toBe("Gmail returned 500");
+  });
+});
+
+describe("findSent", () => {
+  const RFC = "<iris-8f2c6a1e-1111-4111-8111-111111111111@apacademy.ca>";
+  const SEND = "8f2c6a1e-1111-4111-8111-111111111111";
+
+  it("searches rfc822msgid first and returns the first id", async () => {
+    const r = recorder(() => json({ messages: [{ id: "gm-7", threadId: "t1" }] }));
+    expect(await findSent("tok", RFC, "t1", SEND, r.fetcher)).toBe("gm-7");
+    expect(new URL(r.calls[0].url).searchParams.get("q")).toBe("rfc822msgid:iris-8f2c6a1e-1111-4111-8111-111111111111@apacademy.ca");
+    expect(r.calls).toHaveLength(1);
+  });
+
+  it("falls back to the thread's Message-ID and X-Iris-Send-Id headers", async () => {
+    const r = recorder((c) =>
+      c.url.includes("/threads/")
+        ? json({ messages: [
+            { id: "in-1", payload: { headers: [{ name: "Message-ID", value: "<abc@mail.example>" }] } },
+            { id: "gm-8", payload: { headers: [{ name: "Message-Id", value: "<rewritten@mail.gmail.com>" }, { name: "X-Iris-Send-Id", value: SEND }] } },
+          ] })
+        : json({ resultSizeEstimate: 0 }),
+    );
+    expect(await findSent("tok", RFC, "t1", SEND, r.fetcher)).toBe("gm-8");
+    const u = new URL(r.calls[1].url);
+    expect(u.pathname).toBe("/gmail/v1/users/me/threads/t1");
+    expect(u.searchParams.get("format")).toBe("metadata");
+    expect(u.searchParams.getAll("metadataHeaders")).toEqual(["Message-ID", "X-Iris-Send-Id"]);
+  });
+
+  it("returns null when neither finds it, and throws on a Gmail error", async () => {
+    const none = recorder((c) => (c.url.includes("/threads/") ? json({ messages: [] }) : json({})));
+    expect(await findSent("tok", RFC, "t1", SEND, none.fetcher)).toBeNull();
+    const broken = recorder(() => new Response("{}", { status: 503 }));
+    await expect(findSent("tok", RFC, "t1", SEND, broken.fetcher)).rejects.toBeInstanceOf(GmailError);
   });
 });

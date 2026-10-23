@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { ClassifyPort } from "./classify";
 import type { DraftPort } from "./draft";
 import { handleIrisRun, type IrisRunDeps } from "./handlers";
-import { GmailError, type GmailMessage } from "./gmail";
+import { GmailError, type GmailMessage, type GmailSendPort } from "./gmail";
 import type { GmailPort } from "./intake";
 import { POLICY_VERSION } from "./policy";
+import type { ClassifierIntent } from "./policy";
 import { fakeIrisStore } from "./store.fake";
 
 // REQ-42 AC10, AC11, AC12, AC19, AC20: the bearer-protected run.
@@ -18,7 +19,7 @@ const message = (id: string, from: string): GmailMessage => ({
   payload: { mimeType: "text/plain", headers: [{ name: "From", value: from }, { name: "Subject", value: "Hi" }], body: { data: Buffer.from("hello").toString("base64url") } },
 });
 
-function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null; draft?: DraftPort | null; push?: IrisRunDeps["push"]; history?: GmailMessage[] } = {}) {
+function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null; draft?: DraftPort | null; push?: IrisRunDeps["push"]; sender?: GmailSendPort | null; history?: GmailMessage[] } = {}) {
   const db = fakeIrisStore({ paused: opts.paused ?? false });
   const gmailCalls: string[] = [];
   const gmail: GmailPort = {
@@ -32,7 +33,7 @@ function world(opts: { paused?: boolean; listFails?: boolean; classify?: Classif
     get: async (_t, id) => (gmailCalls.push(`get:${id}`), opts.history?.find((m) => m.id === id) ?? message(id, "who@z.com")),
   };
   const directoryCalls: number[] = [];
-  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null,
+  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, sender: opts.sender ?? null, schedule: null, availability: null,
     evalClassify: opts.classify ?? null, evalDraft: opts.draft ?? null, model: "m",
   };
   const build = vi.fn((org: string) => (org ? deps : null));
@@ -328,5 +329,109 @@ describe("handleIrisRun: history import and eval", () => {
     w.db.request("eval_import_requested");
     expect((await w.run()).status).toBe(502);
     expect(order.some((o) => o.startsWith("listRefs"))).toBe(false);
+  });
+});
+
+// REQ-48 AC4, AC5, AC7: the run's send step.
+function sendPort(answer: string | number) {
+  const calls: string[] = [];
+  const port: GmailSendPort = {
+    readToken: async () => (calls.push("readToken"), "read"),
+    sendToken: async () => (calls.push("sendToken"), "send"),
+    send: async () => {
+      calls.push("send");
+      if (typeof answer === "number") throw new GmailError(`Gmail returned ${answer}`, answer);
+      return { id: answer, threadId: "t" };
+    },
+    findSent: async () => (calls.push("findSent"), null),
+  };
+  return { port, calls };
+}
+
+describe("handleIrisRun: sends", () => {
+  it("a paused run makes no Gmail call at all, send included", async () => {
+    const g = sendPort("gm-1");
+    const w = world({ paused: true, sender: g.port });
+    w.db.approved({ leaseUntil: null });
+    expect(await (await w.run()).json()).toEqual({ result: "paused" });
+    expect(g.calls).toEqual([]);
+    expect(w.gmailCalls).toEqual([]);
+  });
+
+  it("a stuck send (lease past) is verified, then sent, and counted in the run row", async () => {
+    const g = sendPort("gm-1");
+    const w = world({ sender: g.port });
+    w.db.setNow(() => T0);
+    const a = w.db.approved({ leaseUntil: null });
+    const res = await w.run();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ result: "ok", sent: 1 });
+    expect(g.calls).toEqual(["readToken", "findSent", "sendToken", "send"]);
+    expect(w.db.sends.get(a.sendId)!.state).toBe("sent");
+    expect(w.db.runs[0]).toMatchObject({ sent: 1, error: null });
+  });
+
+  it("a send error lands in the run's error line and the run stays 200", async () => {
+    const g = sendPort(500);
+    const w = world({ sender: g.port });
+    w.db.setNow(() => T0);
+    w.db.approved({ leaseUntil: null });
+    const res = await w.run();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ result: "ok", sent: 0 });
+    expect(w.db.runs[0].error).toBe("Gmail returned 500");
+    expect(w.db.settings.lastError).toBe("Gmail returned 500");
+  });
+
+  it("without a send port the run leaves sends alone", async () => {
+    const w = world();
+    const a = w.db.approved({ leaseUntil: null });
+    await w.run();
+    expect(w.db.sends.get(a.sendId)!.state).toBe("sending");
+    expect(w.db.calls).not.toContain("listStuckSends");
+  });
+});
+
+// REQ-47 AC10: the run wires the teacher read into the draft step; a parent's pick is a new message, classified
+// like any other, that changes nothing already drafted and books nothing (every scheduler port is a read).
+describe("handleIrisRun: make-up offers", () => {
+  const SAM = "11111111-1111-4111-8111-111111111111";
+  const STAFF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009";
+  const family = [{ studentId: SAM, studentName: "Sam Lee", stage: "Active", parentEmail: "ann@x.com", parentName: "Ann Lee" }];
+
+  it("drafts an offer, then classifies the pick on the same thread as a new message", async () => {
+    const intents: ClassifierIntent[] = ["reschedule_request", "general_question"];
+    const classify: ClassifyPort = async () => {
+      const intent = intents.shift() ?? "general_question";
+      return { ok: true, model: "m", inputTokens: 1, outputTokens: 1, output: { intents: [intent], primary: intent, confidence: 0.95, flags: [], childName: "", summary: "" } };
+    };
+    const draft: DraftPort = async (p) => ({
+      ok: true, model: "m", inputTokens: 1, outputTokens: 1,
+      output: { body: p.user.includes("Make-up times offered") ? "Hi Ann,\n\nThese times work:\n[OPTIONS]\nLet me know." : "Hi Ann,\n\nThanks, I will confirm it.", needsCharlie: false, reason: "" },
+    });
+    const reads: string[] = [];
+    const w = world({ classify, draft });
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.directory = async () => family;
+    deps.schedule = async (id) => (reads.push(`student:${id}`), {
+      series: [{ id: "s1", staffId: STAFF, studentId: SAM, subject: "MPM2D", kind: "weekly", startDate: "2026-10-06", startTime: "17:00", durationMinutes: 60, effectiveUntil: null }], exceptions: [],
+    });
+    deps.availability = async (id) => (reads.push(`teacher:${id}`), {
+      series: [], exceptions: [], availabilityExceptions: [],
+      windows: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startTime: "15:00", endTime: "19:00", effectiveFrom: "2026-01-01", effectiveUntil: null })),
+    });
+    deps.gmail.get = async (_t, id) => ({ ...message(id, "ann@x.com"), threadId: "t-m1" });
+    await w.run();
+    const [offer] = [...w.db.drafts.values()];
+    expect(offer).toMatchObject({ replyType: "reschedule_offer", state: "proposed" });
+    expect(offer.bodyText).toContain("- Wednesday 21 October, 3:00 pm to 4:00 pm");
+    expect(reads).toEqual([`student:${SAM}`, `teacher:${STAFF}`]);
+
+    deps.gmail.list = async () => ["m2"];
+    await w.run();
+    const byGmail = (gid: string) => [...w.db.messages.values()].find((m) => m.gmailMessageId === gid)!;
+    expect(byGmail("m2")).toMatchObject({ intent: "general_question", state: "drafted", threadId: byGmail("m1").threadId });
+    expect(w.db.drafts.get(offer.id)).toEqual(offer);
+    expect(reads).toHaveLength(2);
   });
 });

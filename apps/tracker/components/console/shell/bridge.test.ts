@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CONSOLE_MODES, MODE_LABELS, type ConsoleMode } from "../../../lib/console/modes";
 import { PANEL_SLOTS, placeholderPanels, slotsFor } from "../../../lib/console/panel-slots";
+import type { ConsolePanels as ConsolePanelResults } from "../../../lib/console/contracts";
+import { buildSalesView } from "../../../lib/console/sales-view";
+import { fixtureLeads, SALES_NOW, TRIAL_F } from "../../../test/console/sales-fixtures";
 import { ConsoleBridge } from "./bridge";
 
 // REQ-55 AC1, AC2, AC8, AC9: the production bridge, every panel a "Not connected yet" placeholder.
@@ -103,6 +106,44 @@ describe("ConsoleBridge focus order (AC12)", () => {
   });
 });
 
+// REQ-57: with a sales view, the Sales next and radar slots are the live queue and radar.
+describe("ConsoleBridge with a sales view", () => {
+  const view = buildSalesView(salesPanels(), SALES_NOW);
+  const panels = placeholderPanels(NOW);
+  panels.sales.next = view.queue;
+  panels.sales.radar = view.radar;
+  const out = renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels, sales: view, email: "owner@example.com", now: NOW }));
+
+  it("renders the queue, the Rolodex and the bucket radar in their slots", () => {
+    const sales = tabpanel(out, "sales");
+    expect(sales).toContain('role="listbox"');
+    expect(sales).toContain("data-rolodex");
+    expect(sales).toContain("Callback due");
+    expect(count(sales, "Not connected yet")).toBe(7);
+  });
+
+  it("the rail counts 2 of 9 connected", () => {
+    expect(indicator(out, "panels")).toBe("2 of 9 connected");
+  });
+
+  it("without a sales view nothing changes", () => {
+    const plain = renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels: placeholderPanels(NOW), now: NOW }));
+    expect(plain).not.toContain('role="listbox"');
+    expect(count(tabpanel(plain, "sales"), "Not connected yet")).toBe(9);
+  });
+});
+
+function salesPanels(): ConsolePanelResults {
+  const at = SALES_NOW.toISOString();
+  const r = <T,>(panel: string, status: "ready" | "empty", data: T) => ({
+    panel, status, data, count: null, lastCheckedAt: at, lastSuccessfulFetchAt: at, staleReason: null, errorMessage: null, sourceEvidence: [],
+  });
+  return {
+    leads: r("leads", "ready", fixtureLeads()), touches: r("touches", "empty", []), trialLessons: r("trialLessons", "ready", [TRIAL_F]),
+    work: r("work", "empty", []), invoices: r("invoices", "empty", []), people: r("people", "ready", { syncedAt: at, students: 0, staff: 0 }),
+  } as ConsolePanelResults;
+}
+
 // REQ-56 AC5: the northStar slot renders the north-star instrument; the other slots are unchanged.
 describe("the north-star slot", () => {
   const view = {
@@ -117,6 +158,29 @@ describe("the north-star slot", () => {
     expect(north).toContain("data-north-star");
     expect(north).toContain("Cannot verify weekly hours");
     expect(count(tabpanel(out, "sales"), "Not connected yet")).toBe(8);
+  });
+});
+
+// REQ-59 AC8: the four funnel and cash slots render the new panels, full in Operations and headline in Sales.
+describe("the funnel and cash slots", () => {
+  const unverifiable = (panel: string) => ({
+    panel, status: "unverifiable" as const, data: null, count: null, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: null,
+    staleReason: "Payment records unavailable: Notion returned 500", errorMessage: null,
+    sourceEvidence: [{ source: "notion", sourceId: "ds", sourceUrl: "https://www.notion.so/ds", observedAt: NOW.toISOString() }],
+  });
+  it("render the funnel and cash panels with their Notion links and leave the other slots unchanged", () => {
+    const panels = placeholderPanels(NOW);
+    panels.sales.conversion = unverifiable("trialFunnel");
+    panels.sales.cashflow = unverifiable("cashPulse");
+    panels.operations.trials = unverifiable("trialFunnel");
+    panels.operations.finance = unverifiable("cashPulse");
+    const sales = tabpanel(renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels, now: NOW })), "sales");
+    expect(sales).toContain("Open Students &amp; Parents in Notion");
+    expect(sales).toContain("Open Invoices in Notion");
+    expect(count(sales, "Not connected yet")).toBe(7);
+    const ops = tabpanel(renderToStaticMarkup(h(ConsoleBridge, { mode: "operations", panels, now: NOW })), "operations");
+    expect(count(ops, "data-notion-link")).toBe(2);
+    expect(count(ops, "Not connected yet")).toBe(4);
   });
 });
 
@@ -143,5 +207,37 @@ describe("the Operations slots", () => {
     expect(ops).toContain('href="/tracker/schedule/lessons?from=a&amp;to=b"');
     expect(count(ops, "data-canonical")).toBe(3);
     expect(count(ops, "Not connected yet")).toBe(3);
+  });
+});
+
+// REQ-60 AC7: the Creation slots render the next asset, work queue and weekly review panels; signals is untouched.
+describe("the Creation slots", () => {
+  it("render the three Creation panels from one view and leave signals Not connected yet", async () => {
+    const { buildCreation } = await import("../../../lib/console/creation");
+    const data = buildCreation({
+      rows: [{
+        id: "aaaaaaaa-0000-4000-8000-000000000001", pageUrl: "https://www.notion.so/a", name: "Script 01", area: "Marketing", state: "Next", type: "Task",
+        dueReview: null, dueReviewDate: null, owner: "Charlie", taskTypes: [], parentProjectIds: [], expectedResult: null,
+      }],
+      today: "2026-10-22", selectedId: null, search: new URLSearchParams("mode=creation"), workSourceId: "3031b455-9be0-4f8d-b200-70fcfcf1a0b8",
+    });
+    const view = (panel: string, status: "ready" | "empty") => ({
+      panel, status, data, count: 1, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: NOW.toISOString(), staleReason: null, errorMessage: null,
+      sourceEvidence: [], canonical: { href: data.workDatabaseUrl, label: "Open Work in Notion" },
+    });
+    const panels = placeholderPanels(NOW);
+    panels.creation.nextAsset = view("nextAsset", "ready");
+    panels.creation.work = view("work", "ready");
+    panels.creation.pipeline = view("pipeline", "empty");
+    const out = renderToStaticMarkup(h(ConsoleBridge, { mode: "creation", panels, now: NOW }));
+    const creation = tabpanel(out, "creation");
+    expect([...creation.matchAll(/data-panel="([^"]+)"/g)].map((m) => m[1])).toEqual(["nextAsset", "work", "pipeline", "signals"]);
+    expect(creation).toContain('data-task-id="aaaaaaaa-0000-4000-8000-000000000001"');
+    expect(creation).toContain('data-task="aaaaaaaa-0000-4000-8000-000000000001"');
+    expect(creation).toContain("Weekly media review");
+    expect(creation).toContain("No weekly media review task found");
+    expect(count(creation, "Open Work in Notion")).toBeGreaterThanOrEqual(3);
+    expect(count(creation, "Not connected yet")).toBe(1);
+    expect(count(tabpanel(out, "sales"), "Not connected yet")).toBe(9);
   });
 });

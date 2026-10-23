@@ -18,12 +18,40 @@ const walk = (dir: string): string[] =>
 const FILES = [...walk("app/console"), ...walk("app/api/console"), ...walk("lib/console"), ...walk("components/console")];
 
 describe("console source scan (AC7, AC8)", () => {
+  it("covers the REQ-57 sales queue files", () => {
+    for (const f of [
+      "app/api/console/sales/route.ts", "lib/console/sales-queue.ts", "lib/console/sales-view.ts", "lib/console/sales-state.ts",
+      "components/console/sales/sales-provider.tsx", "components/console/sales/next-lead.tsx", "components/console/sales/sales-radar.tsx",
+    ]) {
+      expect(FILES).toContain(f);
+    }
+  });
+
+  it.each(FILES)("%s holds no tel: link or Parent Phone (REQ-57 AC8)", (f) => {
+    const src = read(f);
+    expect(src).not.toContain("tel:");
+    expect(src).not.toContain("Parent Phone");
+  });
+
+  it("dedupeKey appears only in contracts, facade and the ranking (REQ-57 AC8)", () => {
+    expect(FILES.filter((f) => read(f).includes("dedupeKey")).sort()).toEqual(["lib/console/contracts.ts", "lib/console/facade.ts", "lib/console/sales-queue.ts"]);
+  });
+
+  it("the sales selection transition is none under reduced motion (REQ-57 AC12)", () => {
+    const css = read("app/console/console.css");
+    const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+    const block = reduced.slice(0, reduced.indexOf("\n}") + 2);
+    expect(block).toMatch(/\.console-sales-option \{\s*transition: none;/);
+    expect(css).toMatch(/\.console-sales-option \{[^}]*transition: transform 180ms/);
+  });
+
   it("covers the console files", () => {
     for (const f of [
       "app/console/layout.tsx", "app/console/page.tsx", "app/console/loading.tsx", "app/api/console/health/route.ts", "lib/console/guard.ts",
       "lib/console/handlers.ts", "components/console/session-expired.tsx", "lib/console/contracts.ts", "lib/console/facade.ts",
       "lib/console/people-read.ts", "lib/console/providers.ts",
       "lib/console/operations.ts", "lib/console/operations-read.ts", "components/console/teacher-load.tsx", "components/console/lesson-gaps.tsx",
+      "lib/console/trial-funnel.ts", "lib/console/cash-pulse.ts", "lib/console/finance-panels.ts", "components/console/trial-funnel.tsx", "components/console/cash-pulse.tsx",
     ]) {
       expect(FILES).toContain(f);
     }
@@ -205,5 +233,40 @@ describe("REQ-55 console source scan", () => {
       const rows = [...(grid.match(/grid-template-areas:([^;]+);/)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1].trim());
       expect(rows).toEqual(slotsFor(mode).map((s) => s.id));
     }
+  });
+});
+
+// REQ-60 AC3, AC4, AC8: Creation mode creates nothing, writes no Work row, and calls no recording or publishing host.
+const CREATION_FILES = [
+  "lib/console/creation.ts", "components/console/creation/task-facts.tsx", "components/console/creation/next-asset.tsx",
+  "components/console/creation/work-queue.tsx", "components/console/creation/weekly-review.tsx",
+];
+// The files REQ-60 adds or changes. providers.ts is exempt from the fetch( rule only: it hosts the abort-bound
+// fetcher the Notion reader ports run on (Open gap 3), and the reader tests prove those ports only read.
+const CREATION_TOUCHED = [...CREATION_FILES, "lib/console/contracts.ts", "lib/console/panel-slots.ts", "components/console/shell/bridge.tsx", "app/console/page.tsx", "app/console/console.css"];
+const NO_CREATE_OR_WRITE = ['"/pages"', "/v1/pages", "pages.create", "createTaskPage", "createLogEntry", "appendToDo", "appendTeacher", "NOTION_WORK_WRITE_ENABLED", '"PATCH"'];
+const HOSTS = /youtube|youtu\.be|tiktok|instagram|facebook|linkedin|vimeo|buffer\.com|hootsuite|\bx\.com|twitter/i;
+
+describe("REQ-60 Creation scan", () => {
+  it("covers the Creation files", () => {
+    for (const f of [...CREATION_FILES, "lib/console/providers.ts"]) expect(FILES).toContain(f);
+  });
+
+  it.each(FILES)("%s creates no Notion page and writes no Work row (AC3, AC4)", (f) => {
+    const src = read(f);
+    for (const s of NO_CREATE_OR_WRITE) expect(src, s).not.toContain(s);
+  });
+
+  it.each(FILES)("%s names no recording or publishing host (AC8)", (f) => {
+    expect(read(f)).not.toMatch(HOSTS);
+  });
+
+  it.each(CREATION_TOUCHED)("%s makes no fetch call (AC8)", (f) => {
+    expect(read(f)).not.toContain("fetch(");
+  });
+
+  it("providers.ts reaches the Work reader through fetchWorkItems and fetchTaskTypeNames only", () => {
+    const src = read("lib/console/providers.ts");
+    expect(src).toMatch(/import \{ fetchTaskTypeNames, fetchWorkItems \} from "\.\.\/notion\/work";/);
   });
 });

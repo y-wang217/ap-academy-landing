@@ -83,3 +83,20 @@ describe("runSupersede", () => {
     expect(await runSupersede({ store: w.db.store, gmail, settings: w.db.settings })).toEqual({ stored: 0, superseded: 0, error: "Gmail request failed" });
   });
 });
+
+// REQ-48 AC10: a reply Iris sent is left to the send step.
+describe("runSupersede and Iris's own sends", () => {
+  it("skips an in:sent message with an Iris Message-ID and still stores a normal one", async () => {
+    const irisSent = sent("s-iris", "g-a", T0 + 1000);
+    irisSent.payload.headers!.push({ name: "Message-ID", value: "<iris-8f2c6a1e-1111-4111-8111-111111111111@apacademy.ca>" });
+    const normal = sent("s-own", "g-b", T0 + 1000);
+    const w = world([irisSent, normal]);
+    const a = await w.add("g-a", "drafted", T0 - 60_000);
+    await w.add("g-b", "drafted", T0 - 60_000);
+    const out = await w.run();
+    expect(out.stored).toBe(1);
+    expect(w.db.byGmailId("s-iris")).toBeUndefined();
+    expect(w.db.byGmailId("s-own")).toMatchObject({ source: "charlie_manual" });
+    expect(w.db.messages.get(a.id)!.state).toBe("drafted");
+  });
+});

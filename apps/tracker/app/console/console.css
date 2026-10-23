@@ -469,6 +469,128 @@
   text-underline-offset: 3px;
 }
 
+/* REQ-57: the Sales queue and Rolodex. Two columns from 1280 px, stacked below. */
+.console-sales-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.console-sales-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.console-sales-filters legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.console-sales-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 13px;
+  border: 1px solid #563240;
+  border-radius: 12px;
+}
+.console-sales-filters input {
+  accent-color: var(--amber);
+}
+.console-sales-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+.console-sales-exceptions summary {
+  color: var(--amber);
+  cursor: pointer;
+}
+.console-sales-exceptions ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+.console-sales-exceptions a,
+.console-sales-open {
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.console-sales-retry {
+  padding: 2px 10px;
+  font-size: 13px;
+  color: #1B1015;
+  background: var(--amber);
+  border: 0;
+  border-radius: 3px;
+}
+.console-sales-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.console-sales-queue:focus-visible {
+  outline-offset: 2px;
+}
+.console-sales-option {
+  cursor: pointer;
+  transition: transform 180ms ease-out;
+}
+.console-sales-option[data-selected] {
+  transform: translateX(4px);
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+.console-sales-rolodex {
+  min-width: 0;
+  padding: 10px 12px;
+  background: #160F1B;
+  border: 1px solid #563240;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+.console-sales-name {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.console-sales-fields {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.console-sales-fields div {
+  display: grid;
+  grid-template-columns: 9em minmax(0, 1fr);
+  gap: 8px;
+}
+.console-sales-fields dt {
+  color: var(--muted);
+}
+.console-sales-fields dd {
+  margin: 0;
+  white-space: pre-line;
+}
+@media (min-width: 1280px) {
+  .console-sales-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (width <= 640px) {
+  .console-sales-fields div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
 /* F: the physical rail. */
 .console-rail {
   display: flex;
@@ -552,6 +674,7 @@
   .console-sweep { animation: none; }
   .console-motion-on { display: none; }
   .console-motion-reduced { display: inline; }
+  .console-sales-option { transition: none; }
 }
 
 /* Small screens: the horizon becomes a strip, the radar stacks. */
@@ -568,6 +691,30 @@
   .console-exit {
     margin-left: 0;
   }
+}
+
+/* REQ-59: the trial funnel and cash pulse. */
+.console-funnel-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.console-funnel-count summary,
+.console-cash-line summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+.console-funnel-count ul,
+.console-cash-line ul {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.console-funnel-window {
+  margin-left: 8px;
+}
+.console-cash-line {
+  font-size: 13px;
 }
 
 /* REQ-58: the canonical header link and the Operations instruments. */
@@ -623,6 +770,85 @@
   font-size: 13px;
   font-weight: 600;
 }
+/* REQ-60: Creation mode. Links take the console's amber :focus-visible outline like every other control. */
+.console-creation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.console-creation-task {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.console-creation-task > a {
+  align-self: flex-start;
+  color: var(--amber);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.console-creation-head {
+  margin: 0;
+}
+.console-creation-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.console-creation-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+.console-creation-facts dt {
+  color: var(--muted);
+}
+.console-creation-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.console-creation-facts a,
+.console-creation-reason a,
+.console-note[data-weekly-none] a {
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.console-creation-flag {
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 600;
+}
+.console-creation-label {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+}
+.console-creation-interrupt {
+  padding: 8px 10px;
+  border: 1px solid var(--coral);
+  border-radius: 4px;
+}
+.console-creation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.console-creation-item .console-row {
+  flex-wrap: wrap;
+}
+.console-creation-item .console-row-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.console-creation-children {
+  margin-left: 16px;
+}
+
 /* Grid areas per mode at each range (design, Layout). Area names are slot ids. */
 @media (min-width: 1440px) {
   .console-grid-sales {

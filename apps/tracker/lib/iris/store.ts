@@ -1,3 +1,5 @@
+import type { SendRunStore } from "./send";
+
 /**
  * The Iris storage port (REQ-42). lib/data/iris.ts implements it over the
  * service client for the bearer-protected run; store.fake.ts implements it in
@@ -55,7 +57,7 @@ export type MessageInsert = {
   gmailMessageId: string;
   rfcMessageId: string | null;
   direction: "inbound" | "outbound";
-  source: "external" | "charlie_manual";
+  source: "external" | "charlie_manual" | "iris";
   fromEmail: string;
   fromName: string | null;
   receivedAt: string;
@@ -114,6 +116,8 @@ export type RunRecord = {
   matched: number;
   classified: number;
   drafted: number;
+  /** Replies sent by the run's send step (REQ-48). */
+  sent: number;
   escalated: number;
   skipped: number;
   failed: number;
@@ -131,6 +135,9 @@ export type DraftableMessage = {
   state: "classified" | "escalated";
   intent: string | null;
   notionStudentId: string | null;
+  /** escalate_only or schedule_no_show for a no-show; null for a classified message (REQ-46). */
+  escalationReason: string | null;
+  flags: string[];
 };
 
 /** Version 1 of an Iris draft: proposed, created_by iris, edited false. The body has no signature. */
@@ -192,7 +199,8 @@ export type EvalResultInsert = {
   error: string | null;
 };
 
-export interface IrisStore {
+/** The run's store. The send rows (REQ-48) come from SendRunStore. */
+export interface IrisStore extends SendRunStore {
   getSettings(): Promise<IrisSettings | null>;
   /** iris.claim_poll: the row to the first caller, null while another run holds the lease. */
   claimPoll(leaseSeconds: number): Promise<IrisSettings | null>;

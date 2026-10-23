@@ -122,3 +122,12 @@ describe("routeClassification: default (AC7)", () => {
     expect(routeClassification(answer(), ctx())).toEqual({ state: "classified", reason: null, intent: "general_question", intents: ["general_question"], flags: [], handled: false, studentId: SOLO });
   });
 });
+
+// REQ-46 AC9: the schedule flag is never a classifier flag, so an empty flag list stays classified.
+describe("routeClassification: schedule_unknown", () => {
+  it("a clean cancellation with no flags routes classified", () => {
+    const r = routeClassification(answer({ primary: "cancellation", intents: ["cancellation"], flags: [] }), ctx({ text: "Please cancel Thursday's class." }));
+    expect(r.state).toBe("classified");
+    expect(FLAGS as readonly string[]).not.toContain("schedule_unknown");
+  });
+});

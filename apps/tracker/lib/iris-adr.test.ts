@@ -91,3 +91,61 @@ describe("ADR 0074", () => {
     for (const s of ["history_import", "gmail.readonly", "rated_result_id", "stale", "NEVER_AUTO_SEND", "0.95", "1.0", "retention_days"]) expect(src, s).toContain(s);
   });
 });
+
+// REQ-48 AC13: the send ADR and the operator guide.
+describe("ADR 0069", () => {
+  const file = "0069-iris-send-at-most-once.md";
+  it("has every section, is indexed, has no em dash, and records the five send rules", () => {
+    const src = read(join(DECISIONS, file));
+    expect(src, file).toMatch(/^Status: accepted/m);
+    for (const h of ["## Context", "## Decision", "## Alternatives considered", "## Consequences"]) expect(src, `${file} ${h}`).toContain(h);
+    expect(read(join(DECISIONS, "README.md"))).toContain(`(${file})`);
+    expect(src).not.toMatch(/[—]/);
+    for (const rule of [/One send row per draft/i, /X-Iris-Send-Id/, /Verify before every attempt but the first/i, /Two tokens with one scope each/i, /3-attempt limit/i]) expect(src).toMatch(rule);
+  });
+
+  it("ADR 0059 says its scope is widened by 0069", () => {
+    expect(read(join(DECISIONS, "0059-iris-gmail-read-only.md"))).toMatch(/^Status: accepted, scope widened by 0069/m);
+  });
+
+  it("the operator guide names gmail.send, Failed and Retry, and the first-send check", () => {
+    const src = read(join(ROOT, "apps/tracker/docs/iris-operations.md"));
+    for (const s of ["https://www.googleapis.com/auth/gmail.send", "## Sending", "Retry", "Failed", "First-send check", "Show original"]) expect(src, s).toContain(s);
+    expect(src).not.toMatch(/[—]/);
+  });
+});
+
+// REQ-46 AC12: the schedule-aware cancellations ADR.
+describe("ADR 0072", () => {
+  const file = "0072-iris-schedule-aware-cancellations.md";
+  it("has every section, is indexed and has no em dash", () => {
+    const src = read(join(DECISIONS, file));
+    expect(src, file).toMatch(/^Status: accepted/m);
+    for (const h of ["## Context", "## Decision", "## Alternatives considered", "## Consequences"]) expect(src, `${file} ${h}`).toContain(h);
+    expect(read(join(DECISIONS, "README.md"))).toContain(`(${file})`);
+    expect(src).not.toMatch(/[—]/);
+  });
+
+  it("records the target rule, the notice window, the fallbacks, the no-show storage and the version bump", () => {
+    const src = read(join(DECISIONS, file));
+    for (const s of ["started today", "7 days", "elapsed", "same thread", "schedule_unknown", "FLAGS", "schedule_no_show", "intent no_show", "POLICY_VERSION", "4", "0058"]) expect(src, s).toContain(s);
+  });
+});
+
+describe("ADR 0075", () => {
+  const file = "0075-iris-make-up-offers.md";
+  it("has every section, is indexed and has no em dash", () => {
+    const src = read(join(DECISIONS, file));
+    expect(src, file).toMatch(/^Status: accepted/m);
+    for (const h of ["## Context", "## Decision", "## Alternatives considered", "## Consequences"]) expect(src, `${file} ${h}`).toContain(h);
+    expect(read(join(DECISIONS, "README.md"))).toContain(`(${file})`);
+    expect(src).not.toMatch(/[—]/);
+  });
+
+  it("records the target rule, the slot rules, code-filled options, the fallbacks, the select-only read and never booking", () => {
+    const src = read(join(DECISIONS, file));
+    for (const s of ["next class to start", "30-minute", "MAKEUP_MAX_SLOTS", "MAKEUP_LEAD_HOURS", "[OPTIONS]", "availability_not_entered", "no_free_slot", "schedule_unknown", "select only", "never books", "POLICY_VERSION", "5"]) {
+      expect(src, s).toContain(s);
+    }
+  });
+});

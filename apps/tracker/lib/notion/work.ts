@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { ReadResult, WorkSource } from "../console/contracts";
+import { normalId } from "../domain/billing";
 import { NOTION_VERSION, notionApiBaseOverride, type NotionConfig, type WorkConfig } from "./config";
 import { pagedQuery, parseRows, prop, propertyFilter, type ReaderOptions, val } from "./paged";
 import { NotionError, notionHttpError } from "./staff";
@@ -230,8 +231,12 @@ export async function deleteBlock(config: WorkConfig, blockId: string, fetcher: 
   await call(config, fetcher, `/blocks/${blockId}`, "DELETE");
 }
 
-/** The Founder Console's content work read (REQ-54, ADR 0065): open Work rows, read-only. */
-export const WORK_PROPS = ["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type"] as const;
+/**
+ * The Founder Console's content work read (REQ-54, ADR 0065; REQ-60, ADR 0070): open Marketing Work
+ * rows, read-only. Alignment, Build hours, Bet, Agent permission and Work Log are never read.
+ */
+export const WORK_PROPS = ["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type", "Parent Project", "Expected result"] as const;
+const EXPECTED_RESULT_CHARS = 500;
 
 const WorkPage = z.object({
   id: z.guid(),
@@ -243,6 +248,8 @@ const WorkPage = z.object({
     "Due / Review": prop.date,
     Owner: prop.text,
     "Task Type": prop.relation,
+    "Parent Project": prop.relation,
+    "Expected result": prop.text,
   }),
 });
 
@@ -256,17 +263,33 @@ const toWork = (page: z.output<typeof WorkPage>): WorkSource => {
     type: val.select(p.Type),
     dueReview: val.date(p["Due / Review"]),
     owner: val.text(p.Owner),
-    taskTypeIds: val.ids(p["Task Type"]),
+    taskTypes: val.ids(p["Task Type"]).map((id) => ({ id, name: null })),
+    parentProjectIds: val.ids(p["Parent Project"]),
+    expectedResult: val.text(p["Expected result"])?.slice(0, EXPECTED_RESULT_CHARS) ?? null,
   };
 };
 
-/** Every Work row whose State is not Done, Due / Review ascending. */
+/** Every Marketing Work row whose State is not Done, Due / Review ascending. Task Type names are left null. */
 export async function fetchWorkItems(config: NotionConfig, opts: ReaderOptions): Promise<ReadResult<WorkSource>> {
   const fetcher = opts.fetcher ?? fetch;
   const filterQuery = await propertyFilter(config.token, fetcher, config.dataSourceId, WORK_PROPS, "Work");
   const read = await pagedQuery({
     token: config.token, fetcher, dataSourceId: config.dataSourceId, filterQuery, maxPages: opts.maxPages,
-    body: { filter: { property: "State", select: { does_not_equal: "Done" } }, sorts: [{ property: "Due / Review", direction: "ascending" }] },
+    body: {
+      filter: { and: [{ property: "State", select: { does_not_equal: "Done" } }, { property: "Area", select: { equals: "Marketing" } }] },
+      sorts: [{ property: "Due / Review", direction: "ascending" }],
+    },
   });
   return { ...parseRows(read.rows, WorkPage, toWork), complete: read.complete, pages: read.pages };
+}
+
+const TaskTypePage = z.object({ id: z.guid(), properties: z.object({ "Task type": prop.title }) });
+
+/** Each Task Type page's title, keyed by normalised page id (REQ-60). One page of one query: the database is small. */
+export async function fetchTaskTypeNames(config: NotionConfig, opts: ReaderOptions): Promise<Map<string, string>> {
+  const fetcher = opts.fetcher ?? fetch;
+  const filterQuery = await propertyFilter(config.token, fetcher, config.dataSourceId, ["Task type"], "Task Type");
+  const read = await pagedQuery({ token: config.token, fetcher, dataSourceId: config.dataSourceId, filterQuery, maxPages: 1, body: {} });
+  const { rows } = parseRows(read.rows, TaskTypePage, (page) => [normalId(page.id), page.properties["Task type"].title.trim()] as const);
+  return new Map(rows);
 }
