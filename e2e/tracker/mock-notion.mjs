@@ -63,6 +63,8 @@ const FAMILIES = [
   family("dddddddd-dddd-4ddd-8ddd-dddddddd0001", "Ada Afzal", "Paused", "afzal.family@example.com", "Afzal Parent"),
   // REQ-46: a family whose only class is two days out, for schedule-aware cancellations. Not in STUDENTS.
   family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0005", "Nina Notice", "Active", "notice.parent@example.com", "Noel Notice"),
+  // REQ-47: a family whose teacher has entered no availability, for the make-up fallback. Not in STUDENTS.
+  family("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0006", "Omar Offer", "Active", "offer.parent@example.com", "Olive Offer"),
 ];
 let familiesFail = false;
 
