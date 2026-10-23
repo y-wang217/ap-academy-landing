@@ -1,5 +1,5 @@
 import { historyLines, messageBlock, scrubber, type HistoryLine } from "./classify-prompt";
-import { HOLDING_LINE, POLICY, VOICE_RULES, type DraftableType } from "./policy";
+import { HOLDING_LINE, OPTIONS_TOKEN, POLICY, SCHEDULE_REPLY_TYPES, VOICE_RULES, type DraftableType } from "./policy";
 
 /**
  * What Iris sends to Claude to draft one reply (REQ-44 AC1, tracker ADR
@@ -17,7 +17,20 @@ export type DraftInput = {
   surnames: string[];
   history: HistoryLine[];
   body: string;
+  /** The missed (or to-move) and next class dates, YYYY-MM-DD, for the schedule-aware types only (REQ-46, REQ-47). */
+  schedule?: { missedDate: string; nextDate: string | null };
+  /** How many make-up times code writes in at the placeholder, for reschedule_offer only (REQ-47). Never the times themselves. */
+  optionCount?: number;
 };
+
+const dayFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
+/** "Tuesday 20 October": weekday, day and month, never a year or a time. */
+function classDay(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const parts = dayFormat.formatToParts(new Date(Date.UTC(y, m - 1, d)));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("weekday")} ${get("day")} ${get("month")}`;
+}
 
 export const DRAFT_SYSTEM_FIRST_LINE = "You draft one email reply for Charlie, who runs AP Academy, a tutoring business.";
 
@@ -47,9 +60,20 @@ export function buildDraftPrompt(input: DraftInput): { system: string; user: str
   const user = [
     `Parent first name: ${input.parentFirstName ? scrub(input.parentFirstName) : "unknown"}`,
     `Child first name: ${input.childFirstName ? scrub(input.childFirstName) : "unknown"}`,
+    ...scheduleLines(input),
     history.length > 0 ? `Earlier messages in this thread (oldest first):\n${history.join("\n")}` : "Earlier messages in this thread: none",
     "",
     `<message>\n${messageBlock(input.body, scrub)}\n</message>`,
   ].join("\n");
   return { system, user };
+}
+
+function scheduleLines(input: DraftInput): string[] {
+  if (!input.schedule) return [];
+  const next = `Next scheduled class: ${input.schedule.nextDate ? classDay(input.schedule.nextDate) : "none on the schedule"}`;
+  if (input.replyType === "reschedule_offer") {
+    return [`Class to move: ${classDay(input.schedule.missedDate)}`, next, `Make-up times offered: ${input.optionCount ?? 0}, written in for you where you put ${OPTIONS_TOKEN}`];
+  }
+  if (!(SCHEDULE_REPLY_TYPES as readonly string[]).includes(input.replyType)) return [];
+  return [`Missed class: ${classDay(input.schedule.missedDate)}`, next];
 }

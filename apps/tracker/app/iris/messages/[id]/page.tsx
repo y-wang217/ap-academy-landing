@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { CopyReply } from "@/components/iris/copy-reply";
@@ -45,6 +46,12 @@ function DraftCard({ drafts, current, editable }: { drafts: DraftView[]; current
           <p>{policy.text}</p>
           {latest.policyVersion !== current && <p className="text-text-muted">{IRIS_TEXT.policyVersionNote(latest.policyVersion, current)}</p>}
         </div>
+      )}
+      {latest.replyType === "reschedule_offer" && (
+        <p className="text-sm" data-offer-note>
+          {IRIS_TEXT.offerNote}{" "}
+          <Link href="/schedule" className="underline">{IRIS_TEXT.bookInSchedule}</Link>
+        </p>
       )}
       {latest.state === "proposed" && editable && (
         <DraftEditor key={latest.id} id={latest.id} version={latest.version} body={latest.bodyText} signature={SIGNATURE} />

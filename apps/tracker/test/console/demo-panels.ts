@@ -6,10 +6,13 @@ import { buildCashPulsePanel, buildTrialFunnelPanel } from "../../lib/console/fi
 import { buildNorthStar } from "../../lib/console/north-star";
 import { windowOf } from "../../lib/console/trial-funnel";
 import type { ConsolePanels } from "../../lib/console/panel-slots";
+import type { ConsolePanels as ConsolePanelResults } from "../../lib/console/contracts";
 import { todayIso } from "../../lib/time";
 import { addDays } from "../../lib/domain/schedule/wallclock";
 import { weekOf } from "../../lib/domain/schedule/week";
 import { notConnected, type PanelStatus, type PanelView } from "../../lib/console/panel-view";
+import { buildSalesView, type SalesView } from "../../lib/console/sales-view";
+import { fixtureLeads, TRIAL_F } from "./sales-fixtures";
 import type { LessonGapsData, TeacherLoadData } from "../../lib/console/operations";
 import type { WeekLoad } from "../../lib/domain/schedule/operations";
 import type { WorkRow } from "../../lib/console/contracts";
@@ -89,7 +92,7 @@ function demoFinance(now: Date) {
     id: `d0000000-0000-4000-8000-00000000010${n}`, pageUrl: "#lead", createdAt: null, name: `Lead ${n}`, stage: null, ownerStaffId: null, ownerName: null, nextAction: null,
     nextActionDue: null, nextActionDueDate: null, attempts: null, lastContact: null, source: null, lostReason: null, contactedAt: null, trialBookedAt: null,
     trialAttendedAt: null, closedAt: null, trialTime: null, trialTimeDate: null, trialTeacherId: null, trialTeacherName: null, level: null, hasMajorGaps: false,
-    recommendedPlan: null, hasTrialSummary: false, parentName: null, inPeopleCopy: true, ...extra,
+    recommendedPlan: null, hasTrialSummary: false, parentName: null, inPeopleCopy: true, dedupeKey: null, grade: null, subjects: [], majorGaps: null, trialSummary: null, ...extra,
   });
   const invoice = (n: number, status: string, amount: number, extra: Record<string, string | number | null> = {}) => ({
     id: `d0000000-0000-4000-8000-00000000020${n}`, pageUrl: "#invoice", status, paidOn: null, amount, creditApplied: null, issued: day(-10), due: null, month: null,
@@ -101,7 +104,7 @@ function demoFinance(now: Date) {
   ];
   const panels = {
     leads: ok("leads", leads), touches: ok("touches", []), work: ok("work", []), people: ok("people", { syncedAt: now.toISOString(), students: 2, staff: 1 }),
-    trialLessons: ok("trialLessons", [{ id: "d0000000-0000-4000-8000-000000000301", pageUrl: "#lesson", date: day(-9), studentId: leads[0].id, studentName: null, teacherId: null, teacherName: null, durationHours: 1, hasTopic: false, hasDiagnosis: false, preferredDays: [] }]),
+    trialLessons: ok("trialLessons", [{ id: "d0000000-0000-4000-8000-000000000301", pageUrl: "#lesson", date: day(-9), studentId: leads[0].id, studentName: null, teacherId: null, teacherName: null, durationHours: 1, hasTopic: false, hasDiagnosis: false, diagnosis: null, preferredDays: [] }]),
     invoices: ok("invoices", [invoice(1, "Paid", 480, { paidOn: day(-4) }), invoice(2, "Sent", 420, { due: day(-1) }), invoice(3, "Draft", 315)]),
   };
   const search = new URLSearchParams({ mode: "operations" });
@@ -206,4 +209,14 @@ function demoCreation(now: Date): ConsolePanels["creation"] {
   };
   const p = creationPanels(work, { today, selectedId: null, search: new URLSearchParams("mode=creation"), workSourceId: "d0000000-0000-4000-8000-0000000000ff", weeklyReviewId: id(5) });
   return { nextAsset: p.nextAsset, work: p.work, pipeline: p.pipeline, signals: result<QueueItem[]>("signals", now, "ready", [{ id: "sig-2", title: "Worksheet past its date", reason: "Unit 2 review" }]) };
+}
+
+/** REQ-57: a Sales queue and radar from the ranking fixtures, for the preview's NEXT and radar slots. */
+export function demoSales(now: Date): SalesView {
+  const at = now.toISOString();
+  const r = <T,>(panel: string, data: T) => ({ panel, status: "ready", data, count: null, lastCheckedAt: at, lastSuccessfulFetchAt: at, staleReason: null, errorMessage: null, sourceEvidence: [] });
+  return buildSalesView({
+    leads: r("leads", fixtureLeads()), touches: r("touches", []), trialLessons: r("trialLessons", [TRIAL_F]), work: r("work", []), invoices: r("invoices", []),
+    people: r("people", { syncedAt: at, students: 0, staff: 0 }),
+  } as ConsolePanelResults, now);
 }

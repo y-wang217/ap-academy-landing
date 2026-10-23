@@ -40,8 +40,10 @@ export const PurgeCounts = z.record(z.string(), z.number());
 export const DraftableRow = z.object({
   id: z.guid(), thread_id: z.guid(), received_at: ts, body_text: z.string().nullable(), retry_count: z.number().int(),
   state: z.enum(["classified", "escalated"]), intent: z.string().nullable(), notion_student_id: z.guid().nullable(),
+  escalation_reason: z.string().nullable(), flags: z.array(z.string()),
 }).transform((r): DraftableMessage => ({
   id: r.id, threadId: r.thread_id, receivedAt: r.received_at, bodyText: r.body_text, retryCount: r.retry_count, state: r.state, intent: r.intent, notionStudentId: r.notion_student_id,
+  escalationReason: r.escalation_reason, flags: r.flags,
 }));
 
 export const PushRow = z.object({

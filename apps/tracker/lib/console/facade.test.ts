@@ -14,12 +14,13 @@ const SOURCES = { leads: "fe3d651a", touches: "772939bd", trialLessons: "6300f58
 const lead = (id: string, name: string, extra: Partial<LeadSource> = {}): LeadSource => ({
   id, createdAt: "2026-10-20T14:00:00.000Z", name, stage: "New", ownerStaffId: STAFF, nextAction: "Call", nextActionDue: "2026-11-01T03:30:00Z",
   attempts: 1, lastContact: null, source: "Website", lostReason: null, contactedAt: null, trialBookedAt: null, trialAttendedAt: null, closedAt: null,
-  trialTime: null, trialTeacherId: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: "Pat", ...extra,
+  trialTime: null, trialTeacherId: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: "Pat",
+  leadId: null, grade: null, subjects: [], majorGaps: null, trialSummary: null, ...extra,
 });
 const touch = (n: number, studentId: string): TouchSource => ({
   id: `dddddddd-dddd-4ddd-8ddd-${String(n).padStart(12, "0")}`, when: `2026-10-${String(10 + n).padStart(2, "0")}T12:00:00Z`, type: "Call", outcome: "No answer", studentId, staffId: STAFF, note: "n",
 });
-const trial: TrialLessonSource = { id: W1, date: "2026-10-18", studentId: S1, teacherId: STAFF, durationHours: 1, hasTopic: true, hasDiagnosis: false, preferredDays: [] };
+const trial: TrialLessonSource = { id: W1, date: "2026-10-18", studentId: S1, teacherId: STAFF, durationHours: 1, hasTopic: true, hasDiagnosis: false, preferredDays: [], diagnosis: null };
 const work: WorkSource = { id: W1, name: "Post", area: "Marketing", state: "Next", type: "Task", dueReview: "2026-10-24", owner: "Charlie", taskTypes: [{ id: "t1", name: "Script" }], parentProjectIds: [], expectedResult: "One video" };
 const invoice: InvoiceSource = { id: W1, status: "Sent", paidOn: null, amount: 240, creditApplied: null, issued: "2026-10-01", due: "2026-10-15", month: "2026-10", studentIds: [S2.toUpperCase(), S1] };
 const done = <T,>(rows: T[], extra: Partial<ReadResult<T>> = {}): ReadResult<T> => ({ rows, complete: true, skipped: 0, pages: 1, ...extra });
@@ -141,7 +142,9 @@ describe("loadConsolePanels", () => {
     const leaky = { ...lead(S1, "Sam Lee"), parentPhone: "555-0100", leadId: "L-1", notes: "private" } as LeadSource;
     const p = await loadConsolePanels(deps({ notion: ports({ leads: async () => done([leaky]) }) }));
     expect(p.leads.status).toBe("ready");
-    expect(JSON.stringify(p.leads)).not.toMatch(/555-0100|L-1|private/);
+    expect(JSON.stringify(p.leads)).not.toMatch(/555-0100|private/);
+    // REQ-57: the Lead ID stays server-side as the dedupe key; the sales view schema drops it.
+    expect(p.leads.data?.[0].dedupeKey).toBe("L-1");
   });
 
   it("lastCheckedAt every call; lastSuccessfulFetchAt kept from the previous success on failure", async () => {

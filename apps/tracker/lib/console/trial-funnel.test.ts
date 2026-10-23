@@ -11,11 +11,11 @@ const lead = (n: number, extra: Partial<LeadRow> = {}): LeadRow => ({
   id: ID(n), pageUrl: `https://www.notion.so/lead${n}`, createdAt: null, name: `Lead ${n}`, stage: null, ownerStaffId: null, ownerName: null,
   nextAction: null, nextActionDue: null, nextActionDueDate: null, attempts: null, lastContact: null, source: null, lostReason: null,
   contactedAt: null, trialBookedAt: null, trialAttendedAt: null, closedAt: null, trialTime: null, trialTimeDate: null, trialTeacherId: null,
-  trialTeacherName: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: null, inPeopleCopy: true, ...extra,
+  trialTeacherName: null, level: null, hasMajorGaps: false, recommendedPlan: null, hasTrialSummary: false, parentName: null, inPeopleCopy: true, dedupeKey: null, grade: null, subjects: [], majorGaps: null, trialSummary: null, ...extra,
 });
 const lesson = (n: number, date: string, studentId: string | null): TrialLessonRow => ({
   id: `c0000000-0000-4000-8000-${String(n).padStart(12, "0")}`, pageUrl: `https://www.notion.so/lesson${n}`, date, studentId, studentName: null,
-  teacherId: null, teacherName: null, durationHours: 1, hasTopic: false, hasDiagnosis: false, preferredDays: [],
+  teacherId: null, teacherName: null, durationHours: 1, hasTopic: false, hasDiagnosis: false, diagnosis: null, preferredDays: [],
 });
 const run = (leads: LeadRow[], lessons: TrialLessonRow[] | null = [], paid: Map<string, string> | null = new Map()) =>
   trialFunnel({ window: WINDOW, now: NOW, leads, trialLessons: lessons, paidStudentIds: paid, unusable: { lessons: "Lessons unavailable", invoices: "Payment records unavailable" } });

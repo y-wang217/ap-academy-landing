@@ -1576,10 +1576,11 @@ try {
       check("REQ-55: the sync line reports the health check and never says online", /^(Sources checked|Some sources failing)/.test(sync) && !/online/i.test(await p.locator("[data-console]").innerText()), sync);
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
-      // REQ-58 wires Sales capacity and three Operations panels; REQ-59 the trial funnel and cash pulse; REQ-60 three Creation panels.
-      const WIRED = ["northStar", "capacity", "teacherLoad", "lessonGaps", "upcoming", "conversion", "cashflow", "trials", "finance", "nextAsset", "work", "pipeline"];
+      // REQ-56 wires the north star; REQ-57 the Sales next and radar slots; REQ-58 Sales capacity and three Operations
+      // panels; REQ-59 the trial funnel and cash pulse; REQ-60 three Creation panels. Every other panel is a placeholder.
+      const WIRED = ["northStar", "next", "radar", "capacity", "teacherLoad", "lessonGaps", "upcoming", "conversion", "cashflow", "trials", "finance", "nextAsset", "work", "pipeline"];
       check("REQ-55: production panels other than the wired ones are Not connected yet",
-        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 5
+        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 3
           && (await p.locator(`[data-panel]${WIRED.map((id) => `:not([data-panel="${id}"])`).join("")} [data-panel-value]`).count()) === 0);
 
       // REQ-56 AC5, AC9: the mock Notion serves Invoices, so the north star is a real read of this stack's series.
@@ -2001,6 +2002,101 @@ try {
       check("REQ-55: a hovered panel has no outline and a 1px border", hovered.outline === "none" && hovered.border === "1px", JSON.stringify(hovered));
       await p.context().close();
     }
+
+    // REQ-57: the Sales queue, Rolodex and radar against the mock Notion's console leads.
+    {
+      const SHOTS57 = new URL("../../docs/spec/founder-console/screenshots/req-57/", import.meta.url);
+      mkdirSync(SHOTS57, { recursive: true });
+      const mock = (path) => fetch(`${MOCK_NOTION}${path}`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+      const next = (p) => p.locator('#console-panel-sales [data-panel="next"]');
+      const selectedName = (p) => next(p).locator('[role="option"][aria-selected="true"] .console-row-title').textContent();
+      // The health poller polls at once when the tab shows again, and each new check after the first refreshes the queue.
+      const kick = (p) => p.evaluate(async () => {
+        const set = (state) => {
+          Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+          document.dispatchEvent(new Event("visibilitychange"));
+        };
+        set("hidden");
+        await new Promise((r) => setTimeout(r, 50));
+        set("visible");
+      });
+      const NOVA = "https://www.notion.so/eeeeeeee000040008000000000000001";
+
+      const p = await bridgeAt(1440, 900, "/console?mode=sales");
+      await syncSettled(p);
+      check("REQ-57: NEXT is the New lead, with exactly one selected", (await selectedName(p)) === "Nova New" && (await next(p).locator('[aria-selected="true"]').count()) === 1, await selectedName(p));
+      await next(p).getByRole("listbox").focus();
+      await p.keyboard.press("ArrowDown");
+      check("REQ-57: ArrowDown moves the selection to the overdue callback", (await selectedName(p)) === "Gail Overdue", await selectedName(p));
+      await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      await p.keyboard.press("/");
+      check("REQ-57: / focuses the checked filter", await p.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.type === "radio" && document.activeElement.checked));
+      const exceptionEverywhere = [];
+      for (const label of ["New", "Due", "Post-trial", "Later", "All"]) {
+        await next(p).locator("label", { hasText: new RegExp(`^${label} \\d+$`) }).click();
+        exceptionEverywhere.push((await next(p).getByText("1 exception", { exact: true }).count()) === 1);
+        if (label === "Post-trial") {
+          const names = await next(p).locator('[role="option"] .console-row-title').allTextContents();
+          const rolodex = (await next(p).locator("[data-rolodex]").textContent()) ?? "";
+          check("REQ-57: the Post-trial filter shows only the Awaiting Close lead, with its diagnosis", names.join() === "Ezra Awaiting" && rolodex.includes("Needs factoring practice") && rolodex.includes("Tue"), `${names.join()} ${rolodex.slice(0, 120)}`);
+        }
+      }
+      check("REQ-57: the exception line is under every filter", exceptionEverywhere.every(Boolean), exceptionEverywhere.join());
+      await p.context().route("https://www.notion.so/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<p>notion stub</p>" }));
+      await next(p).getByRole("listbox").focus();
+      await p.keyboard.press("Home");
+      const [popup] = await Promise.all([p.context().waitForEvent("page"), p.keyboard.press("Enter")]);
+      await popup.waitForLoadState().catch(() => {});
+      check("REQ-57: Enter opens the selected lead's Notion page", popup.url() === NOVA, popup.url());
+      await popup.close();
+      const html = await p.content();
+      const salesRes = await p.context().request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+      const salesBody = await salesRes.text();
+      const hidden = ["Lou Lost", "Dee Optout", "E2E-LEAD-77", "e2e-lead-77", "tel:", "555-0177"];
+      check("REQ-57: excluded leads, the Lead ID and any phone are absent from the page and the sales JSON",
+        salesRes.status() === 200 && salesRes.headers()["cache-control"] === "no-store" && hidden.every((t) => !html.includes(t) && !salesBody.includes(t)),
+        hidden.filter((t) => html.includes(t) || salesBody.includes(t)).join());
+
+      await mock("/__console/leads-fail");
+      await kick(p);
+      await next(p).getByText(/^Refresh failed at \d\d:\d\d: /).waitFor({ timeout: 20000 }).catch(() => {});
+      check("REQ-57: a failed refresh keeps the queue with Refresh failed at",
+        (await next(p).getByText(/^Refresh failed at /).count()) === 1 && (await next(p).locator('[role="option"]').count()) === 5 && (await next(p).getAttribute("data-status")) === "stale");
+      await mock("/__console/leads-fail");
+      await next(p).getByRole("button", { name: "Retry" }).click();
+      await next(p).getByText(/^Refresh failed at /).waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
+      check("REQ-57: Retry after recovery clears the line", (await next(p).getByText(/^Refresh failed at /).count()) === 0 && (await next(p).getAttribute("data-status")) === "ready");
+      await mock("/__console/lose");
+      await kick(p);
+      await next(p).getByText("Gail Overdue", { exact: true }).waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
+      check("REQ-57: a lead turned Lost leaves the queue on the next read", (await next(p).getByText("Gail Overdue", { exact: true }).count()) === 0 && (await next(p).locator('[role="option"]').count()) === 4);
+      await p.context().close();
+
+      for (const [label, who] of [["Ryan", ryan], ["teacher2", teacher2], ["the student", student], ["the parent", parent], ["the role-less user", outsider]]) {
+        const res = await who.context().request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+        const body = await res.text();
+        check(`REQ-57: ${label} gets 403 forbidden from the sales route`, res.status() === 403 && body === '{"error":"forbidden"}', `${res.status()} ${body}`);
+      }
+      {
+        const guestContext = await browser.newContext();
+        const res = await guestContext.request.get(`${BASE}/api/console/sales`, { maxRedirects: 0 });
+        check("REQ-57: a guest's sales request gets the health route's 307", res.status() === 307 && res.headers()["location"] === "/login?next=/tracker/api/console/sales", `${res.status()} ${res.headers()["location"]}`);
+        await guestContext.close();
+      }
+
+      for (const [w, h] of [[390, 844], [1280, 720], [1440, 900], [1920, 1080]]) {
+        const q = await bridgeAt(w, h, "/console?mode=sales");
+        await syncSettled(q);
+        if (w === 390 || w === 1280) check(`REQ-57: ?mode=sales at ${w} has no sideways scroll`, await noSideScroll(q));
+        await q.screenshot({ path: new URL(`console-sales-${w}x${h}.png`, SHOTS57).pathname, fullPage: true });
+        await q.context().close();
+      }
+      check("REQ-57: screenshots written to docs/spec/founder-console/screenshots/req-57/", true);
+      const reduced = await bridgeAt(1440, 900, "/console?mode=sales", { reducedMotion: "reduce" });
+      const transition = await next(reduced).locator('[role="option"][aria-selected="true"]').evaluate((e) => getComputedStyle(e).transitionProperty);
+      check("REQ-57: the selection transition is none under reduced motion", transition === "none", transition);
+      await reduced.context().close();
+    }
   }
 
   // REQ-21: scheduler GET routes carry Server-Timing through the landing proxy.
@@ -2025,6 +2121,26 @@ try {
     const msg = (gid, cols) => psql(`select ${cols} from iris.messages where gmail_message_id = '${gid}'`);
     const irisTables = () => psql("select table_name from information_schema.tables where table_schema = 'tracker' and table_type = 'BASE TABLE' and table_name not in ('audit_log', 'notion_outbox') order by 1").split("\n").filter(Boolean);
     const trackerSnapshot = () => Object.fromEntries(irisTables().map((t) => [t, psql(`select count(*) || ' ' || coalesce(md5(string_agg(x::text, '' order by x::text)), '') from tracker.${t} x`)]));
+    // REQ-46: Nina's weekly MPM2D class, first held two Toronto days from now at 17:00, so a cancellation sent
+    // during this run always has 41 to 65 hours of notice. Inserted before the snapshot, so the Iris run's
+    // "no tracker table changed" check covers the schedule read too.
+    const NINA_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0005";
+    const ninaStart = isoIn(2);
+    psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009', '${NINA_ID}', 'MPM2D', 'weekly', '${ninaStart}', '17:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
+    // REQ-47: Nina's teacher (not a linked staff member, so the REQ-33 setup counts are untouched) is free 15:00 to
+    // 19:00 every weekday from today. Omar's teacher has entered no availability at all. Both before the snapshot.
+    const OMAR_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0006";
+    psql(`insert into tracker.availability_windows (org_id, request_id, notion_staff_id, weekday, start_time, end_time, effective_from, created_by) select '10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009', d, '15:00', '19:00', '${isoIn(0)}', '00000000-0000-0000-0000-00000000aaaa' from generate_series(1, 5) d`);
+    psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('10000000-0000-0000-0000-00000000aaaa', gen_random_uuid(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0010', '${OMAR_ID}', 'SCH4U', 'weekly', '${isoIn(3)}', '16:00', 60, '00000000-0000-0000-0000-00000000aaaa')`);
+    // The insert queues the daily-task export; an admin page's background drain settles it before the snapshot,
+    // so a later drain never changes the daily-task tables inside the Iris section.
+    await teacher.goto(`${BASE}/schedule`);
+    let exportsDue = "1";
+    for (let i = 0; i < 60 && exportsDue !== "0"; i++) {
+      exportsDue = psql("select count(*) from tracker.notion_outbox where status in ('pending', 'running') and next_attempt_at <= now() + interval '15 minutes'");
+      if (exportsDue !== "0") await teacher.waitForTimeout(250);
+    }
+    check("REQ-46: the exports queued by Nina's and Omar's series settle before the Iris section", exportsDue === "0", exportsDue);
     const trackerBefore = trackerSnapshot();
     const notionStart = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
     await gmail("/__gmail/reset");
@@ -2078,7 +2194,7 @@ try {
     check("REQ-42: m5 is cut to 20,000 characters", msg("m5", "length(body_text) || '|' || body_truncated::text") === "20000|true");
     check("REQ-42: m6 is stored outbound in Sam's thread", msg("m6", "direction || '|' || source") === "outbound|charlie_manual");
     check("REQ-42: m7 (the mailbox in a new thread) is not stored", msg("m7", "count(*)") === "0");
-    check("REQ-42: every inbound row has policy version 3 (REQ-44)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 3") === "0");
+    check("REQ-42: every inbound row has policy version 5 (REQ-47)", psql("select count(*) from iris.messages where direction = 'inbound' and policy_version is distinct from 5") === "0");
     check("REQ-42: Sam's thread carries his Notion page id", psql("select array_to_string(t.notion_student_ids, ',') from iris.messages m join iris.threads t on t.id = m.thread_id where m.gmail_message_id = 'm1'") === SAM_ID);
 
     // 7. The owner's inbox: m3 needs him, m4 does not.
@@ -2127,19 +2243,20 @@ try {
       writes.every((j) => (j.method === "POST" && ["/v1/pages", "/v1/comments"].includes(j.path)) || (j.method === "PATCH" && /^\/v1\/(blocks\/[0-9a-f-]{36}\/children|pages\/[0-9a-f-]{36})$/.test(j.path))),
       writes.map((j) => `${j.method} ${j.path}`).join(" "));
     check("REQ-44: no Notion request carries a parent's message or address",
-      !writes.some((j) => /Sam is sick today|Running late today|sam\.parent@example\.com|lead@example\.org|afzal\.family/i.test(JSON.stringify(j.body ?? {}))));
+      !writes.some((j) => /Sam is sick today|Running late today|sam\.parent@example\.com|notice\.parent|offer\.parent|lead@example\.org|afzal\.family/i.test(JSON.stringify(j.body ?? {}))));
 
     // REQ-43: Iris 3/9. A cancellation and a "charged twice" message from Sam's parent, classified through the
     // mock Anthropic (54332); then the message page, Mark handled, and who may use them.
-    const add = (id, subject, text) => gmail("/__gmail/add", "POST", {
+    const add = (id, subject, text, from = "sam.parent@example.com") => gmail("/__gmail/add", "POST", {
       id, threadId: `thread-${id}`, internalDate: String(Date.now()), snippet: subject,
-      payload: { mimeType: "text/plain", headers: [{ name: "From", value: "sam.parent@example.com" }, { name: "Subject", value: subject }], body: { data: Buffer.from(text).toString("base64url") } },
+      payload: { mimeType: "text/plain", headers: [{ name: "From", value: from }, { name: "Subject", value: subject }], body: { data: Buffer.from(text).toString("base64url") } },
     });
-    await add("m9", "Thursday", "Please cancel Thursday's class, Sam has a dentist appointment.");
+    // REQ-46: m9 comes from Nina's family, whose only class is two days out, so its result never depends on the clock.
+    await add("m9", "Thursday", "Please cancel Thursday's class, Nina has a dentist appointment.", "notice.parent@example.com");
     await add("m10", "October invoice", "We were charged twice this month. Please check.");
     const run43 = await irisRun();
     check("REQ-43: the run answers ok and counts classified", run43.status === 200 && run43.body?.result === "ok" && run43.body?.classified >= 1, JSON.stringify(run43.body));
-    check("REQ-43: the cancellation is classified at 0.95, then drafted", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "drafted|cancellation|0.95|3", msg("m9", "state"));
+    check("REQ-43: the cancellation is classified at 0.95, then drafted", msg("m9", "state || '|' || intent || '|' || confidence || '|' || policy_version") === "drafted|cancellation|0.95|5", msg("m9", "state"));
     check("REQ-43: charged twice is escalated flagged with money_dispute", msg("m10", "state || '|' || escalation_reason || '|' || array_to_string(flags, ',')") === "escalated|flagged|money_dispute", msg("m10", "state || '|' || coalesce(escalation_reason, '')"));
     check("REQ-43: one ok classify ai_calls row each",
       psql("select count(*) from iris.ai_calls a join iris.messages m on m.id = a.message_id where m.gmail_message_id in ('m9', 'm10') and a.purpose = 'classify' and a.outcome = 'ok' and a.input_tokens = 300") === "2");
@@ -2151,6 +2268,64 @@ try {
     await teacher.locator("[data-intent]").waitFor({ timeout: 15000 });
     const shown = `${await teacher.locator("[data-intent]").innerText()}|${await teacher.locator("[data-confidence]").innerText()}`;
     check("REQ-43: the owner's message page shows intent and 95%", shown === "Cancellation|95%", shown);
+
+    // REQ-46: Iris 6/9. m9 is drafted from the scheduler as a cancellation with notice, and nothing in the
+    // tracker changes (the snapshot check at the end of this block).
+    const m9Draft = psql(`select reply_type from iris.drafts where message_id = '${m9}' order by version limit 1`);
+    check("REQ-46: m9's draft is cancel_with_notice", m9Draft === "cancel_with_notice", m9Draft);
+    const m9Event = psql(`select (detail->>'notice_minutes') || '|' || (detail->>'class_date') from iris.events where message_id = '${m9}' and kind = 'drafted'`);
+    const [noticeMinutes, classDate] = m9Event.split("|");
+    check("REQ-46: its drafted event has at least 40 hours of notice and the series' first class date",
+      Number(noticeMinutes) >= 2400 && classDate === ninaStart, `${m9Event} want ${ninaStart}`);
+    check("REQ-46: m9 is not flagged schedule unknown", msg("m9", "array_to_string(flags, ',')") === "", msg("m9", "array_to_string(flags, ',')"));
+    await teacher.locator("[data-policy-used]").waitFor({ timeout: 15000 });
+    check("REQ-46: the message page names the policy used: Cancellation with notice", (await teacher.locator("[data-policy-used]").innerText()).includes("Cancellation with notice"));
+
+    // REQ-47: Iris 7/9. Nina's family asks to move her class: the draft offers make-up times from her teacher's
+    // availability, written in by the tracker. Omar's teacher has entered none: the plain reply, flagged. Nothing
+    // in the tracker changes (the snapshot check at the end of this block).
+    {
+      await add("m12", "Next class", "Could we move Nina's next class? Something came up.", "notice.parent@example.com");
+      await add("m13", "Next class", "Could we move Omar's next class this week?", "offer.parent@example.com");
+      const run47 = await irisRun();
+      check("REQ-47: the run answers ok", run47.status === 200 && run47.body?.result === "ok", JSON.stringify(run47.body));
+      const m12 = msg("m12", "id");
+      const m13 = msg("m13", "id");
+      check("REQ-47: both are classified reschedule_request and drafted", msg("m12", "intent || '|' || state") === "reschedule_request|drafted" && msg("m13", "intent || '|' || state") === "reschedule_request|drafted",
+        `${msg("m12", "intent || '|' || state")} ${msg("m13", "intent || '|' || state")}`);
+      const m12Draft = psql(`select reply_type from iris.drafts where message_id = '${m12}' order by version limit 1`);
+      check("REQ-47: Nina's draft is reschedule_offer", m12Draft === "reschedule_offer", m12Draft);
+      const body12 = psql(`select body_text from iris.drafts where message_id = '${m12}' order by version limit 1`);
+      const lines = body12.split("\n").filter((l) => l.startsWith("- "));
+      const LINE = /^- (\w+) (\d{1,2}) (\w+), (\d{1,2}):(\d{2}) (am|pm) to (\d{1,2}):(\d{2}) (am|pm)$/;
+      const h24 = (h, ap) => (Number(h) % 12) + (ap === "pm" ? 12 : 0);
+      check("REQ-47: 1 to 3 option lines, each inside 15:00 to 19:00, one per date",
+        lines.length >= 1 && lines.length <= 3 && !body12.includes("[OPTIONS]")
+          && lines.every((l) => { const m = LINE.exec(l); return m && h24(m[4], m[6]) >= 15 && h24(m[7], m[9]) * 60 + Number(m[8]) <= 19 * 60; })
+          && new Set(lines.map((l) => l.split(",")[0])).size === lines.length,
+        body12);
+      const ninaNext = isoIn(9);
+      const slotCheck = psql(`select count(*) || '|' || count(distinct (s::timestamptz at time zone 'America/Toronto')::date) || '|' || coalesce(bool_and(s::timestamptz >= ('${ninaStart} 18:00'::timestamp at time zone 'America/Toronto') and s::timestamptz + interval '60 minutes' <= ('${ninaNext} 17:00'::timestamp at time zone 'America/Toronto')), false) || '|' || (e.detail->>'class_date') from iris.events e, jsonb_array_elements_text(e.detail->'offered_slots') s where e.message_id = '${m12}' and e.kind = 'drafted' group by e.detail->>'class_date'`);
+      check("REQ-47: the event's offered_slots match the lines, after her next class and before the one after it",
+        slotCheck === `${lines.length}|${lines.length}|true|${ninaStart}`, `${slotCheck} want ${lines.length}|${lines.length}|true|${ninaStart}`);
+      check("REQ-47: Nina's message has no schedule flag", msg("m12", "array_to_string(flags, ',')") === "", msg("m12", "array_to_string(flags, ',')"));
+      const m13Draft = psql(`select reply_type || '|' || body_text from iris.drafts where message_id = '${m13}' order by version limit 1`);
+      check("REQ-47: Omar's draft is reschedule_request with no clock time", m13Draft.startsWith("reschedule_request|") && !/\d{1,2}:\d{2}|\d\s?(am|pm)\b/i.test(m13Draft), m13Draft);
+      check("REQ-47: Omar's message is flagged availability_not_entered and not escalated", msg("m13", "array_to_string(flags, ',') || '|' || state") === "availability_not_entered|drafted", msg("m13", "array_to_string(flags, ',') || '|' || state"));
+      check("REQ-47: Omar's drafted event has no offered_slots", psql(`select count(*) from iris.events where message_id = '${m13}' and kind = 'drafted' and detail ? 'offered_slots'`) === "0");
+
+      await teacher.goto(`${BASE}/iris/messages/${m12}`);
+      await teacher.locator("[data-offer-note]").waitFor({ timeout: 15000 });
+      const note = teacher.locator("[data-offer-note]");
+      check("REQ-47: the offer's message page says nothing is booked and links to Schedule",
+        (await note.innerText()).includes("Nothing is booked") && /\/tracker\/schedule$/.test((await note.getByRole("link", { name: "Open Schedule" }).getAttribute("href")) ?? ""),
+        await note.innerText());
+      check("REQ-47: the policy used is Reschedule offer", (await teacher.locator("[data-policy-used]").innerText()).includes("Reschedule offer"));
+      await teacher.goto(`${BASE}/iris/messages/${m13}`);
+      await teacher.locator('[data-flag="availability_not_entered"]').waitFor({ timeout: 15000 });
+      check("REQ-47: Omar's page shows the flag and no offer note",
+        (await teacher.locator('[data-flag="availability_not_entered"]').innerText()) === "teacher availability not entered" && (await teacher.locator("[data-offer-note]").count()) === 0);
+    }
 
     await teacher.goto(`${BASE}/iris`);
     await teacher.getByRole("heading", { name: "Needs you", exact: true }).waitFor({ timeout: 15000 });
@@ -2184,7 +2359,7 @@ try {
       const draftCount = (gid) => psql(`select count(*) from iris.drafts d join iris.messages m on m.id = d.message_id where m.gmail_message_id = '${gid}'`);
       const streak = (type) => psql(`select unedited_streak || '|' || edited_total || '|' || rejected_total from iris.reply_types where type = '${type}'`);
       check("REQ-44: the cancellation has version 1, proposed, by iris, unedited, without a signature",
-        draftOf("m9", "d.version || '|' || d.state || '|' || d.created_by || '|' || d.edited || '|' || d.policy_version || '|' || (d.body_text like '%AP Academy%')") === "1|proposed|iris|false|3|false",
+        draftOf("m9", "d.version || '|' || d.state || '|' || d.created_by || '|' || d.edited || '|' || d.policy_version || '|' || (d.body_text like '%AP Academy%')") === "1|proposed|iris|false|5|false",
         draftOf("m9", "d.state"));
       check("REQ-44: one draft ai_calls row for it", psql(`select count(*) from iris.ai_calls where purpose = 'draft' and outcome = 'ok' and message_id = '${idOf("m9")}'`) === "1");
       check("REQ-44: the flagged billing message gets no draft", draftCount("m10") === "0");
@@ -2200,7 +2375,7 @@ try {
       const m9 = idOf("m9");
       await teacher.goto(`${BASE}/iris/messages/${m9}`);
       await teacher.locator("[data-draft-body]").waitFor({ timeout: 15000 });
-      check("REQ-44: the message page shows the policy used and the signature", (await teacher.locator("[data-policy-used]").innerText()).includes("A cancelled class has no fee") && (await teacher.locator("[data-signature]").innerText()).includes("AP Academy"));
+      check("REQ-44: the message page shows the policy used and the signature", (await teacher.locator("[data-policy-used]").innerText()).includes("is always accommodated") && (await teacher.locator("[data-signature]").innerText()).includes("AP Academy"));
       await teacher.locator("[data-draft-body]").fill("Hi Pat,\n\nNo problem, I hope the dentist goes well.");
       await teacher.getByRole("button", { name: "Save edit", exact: true }).click();
       await teacher.locator('[data-draft-editor="2"]').waitFor({ timeout: 15000 });
@@ -2210,7 +2385,8 @@ try {
       check("REQ-44: after Approve the page shows Copy with the signed reply",
         (await teacher.locator("[data-approved-text]").innerText()).includes("I hope the dentist goes well.") && await teacher.getByRole("button", { name: "Copy", exact: true }).isVisible());
       check("REQ-44: the draft and the message are approved", draftOf("m9", "d.state || '|' || d.approval_mode") === "approved|manual" && msg("m9", "state") === "approved");
-      check("REQ-44: the cancellation streak is 0 with edited_total 1", streak("cancellation") === "0|1|0", streak("cancellation"));
+      check("REQ-44: the cancellation streak is 0 with edited_total 1", streak("cancel_with_notice") === "0|1|0", streak("cancel_with_notice"));
+      check("REQ-46: the edit counted under cancel_with_notice, not cancellation", psql("select count(*) from iris.reply_types where type = 'cancellation'") === "0");
       const again44 = await teacher.context().request.post(`${BASE}/api/iris/drafts/${draftOf("m9", "d.id")}/approve`, { data: { version: 2 } });
       check("REQ-44: a second Approve is 409", again44.status() === 409, String(again44.status()));
 
@@ -2280,6 +2456,14 @@ try {
     const lastError = await teacher.locator("[data-last-error]").innerText();
     check("REQ-42: the settings page shows the short last error", lastError.includes("Gmail returned 500") && !lastError.includes("@"), lastError);
     await gmail("/__gmail/fail-list");
+
+    // REQ-46: no request to Missed Sessions & Credits and no write to a family's page during the Iris section.
+    {
+      const irisJournal = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(notionStart);
+      const familyIds = ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0004", NINA_ID, OMAR_ID, "dddddddd-dddd-4ddd-8ddd-dddddddd0001"];
+      check("REQ-46: Iris makes no Missed Sessions & Credits request", !irisJournal.some((j) => j.path.replace(/-/g, "").includes("38cdcded9bef4e68bceba56920f098bd")));
+      check("REQ-46: Iris writes no family page", !irisJournal.some((j) => j.method === "PATCH" && familyIds.some((id) => j.path.replace(/-/g, "").includes(id.replace(/-/g, "")))));
+    }
 
     // 13. No tracker table changed (the audit log records the pause changes by design; the outbox drains in the background).
     check("REQ-42: every tracker table is unchanged across the Iris section", JSON.stringify(trackerSnapshot()) === JSON.stringify(trackerBefore));

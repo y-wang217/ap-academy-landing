@@ -18,6 +18,33 @@ const walk = (dir: string): string[] =>
 const FILES = [...walk("app/console"), ...walk("app/api/console"), ...walk("lib/console"), ...walk("components/console")];
 
 describe("console source scan (AC7, AC8)", () => {
+  it("covers the REQ-57 sales queue files", () => {
+    for (const f of [
+      "app/api/console/sales/route.ts", "lib/console/sales-queue.ts", "lib/console/sales-view.ts", "lib/console/sales-state.ts",
+      "components/console/sales/sales-provider.tsx", "components/console/sales/next-lead.tsx", "components/console/sales/sales-radar.tsx",
+    ]) {
+      expect(FILES).toContain(f);
+    }
+  });
+
+  it.each(FILES)("%s holds no tel: link or Parent Phone (REQ-57 AC8)", (f) => {
+    const src = read(f);
+    expect(src).not.toContain("tel:");
+    expect(src).not.toContain("Parent Phone");
+  });
+
+  it("dedupeKey appears only in contracts, facade and the ranking (REQ-57 AC8)", () => {
+    expect(FILES.filter((f) => read(f).includes("dedupeKey")).sort()).toEqual(["lib/console/contracts.ts", "lib/console/facade.ts", "lib/console/sales-queue.ts"]);
+  });
+
+  it("the sales selection transition is none under reduced motion (REQ-57 AC12)", () => {
+    const css = read("app/console/console.css");
+    const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+    const block = reduced.slice(0, reduced.indexOf("\n}") + 2);
+    expect(block).toMatch(/\.console-sales-option \{\s*transition: none;/);
+    expect(css).toMatch(/\.console-sales-option \{[^}]*transition: transform 180ms/);
+  });
+
   it("covers the console files", () => {
     for (const f of [
       "app/console/layout.tsx", "app/console/page.tsx", "app/console/loading.tsx", "app/api/console/health/route.ts", "lib/console/guard.ts",

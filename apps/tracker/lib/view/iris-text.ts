@@ -1,7 +1,7 @@
 import { POLICY } from "../iris/policy";
 import type { MessageState } from "../iris/store";
 
-/** Every line of Iris copy (REQ-42, REQ-43, REQ-44). Plain, short, no em dashes. */
+/** Every line of Iris copy (REQ-42, REQ-43, REQ-44, REQ-47). Plain, short, no em dashes. */
 export const IRIS_TEXT = {
   title: "Iris inbox",
   settingsTitle: "Iris settings",
@@ -57,6 +57,8 @@ export const IRIS_TEXT = {
   draft: "Draft",
   noDraft: "No draft for this message.",
   policyUsed: "Policy used",
+  offerNote: "Times come from the teacher's availability. Nothing is booked: book the time the family picks in Schedule.",
+  bookInSchedule: "Open Schedule",
   policyVersionNote: (drafted: number, current: number) => `Drafted under policy version ${drafted}; current is ${current}.`,
   signatureNote: "Added below your reply:",
   approve: "Approve",
@@ -74,6 +76,9 @@ export const IRIS_TEXT = {
 
 const FLAG_LABELS: Record<string, string> = {
   money_dispute: "money dispute",
+  schedule_unknown: "schedule unknown",
+  availability_not_entered: "teacher availability not entered",
+  no_free_slot: "no free make-up time",
   legal_threat: "legal threat",
   crisis: "crisis",
   hardship: "hardship",
@@ -113,6 +118,8 @@ export function reasonLabel(reason: string | null, extra: { flags?: string[]; in
       return "Iris wants you to check";
     case "draft_rule":
       return "Draft held back";
+    case "schedule_no_show":
+      return "Wrote after class started";
     case "draft_rejected":
       return "You rejected the draft";
     case "answered_by_charlie":

@@ -3,13 +3,14 @@ import { normalId } from "../domain/billing";
 import { TUNING } from "../domain/tuning";
 import { localDateOf } from "../time";
 import {
-  InvoiceRow, LeadRow, notionPageUrl, PeopleData, TouchGroup, TrialLessonRow, WorkRow,
+  InvoiceRow, LeadRow, notionPageUrl, PAGE_CAP_PREFIX, PeopleData, TouchGroup, TrialLessonRow, WorkRow,
   type ConsolePanels, type InvoiceSource, type LeadSource, type NotionPanel, type PanelId, type PanelResult, type ReadResult,
   type SourceEvidence, type TouchSource, type TrialLessonSource, type WorkSource,
 } from "./contracts";
 import type { PeopleSnapshot } from "./people-read";
 
 export type { PeopleSnapshot } from "./people-read";
+export { PAGE_CAP_PREFIX } from "./contracts";
 
 /**
  * The Founder Console read facade (REQ-54, tracker ADR 0065). Six providers
@@ -165,7 +166,7 @@ export async function loadConsolePanels(deps: FacadeDeps): Promise<ConsolePanels
       return { ...base, status: "error", data: null, count: null, lastSuccessfulFetchAt: checkedAt, staleReason: null, errorMessage: "Read failed" };
     }
     const reasons: string[] = [];
-    if (!settled.value.complete) reasons.push(`Stopped after ${settled.value.pages} pages; showing ${built.count} rows`);
+    if (!settled.value.complete) reasons.push(`${PAGE_CAP_PREFIX}${settled.value.pages} pages; showing ${built.count} rows`);
     const emptyComplete = settled.value.complete && built.count === 0;
     if (joins && !emptyComplete && names.reason) reasons.push(names.reason);
     const status = reasons.length ? "stale" : built.count === 0 ? "empty" : "ready";
@@ -181,6 +182,7 @@ export async function loadConsolePanels(deps: FacadeDeps): Promise<ConsolePanels
     leads: panel("leads", leads, true, (rows) => list(LeadRow, rows.map((l) => ({
       ...l,
       pageUrl: notionPageUrl(l.id),
+      dedupeKey: l.leadId,
       ownerName: staff(l.ownerStaffId),
       nextActionDueDate: localDateOf(l.nextActionDue),
       trialTimeDate: localDateOf(l.trialTime),

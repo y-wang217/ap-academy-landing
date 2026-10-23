@@ -27,6 +27,9 @@ export type PanelResult<T> = {
   sourceEvidence: SourceEvidence[];
 };
 
+/** How a read stopped at the page cap begins its stale reason (REQ-57 reads it to tell truncation apart). */
+export const PAGE_CAP_PREFIX = "Stopped after ";
+
 /** A Notion page or data source link, which opens only for a Notion member. */
 export const notionPageUrl = (id: string) => `https://www.notion.so/${id.replaceAll("-", "")}`;
 
@@ -37,11 +40,13 @@ export type LeadSource = {
   contactedAt: string | null; trialBookedAt: string | null; trialAttendedAt: string | null; closedAt: string | null; trialTime: string | null;
   trialTeacherId: string | null; level: string | null; hasMajorGaps: boolean; recommendedPlan: string | null; hasTrialSummary: boolean;
   parentName: string | null;
+  /** REQ-57: Lead ID trimmed and lowercased, empty to null. Server-side only: the dedupe key. */
+  leadId: string | null; grade: string | null; subjects: string[]; majorGaps: string | null; trialSummary: string | null;
 };
 export type TouchSource = { id: string; when: string | null; type: string | null; outcome: string | null; studentId: string | null; staffId: string | null; note: string };
 export type TrialLessonSource = {
   id: string; date: string | null; studentId: string | null; teacherId: string | null; durationHours: number | null; hasTopic: boolean;
-  hasDiagnosis: boolean; preferredDays: string[];
+  hasDiagnosis: boolean; preferredDays: string[]; diagnosis: string | null;
 };
 export type TaskTypeRef = { id: string; name: string | null };
 export type WorkSource = {
@@ -59,12 +64,15 @@ export type ReadResult<T> = { rows: T[]; complete: boolean; skipped: number; pag
 // .passthrough()): parsing drops any key not listed here and keeps the row (Decision 16).
 const str = z.string().nullable();
 const num = z.number().nullable();
+const longText = z.string().max(1000).nullable();
 
 export const LeadRow = z.object({
   id: z.string(), pageUrl: z.string(), createdAt: str, name: z.string(), stage: str, ownerStaffId: str, ownerName: str, nextAction: str,
   nextActionDue: str, nextActionDueDate: str, attempts: num, lastContact: str, source: str, lostReason: str, contactedAt: str,
   trialBookedAt: str, trialAttendedAt: str, closedAt: str, trialTime: str, trialTimeDate: str, trialTeacherId: str, trialTeacherName: str,
   level: str, hasMajorGaps: z.boolean(), recommendedPlan: str, hasTrialSummary: z.boolean(), parentName: str, inPeopleCopy: z.boolean(),
+  // REQ-57: dedupeKey stays in server-side panels; the sales view schema has no such key.
+  dedupeKey: str, grade: str, subjects: z.array(z.string()), majorGaps: longText, trialSummary: longText,
 });
 export const TouchRow = z.object({
   id: z.string(), pageUrl: z.string(), when: str, whenDate: str, type: str, outcome: str, studentId: str, staffId: str, staffName: str,
@@ -73,7 +81,7 @@ export const TouchRow = z.object({
 export const TouchGroup = z.object({ studentId: z.string(), studentName: str, touches: z.array(TouchRow) });
 export const TrialLessonRow = z.object({
   id: z.string(), pageUrl: z.string(), date: str, studentId: str, studentName: str, teacherId: str, teacherName: str, durationHours: num,
-  hasTopic: z.boolean(), hasDiagnosis: z.boolean(), preferredDays: z.array(z.string()),
+  hasTopic: z.boolean(), hasDiagnosis: z.boolean(), preferredDays: z.array(z.string()), diagnosis: longText,
 });
 export const WorkRow = z.object({
   id: z.string(), pageUrl: z.string(), name: z.string(), area: str, state: str, type: str, dueReview: str, dueReviewDate: str, owner: str,

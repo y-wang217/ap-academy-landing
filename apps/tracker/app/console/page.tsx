@@ -8,7 +8,9 @@ import { buildNorthStar, CANNOT_VERIFY } from "@/lib/console/north-star";
 import { loadOperationsPanels } from "@/lib/console/operations";
 import { createOperationsReader } from "@/lib/console/operations-read";
 import { placeholderPanels } from "@/lib/console/panel-slots";
+import type { PanelView } from "@/lib/console/panel-view";
 import { consoleFreshness, createConsoleDeps, createOperationsLessons, sharePeopleRead } from "@/lib/console/providers";
+import { buildSalesView, type SalesView } from "@/lib/console/sales-view";
 import { createConsoleSeriesReader } from "@/lib/console/series-read";
 import { windowOf } from "@/lib/console/trial-funnel";
 import { priorWeek } from "@/lib/domain/schedule/net-new";
@@ -22,12 +24,13 @@ const settle = <T,>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok: false
 
 /**
  * The founder console (REQ-53 gate, REQ-55 bridge). Owner only, checked again
- * here. The north star (REQ-56) is wired from the facade, one shared people
- * read and the series read; Operations' teacher load, lesson gaps and
- * upcoming classes and the Sales capacity gauge (REQ-58) from the scheduler
- * tables on the same people read; the trial funnel and cash pulse (REQ-59)
- * from the same facade result. Creation's next asset, work queue and weekly
- * review (REQ-60) come from the same facade's Work read. Every other panel is
+ * here. One facade load per request. The north star (REQ-56) is wired from
+ * it, one shared people read and the series read; the Sales queue and radar
+ * (REQ-57) from the same facade result; Operations' teacher load, lesson gaps
+ * and upcoming classes and the Sales capacity gauge (REQ-58) from the
+ * scheduler tables on the same people read; the trial funnel and cash pulse
+ * (REQ-59) from the same facade result; Creation's next asset, work queue and
+ * weekly review (REQ-60) from the same facade's Work read. Every other panel is
  * "Not connected yet" until the later Console cards fill their slots.
  */
 export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[]; gapDays?: string | string[]; window?: string | string[]; task?: string | string[] }> }) {
@@ -62,6 +65,18 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   } catch {
     panels.sales.northStar = { ...panels.sales.northStar, status: "error", staleReason: null, errorMessage: CANNOT_VERIFY };
   }
+  // REQ-57: the same facade result; a throw while building the view gives both slots "Read failed".
+  let sales: SalesView;
+  try {
+    sales = buildSalesView(facade, now);
+  } catch {
+    const failed = <T,>(panel: string): PanelView<T> => ({
+      panel, status: "error", data: null, count: null, lastCheckedAt: now.toISOString(), lastSuccessfulFetchAt: null, staleReason: null, errorMessage: "Read failed", sourceEvidence: [],
+    });
+    sales = { queue: failed("next"), radar: failed("radar") };
+  }
+  panels.sales.next = sales.queue;
+  panels.sales.radar = sales.radar;
   panels.operations.teacherLoad = ops.teacherLoad;
   panels.operations.lessonGaps = ops.lessonGaps;
   panels.operations.upcoming = ops.upcoming;
@@ -81,5 +96,5 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   panels.creation.nextAsset = creation.nextAsset;
   panels.creation.work = creation.work;
   panels.creation.pipeline = creation.pipeline;
-  return <ConsoleBridge mode={mode} panels={panels} email={gate.viewer.email} now={now} />;
+  return <ConsoleBridge mode={mode} panels={panels} sales={sales} email={gate.viewer.email} now={now} />;
 }
