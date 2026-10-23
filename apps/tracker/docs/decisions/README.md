@@ -73,6 +73,7 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0066](0066-console-shell-and-instrument-kit.md) | The console shell renders a `PanelView` kit, keeps the mode in the URL and builds its preview only with a flag | accepted |
 | [0067](0067-schedule-source-and-drift-notice.md) | Schedule Source says the Weekly Schedule is generated, and the owner sees replaced Notion edits | accepted |
 | [0068](0068-north-star-net-new-hours.md) | North star: verified net-new weekly teaching hours from adopted series and Paid invoices | accepted |
+| [0069](0069-iris-send-at-most-once.md) | Iris sends an approved reply at most once: one send row per draft, verify before every retry, two one-scope tokens | accepted |
 | [0070](0070-creation-mode-work-queue.md) | Creation mode reads open Marketing Work rows, pins the weekly review by page id and writes nothing | accepted |
 | [0071](0071-sales-queue-ranking.md) | The Sales queue ranks leads by the published order, keeps opt-outs out and never sends a phone to the browser | accepted |
 | [0072](0072-iris-schedule-aware-cancellations.md) | Iris splits cancellations by the notice the scheduler shows | accepted |

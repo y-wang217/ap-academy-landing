@@ -2549,21 +2549,38 @@ try {
       await teacher.getByRole("button", { name: "Save edit", exact: true }).click();
       await teacher.locator('[data-draft-editor="2"]').waitFor({ timeout: 15000 });
       check("REQ-44: Save edit stores version 2 by the owner, edited", draftOf("m9", "d.version || '|' || d.created_by || '|' || d.edited") === "2|owner|true");
-      await teacher.getByRole("button", { name: "Approve", exact: true }).click();
-      await teacher.locator("[data-copy-reply]").waitFor({ timeout: 15000 });
-      check("REQ-44: after Approve the page shows Copy with the signed reply",
-        (await teacher.locator("[data-approved-text]").innerText()).includes("I hope the dentist goes well.") && await teacher.getByRole("button", { name: "Copy", exact: true }).isVisible());
-      check("REQ-44: the draft and the message are approved", draftOf("m9", "d.state || '|' || d.approval_mode") === "approved|manual" && msg("m9", "state") === "approved");
+      // REQ-48: Approve now sends the reply from the mailbox, once.
+      const sentMail = () => gmail("/__gmail/sent", "GET");
+      const sendOf = (gid, cols) => psql(`select ${cols} from iris.sends s join iris.messages m on m.id = s.message_id where m.gmail_message_id = '${gid}'`);
+      const irisOutbound = (gid) => psql(`select count(*) from iris.messages o join iris.messages m on m.thread_id = o.thread_id where m.gmail_message_id = '${gid}' and o.direction = 'outbound' and o.source = 'iris'`);
+      const sentBefore = (await sentMail()).length;
+      await teacher.getByRole("button", { name: "Approve and send", exact: true }).click();
+      await teacher.locator('[data-send-state="sent"]').waitFor({ timeout: 15000 });
+      check("REQ-48: after Approve the page shows Sent with the signed reply",
+        (await teacher.locator("[data-approved-text]").innerText()).includes("I hope the dentist goes well.") && (await teacher.locator('[data-send-state="sent"]').innerText()).includes("Sent"));
+      check("REQ-48: the draft, the message and the send are sent", draftOf("m9", "d.state || '|' || d.approval_mode") === "sent|manual" && msg("m9", "state") === "sent"
+        && sendOf("m9", "s.state || '|' || s.attempts || '|' || (s.gmail_message_id is not null)") === "sent|1|true", sendOf("m9", "s.state || '|' || coalesce(s.last_error, '')"));
       check("REQ-44: the cancellation streak is 0 with edited_total 1", streak("cancel_with_notice") === "0|1|0", streak("cancel_with_notice"));
       check("REQ-46: the edit counted under cancel_with_notice, not cancellation", psql("select count(*) from iris.reply_types where type = 'cancellation'") === "0");
       const again44 = await teacher.context().request.post(`${BASE}/api/iris/drafts/${draftOf("m9", "d.id")}/approve`, { data: { version: 2 } });
-      check("REQ-44: a second Approve is 409", again44.status() === 409, String(again44.status()));
+      check("REQ-48: a second Approve is 200 with the send's state and sends nothing more",
+        again44.status() === 200 && (await again44.json()).state === "sent" && (await sentMail()).length === sentBefore + 1, String(again44.status()));
+      check("REQ-48: one outbound iris row for the cancellation", irisOutbound("m9") === "1", irisOutbound("m9"));
 
       // An unedited approval, then a reject.
       await teacher.goto(`${BASE}/iris/messages/${idOf("m1")}`);
-      await teacher.getByRole("button", { name: "Approve", exact: true }).click();
-      await teacher.locator("[data-copy-reply]").waitFor({ timeout: 15000 });
+      await teacher.getByRole("button", { name: "Approve and send", exact: true }).click();
+      await teacher.locator('[data-send-state="sent"]').waitFor({ timeout: 15000 });
       check("REQ-44: an unedited approval gives the general_question streak 1", streak("general_question") === "1|0|0", streak("general_question"));
+      const m1Mail = (await sentMail()).at(-1);
+      const h = (name) => m1Mail?.headers.find((x) => x.name.toLowerCase() === name.toLowerCase())?.value;
+      const m1SendId = sendOf("m1", "s.id");
+      check("REQ-48: the sent reply carries the thread headers, our ids and the signature, with no automated line",
+        h("To") === "sam.parent@example.com" && h("From") === "charlie@apacademy.ca" && h("Subject") === "Re: Sam is sick"
+          && h("In-Reply-To") === "<m1@mail.example>" && h("References") === "<m1@mail.example>" && h("Message-ID") === `<iris-${m1SendId}@apacademy.ca>`
+          && h("X-Iris-Send-Id") === m1SendId && h("Content-Type") === "text/plain; charset=UTF-8" && m1Mail.threadId === "thread-sam"
+          && m1Mail.body.includes("AP Academy") && !/automat/i.test(m1Mail.body),
+        JSON.stringify(m1Mail?.headers));
       await teacher.goto(`${BASE}/iris/messages/${idOf("m2")}`);
       await teacher.locator("[data-reject-reason]").fill("Too long");
       await teacher.getByRole("button", { name: "Reject", exact: true }).click();
@@ -2573,7 +2590,7 @@ try {
       await teacher.goto(`${BASE}/iris`);
       await teacher.getByRole("heading", { name: "Drafts waiting", exact: true }).waitFor({ timeout: 15000 });
       check("REQ-44: the queue shows Needs you, Drafts waiting, Sent today and Failed",
-        (await section(teacher, "Needs you").innerText()).includes("You rejected the draft") && (await section(teacher, "Sent today").innerText()).includes("Approved, send by hand")
+        (await section(teacher, "Needs you").innerText()).includes("You rejected the draft") && (await section(teacher, "Sent today").innerText()).includes("Sent")
           && await teacher.getByRole("heading", { name: "Failed", exact: true }).isVisible());
 
       // Charlie answers m5 from Gmail: the next run supersedes its draft.
@@ -2587,6 +2604,67 @@ try {
         msg("m5", "state || '|' || escalation_reason || '|' || (handled_at is not null)") === "escalated|answered_by_charlie|true" && draftOf("m5", "d.state") === "superseded",
         msg("m5", "state || '|' || coalesce(escalation_reason, '')"));
       check("REQ-44: the streak is unchanged by a Gmail reply", streak("general_question") === "0|0|1");
+      check("REQ-48: the run never stores Iris's own sent mail as charlie_manual",
+        psql("select count(*) from iris.messages where source = 'charlie_manual' and rfc_message_id like '<iris-%'") === "0"
+          && psql("select count(*) from iris.messages where source = 'iris'") === psql("select count(*) from iris.sends where state = 'sent'"));
+
+      // REQ-48: a crash after Gmail accepted the message is recovered by search, not a second send.
+      const expireLeases = () => psql("update iris.sends set lease_until = now() - interval '1 second' where state = 'sending' returning 1");
+      await gmail("/__gmail/accept-then-fail");
+      const m8Approve = await teacher.context().request.post(`${BASE}/api/iris/drafts/${draftOf("m8", "d.id")}/approve`, { data: { version: 1 } });
+      await gmail("/__gmail/accept-then-fail");
+      const m8Body = await m8Approve.json();
+      check("REQ-48: accepted then 500 leaves the send waiting with the status line", m8Approve.status() === 200 && m8Body.state === "sending" && m8Body.error === "Gmail returned 500", JSON.stringify(m8Body));
+      const sentAfterCrash = (await sentMail()).length;
+      expireLeases();
+      const runRecover = await irisRun();
+      check("REQ-48: the next run finds it by search and records it, with no second send",
+        runRecover.body?.sent === 1 && sendOf("m8", "s.state || '|' || s.attempts") === "sent|2" && (await sentMail()).length === sentAfterCrash && irisOutbound("m8") === "1",
+        `${JSON.stringify(runRecover.body)} ${sendOf("m8", "s.state || '|' || s.attempts")}`);
+
+      // REQ-48: Gmail 500 on every attempt: Approve, then two runs, then Failed with Retry; the rest of the tracker loads.
+      await add("m14", "Homework", "Quick question about this week's homework.");
+      await irisRun();
+      const m14Draft = draftOf("m14", "d.id");
+      psql("update iris.settings set paused = true returning 1");
+      const pausedApprove = await teacher.context().request.post(`${BASE}/api/iris/drafts/${m14Draft}/approve`, { data: { version: 1 } });
+      check("REQ-48: a paused Approve is 409 paused with no send row and no approval",
+        pausedApprove.status() === 409 && (await pausedApprove.json()).error === "paused" && sendOf("m14", "count(*)") === "0" && draftOf("m14", "d.state") === "proposed", String(pausedApprove.status()));
+      psql("update iris.settings set paused = false returning 1");
+      await gmail("/__gmail/fail-send");
+      const sentBeforeFail = (await sentMail()).length;
+      await teacher.goto(`${BASE}/iris/messages/${idOf("m14")}`);
+      await teacher.getByRole("button", { name: "Approve and send", exact: true }).click();
+      await teacher.locator('[data-send-state="sending"]').waitFor({ timeout: 15000 });
+      check("REQ-48: after a failed first attempt the page says not sent yet",
+        (await teacher.locator('[data-send-state="sending"]').innerText()).includes("Not sent yet: Gmail returned 500"));
+      for (let i = 0; i < 2; i++) {
+        expireLeases();
+        await irisRun();
+      }
+      check("REQ-48: after three attempts the send, draft and message are failed with a status-only error",
+        sendOf("m14", "s.state || '|' || s.attempts || '|' || s.last_error") === "failed|3|Gmail returned 500" && draftOf("m14", "d.state") === "failed" && msg("m14", "state") === "failed",
+        sendOf("m14", "s.state || '|' || s.attempts || '|' || coalesce(s.last_error, '')"));
+      await teacher.goto(`${BASE}/iris`);
+      const failedSection = section(teacher, "Failed");
+      await failedSection.locator("[data-retry-send]").first().waitFor({ timeout: 15000 });
+      check("REQ-48: the Failed section lists it with Retry", (await failedSection.innerText()).includes("Homework") && await failedSection.getByRole("button", { name: "Retry", exact: true }).isVisible());
+      const pagesUp = await Promise.all(["/iris", "/iris/settings", "/"].map((p) => teacher.context().request.get(`${BASE}${p}`).then((r) => r.status())));
+      check("REQ-48: /iris, /iris/settings and the tracker home still load", pagesUp.every((st) => st === 200), pagesUp.join(","));
+      const m14Send = sendOf("m14", "s.id");
+      const ryanRetry = await ryan.context().request.post(`${BASE}/api/iris/sends/${m14Send}/retry`);
+      check("REQ-48: Ryan gets 403 from Retry", ryanRetry.status() === 403, String(ryanRetry.status()));
+      const evilRetry = await teacher.context().request.post(`${BASE}/api/iris/sends/${m14Send}/retry`, { headers: { Origin: "https://evil.example" } });
+      check("REQ-48: a cross-site Retry is 403", evilRetry.status() === 403, String(evilRetry.status()));
+      check("REQ-48: no failed attempt reached Gmail's store", (await sentMail()).length === sentBeforeFail);
+      await gmail("/__gmail/fail-send");
+      await teacher.goto(`${BASE}/iris/messages/${idOf("m14")}`);
+      await teacher.getByRole("button", { name: "Retry", exact: true }).click();
+      await teacher.locator('[data-send-state="sent"]').waitFor({ timeout: 15000 });
+      check("REQ-48: Retry sends it once and the page shows Sent",
+        sendOf("m14", "s.state || '|' || s.attempts") === "sent|1" && (await sentMail()).length === sentBeforeFail + 1 && irisOutbound("m14") === "1", sendOf("m14", "s.state || '|' || s.attempts"));
+      const retryAgain = await teacher.context().request.post(`${BASE}/api/iris/sends/${m14Send}/retry`);
+      check("REQ-48: Retry on a sent send is 409", retryAgain.status() === 409, String(retryAgain.status()));
 
       // The phone backup: one page for today, one to-do per pushed item, one comment each.
       const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());

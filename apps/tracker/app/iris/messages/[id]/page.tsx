@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { CopyReply } from "@/components/iris/copy-reply";
 import { DraftEditor } from "@/components/iris/draft-editor";
 import { MarkHandled } from "@/components/iris/mark-handled";
+import { RetrySend } from "@/components/iris/send-status";
 import { TopBar } from "@/components/top-bar";
 import { Card, Notice, Page } from "@/components/ui";
 import { getDb } from "@/lib/data/client";
@@ -14,7 +15,7 @@ import { realIrisAdminDeps } from "@/lib/iris/deps";
 import { withSignature } from "@/lib/iris/draft-rules";
 import { loadMessage } from "@/lib/iris/handlers";
 import { POLICY, SIGNATURE } from "@/lib/iris/policy";
-import type { DraftView } from "@/lib/iris/schemas";
+import type { DraftView, SendView } from "@/lib/iris/schemas";
 import { DRAFT_STATE_LABELS, IRIS_TEXT, confidenceText, flagLabel, gmailThreadUrl, intentLabel, stateLabel } from "@/lib/view/iris-text";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +33,30 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 const policySection = (type: string) => (POLICY as Record<string, { title: string; text: string } | undefined>)[type] ?? null;
 
-/** The Draft card (REQ-44 AC14): the policy used, the editor on the latest proposed version or Copy after Approve, and earlier versions. */
-function DraftCard({ drafts, current, editable }: { drafts: DraftView[]; current: number; editable: boolean }) {
+/**
+ * The send block after Approve (REQ-48): Sent with the time, Failed with the
+ * error and Retry, or still sending. The text shown is the text sent.
+ */
+function SendBlock({ send, text, gmailUrl }: { send: SendView; text: string; gmailUrl: string }) {
+  return (
+    <div className="flex flex-col gap-2 text-sm" data-send-state={send.state}>
+      {send.state === "sent" && <p className="font-medium">{IRIS_TEXT.sentAt(send.sentAt ? when(send.sentAt) : "")}</p>}
+      {send.state === "failed" && <p className="font-medium text-error">{IRIS_TEXT.sendFailed(send.lastError ?? "unknown error")}</p>}
+      {send.state === "sending" && <p className="font-medium">{send.lastError ? IRIS_TEXT.sendPending(send.lastError) : IRIS_TEXT.sendingNow}</p>}
+      <pre className="whitespace-pre-wrap break-words rounded border border-border p-2 font-sans" data-approved-text>{text}</pre>
+      {send.state === "failed" && <RetrySend sendId={send.id} />}
+      {/* Plain anchor: Gmail is outside the app. */}
+      <a href={gmailUrl} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">{IRIS_TEXT.openInGmail}</a>
+    </div>
+  );
+}
+
+/**
+ * The Draft card (REQ-44 AC14, REQ-48): the policy used, the editor on the
+ * latest proposed version, the send block after Approve (Copy only for a
+ * draft approved before sending existed, which has no send), and earlier versions.
+ */
+function DraftCard({ drafts, current, editable, send, gmailUrl }: { drafts: DraftView[]; current: number; editable: boolean; send: SendView | null; gmailUrl: string }) {
   const latest = drafts[0];
   if (!latest) return <Card title={IRIS_TEXT.draft}><p className="text-sm text-text-muted">{IRIS_TEXT.noDraft}</p></Card>;
   const policy = policySection(latest.replyType);
@@ -56,8 +79,9 @@ function DraftCard({ drafts, current, editable }: { drafts: DraftView[]; current
       {latest.state === "proposed" && editable && (
         <DraftEditor key={latest.id} id={latest.id} version={latest.version} body={latest.bodyText} signature={SIGNATURE} />
       )}
-      {(latest.state === "approved" || latest.state === "sent") && <CopyReply text={withSignature(latest.bodyText)} />}
-      {latest.state !== "proposed" && latest.state !== "approved" && latest.state !== "sent" && (
+      {send && latest.state !== "proposed" && <SendBlock send={send} text={withSignature(latest.bodyText)} gmailUrl={gmailUrl} />}
+      {!send && (latest.state === "approved" || latest.state === "sent") && <CopyReply text={withSignature(latest.bodyText)} />}
+      {!send && latest.state !== "proposed" && latest.state !== "approved" && latest.state !== "sent" && (
         <p className="text-sm" data-draft-state={latest.state}>
           {IRIS_TEXT.versionLine(latest.version, DRAFT_STATE_LABELS[latest.state] ?? latest.state, latest.createdBy === "owner" ? IRIS_TEXT.charlie : "Iris")}
           {latest.rejectedReason ? `: ${latest.rejectedReason}` : ""}
@@ -138,7 +162,13 @@ export default async function IrisMessagePage({ params }: { params: Promise<{ id
                 </ul>
               )}
             </Card>
-            <DraftCard drafts={r.view.drafts} current={r.currentPolicyVersion} editable={r.message.state === "drafted" || r.message.state === "escalated"} />
+            <DraftCard
+              drafts={r.view.drafts}
+              current={r.currentPolicyVersion}
+              editable={r.message.state === "drafted" || r.message.state === "escalated"}
+              send={r.view.send}
+              gmailUrl={gmailThreadUrl(irisMailbox(), r.message.gmailThreadId)}
+            />
             <Card>
               {r.message.bodyText === null ? (
                 <p className="text-sm text-text-muted">{IRIS_TEXT.bodyNotStored}</p>

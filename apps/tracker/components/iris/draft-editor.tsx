@@ -11,18 +11,19 @@ const API = "/tracker/api/iris/drafts";
 /**
  * The editor on the latest proposed draft (REQ-44 AC14): the body in a
  * textarea with the signature shown read-only below it, then Save edit,
- * Approve and Reject with a reason. Shows Saving..., then refreshes into the
- * new state; a failed save shows the error line and never a success state.
+ * Approve and send (REQ-48), and Reject with a reason. Shows Saving... (and
+ * Sending... on Approve), then refreshes into the new state; a failed save
+ * shows the error line and never a success state.
  */
 export function DraftEditor({ id, version, body, signature }: { id: string; version: number; body: string; signature: string }) {
   const router = useRouter();
   const [text, setText] = useState(body);
   const [reason, setReason] = useState("");
-  const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+  const [state, setState] = useState<"idle" | "saving" | "sending" | "error">("idle");
   const changed = text.trim() !== body.trim();
 
   async function post(action: "approve" | "edit" | "reject", payload: unknown) {
-    setState("saving");
+    setState(action === "approve" ? "sending" : "saving");
     try {
       const res = await fetch(`${API}/${encodeURIComponent(id)}/${action}`, {
         method: "POST",
@@ -37,7 +38,7 @@ export function DraftEditor({ id, version, body, signature }: { id: string; vers
     }
   }
 
-  const saving = state === "saving";
+  const saving = state === "saving" || state === "sending";
   return (
     <div className="flex flex-col gap-3" role="status" aria-live="polite" data-draft-editor={version}>
       <textarea
@@ -58,7 +59,7 @@ export function DraftEditor({ id, version, body, signature }: { id: string; vers
           {IRIS_TEXT.saveEdit}
         </button>
         <button type="button" className={`${buttonClass} w-full sm:w-auto`} disabled={saving || changed} onClick={() => post("approve", { version })}>
-          {saving ? IRIS_TEXT.saving : IRIS_TEXT.approve}
+          {state === "sending" ? IRIS_TEXT.sending : IRIS_TEXT.approve}
         </button>
       </div>
       <label className="flex flex-col gap-1 text-sm">

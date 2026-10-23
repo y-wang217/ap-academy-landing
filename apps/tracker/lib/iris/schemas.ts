@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SendContext } from "./send";
 import type { ClassifiableMessage, DraftableMessage, IrisSettings, MessageState, PollResult, PushDay, PushRecord, RetryableMessage, StoredThread, ThreadHistoryRow } from "./store";
 
 /** Zod for every Iris row read and every Iris response (ADR 0017). */
@@ -66,6 +67,33 @@ export const PushDayRow = z.object({ day: z.string(), work_page_id: z.string().n
 export const ReviewResult = z.object({ result: z.enum(["ok", "conflict", "not_found"]), draft_id: z.guid().optional() })
   .transform((r) => ({ result: r.result, draftId: r.draft_id ?? null }));
 
+/** REQ-48: the send rows and what the send functions return. */
+const SendState = z.enum(["sending", "sent", "failed"]);
+export const SendContextRow = z.object({
+  id: z.guid(), state: SendState, attempts: z.number().int(), rfc_message_id: z.string().min(1),
+  draft: z.object({ body_text: z.string() }),
+  message: z.object({ from_email: z.string(), rfc_message_id: z.string().nullable(), thread: z.object({ gmail_thread_id: z.string(), subject: z.string().nullable() }) }),
+}).transform((r): SendContext => ({
+  sendId: r.id, state: r.state, attempts: r.attempts, rfcMessageId: r.rfc_message_id, draftText: r.draft.body_text, to: r.message.from_email,
+  subject: r.message.thread.subject, inReplyTo: r.message.rfc_message_id, gmailThreadId: r.message.thread.gmail_thread_id || null,
+}));
+export const ClaimResultValue = z.enum(["claimed", "busy", "done", "exhausted", "paused", "not_found"]);
+export const FinishResultValue = z.enum(["ok", "done", "not_found"]);
+export const FailResultValue = z.enum(["retrying", "failed", "done", "not_found"]);
+export const ApproveSendResult = z.object({
+  result: z.enum(["ok", "existing", "conflict", "not_found", "paused"]), send_id: z.guid().optional(), state: SendState.optional(),
+}).transform((r) => ({ result: r.result, sendId: r.send_id ?? null, state: r.state ?? null }));
+export type ApproveSendOutcome = z.infer<typeof ApproveSendResult>;
+export const RetrySendResult = z.object({ result: z.enum(["ok", "not_failed", "paused", "not_found"]), state: SendState.optional() })
+  .transform((r) => ({ result: r.result, state: r.state ?? null }));
+export type RetrySendOutcome = z.infer<typeof RetrySendResult>;
+
+/** The latest send of a message, for its page (REQ-48). */
+export type SendView = { id: string; state: "sending" | "sent" | "failed"; attempts: number; lastError: string | null; sentAt: string | null; leaseUntil: string | null };
+export const SendViewRow = z.object({
+  id: z.guid(), state: SendState, attempts: z.number().int(), last_error: z.string().nullable(), sent_at: ts.nullable(), lease_until: ts.nullable(),
+}).transform((r): SendView => ({ id: r.id, state: r.state, attempts: r.attempts, lastError: r.last_error, sentAt: r.sent_at, leaseUntil: r.lease_until }));
+
 export type DraftView = {
   id: string; version: number; replyType: string; bodyText: string; policyVersion: number;
   state: "proposed" | "approved" | "rejected" | "superseded" | "sent" | "failed"; createdBy: "iris" | "owner"; edited: boolean;
@@ -86,7 +114,7 @@ export const ThreadMessageRow = z.object({
   id: z.guid(), received_at: ts, direction: z.enum(["inbound", "outbound"]), source: z.string(), body_text: z.string().nullable(), snippet: z.string().nullable(),
 }).transform((r): ThreadMessage => ({ id: r.id, receivedAt: r.received_at, direction: r.direction, source: r.source, text: r.body_text ?? r.snippet }));
 
-export type ThreadView = { thread: ThreadMessage[]; drafts: DraftView[] };
+export type ThreadView = { thread: ThreadMessage[]; drafts: DraftView[]; send: SendView | null };
 
 /** What the owner sees: settings without the lease. */
 export type OwnerSettings = { paused: boolean; mailbox: string | null; lastPollAt: string | null; lastPollResult: PollResult | null; lastError: string | null; confidenceThreshold: number };
@@ -116,6 +144,8 @@ export type InboxMessage = {
   notionStudentId: string | null;
   /** Its Notion phone copy failed (REQ-44 AC13). */
   pushFailed: boolean;
+  /** The failed send behind a Failed row, for Retry (REQ-48). */
+  sendId?: string | null;
 };
 export const InboxMessageRow = z.object({
   id: z.guid(), thread_id: z.guid(), from_email: z.string(), snippet: z.string().nullable(), received_at: ts,
@@ -163,6 +193,7 @@ export const IrisRunResponse = z.strictObject({
   matched: count.optional(),
   classified: count.optional(),
   drafted: count.optional(),
+  sent: count.optional(),
   escalated: count.optional(),
   skipped: count.optional(),
   failed: count.optional(),

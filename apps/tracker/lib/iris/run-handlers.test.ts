@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ClassifyPort } from "./classify";
 import type { DraftPort } from "./draft";
 import { handleIrisRun, type IrisRunDeps } from "./handlers";
-import { GmailError, type GmailMessage } from "./gmail";
+import { GmailError, type GmailMessage, type GmailSendPort } from "./gmail";
 import type { GmailPort } from "./intake";
 import { POLICY_VERSION } from "./policy";
 import type { ClassifierIntent } from "./policy";
@@ -19,7 +19,7 @@ const message = (id: string, from: string): GmailMessage => ({
   payload: { mimeType: "text/plain", headers: [{ name: "From", value: from }, { name: "Subject", value: "Hi" }], body: { data: Buffer.from("hello").toString("base64url") } },
 });
 
-function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null; draft?: DraftPort | null; push?: IrisRunDeps["push"]; history?: GmailMessage[] } = {}) {
+function world(opts: { paused?: boolean; listFails?: boolean; classify?: ClassifyPort | null; draft?: DraftPort | null; push?: IrisRunDeps["push"]; sender?: GmailSendPort | null; history?: GmailMessage[] } = {}) {
   const db = fakeIrisStore({ paused: opts.paused ?? false });
   const gmailCalls: string[] = [];
   const gmail: GmailPort = {
@@ -33,7 +33,7 @@ function world(opts: { paused?: boolean; listFails?: boolean; classify?: Classif
     get: async (_t, id) => (gmailCalls.push(`get:${id}`), opts.history?.find((m) => m.id === id) ?? message(id, "who@z.com")),
   };
   const directoryCalls: number[] = [];
-  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, schedule: null, availability: null,
+  const deps: IrisRunDeps = { store: db.store, gmail, directory: async () => (directoryCalls.push(1), []), mailbox: "charlie@apacademy.ca", classify: opts.classify ?? null, draft: opts.draft ?? null, push: opts.push ?? null, sender: opts.sender ?? null, schedule: null, availability: null,
     evalClassify: opts.classify ?? null, evalDraft: opts.draft ?? null, model: "m",
   };
   const build = vi.fn((org: string) => (org ? deps : null));
@@ -329,6 +329,66 @@ describe("handleIrisRun: history import and eval", () => {
     w.db.request("eval_import_requested");
     expect((await w.run()).status).toBe(502);
     expect(order.some((o) => o.startsWith("listRefs"))).toBe(false);
+  });
+});
+
+// REQ-48 AC4, AC5, AC7: the run's send step.
+function sendPort(answer: string | number) {
+  const calls: string[] = [];
+  const port: GmailSendPort = {
+    readToken: async () => (calls.push("readToken"), "read"),
+    sendToken: async () => (calls.push("sendToken"), "send"),
+    send: async () => {
+      calls.push("send");
+      if (typeof answer === "number") throw new GmailError(`Gmail returned ${answer}`, answer);
+      return { id: answer, threadId: "t" };
+    },
+    findSent: async () => (calls.push("findSent"), null),
+  };
+  return { port, calls };
+}
+
+describe("handleIrisRun: sends", () => {
+  it("a paused run makes no Gmail call at all, send included", async () => {
+    const g = sendPort("gm-1");
+    const w = world({ paused: true, sender: g.port });
+    w.db.approved({ leaseUntil: null });
+    expect(await (await w.run()).json()).toEqual({ result: "paused" });
+    expect(g.calls).toEqual([]);
+    expect(w.gmailCalls).toEqual([]);
+  });
+
+  it("a stuck send (lease past) is verified, then sent, and counted in the run row", async () => {
+    const g = sendPort("gm-1");
+    const w = world({ sender: g.port });
+    w.db.setNow(() => T0);
+    const a = w.db.approved({ leaseUntil: null });
+    const res = await w.run();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ result: "ok", sent: 1 });
+    expect(g.calls).toEqual(["readToken", "findSent", "sendToken", "send"]);
+    expect(w.db.sends.get(a.sendId)!.state).toBe("sent");
+    expect(w.db.runs[0]).toMatchObject({ sent: 1, error: null });
+  });
+
+  it("a send error lands in the run's error line and the run stays 200", async () => {
+    const g = sendPort(500);
+    const w = world({ sender: g.port });
+    w.db.setNow(() => T0);
+    w.db.approved({ leaseUntil: null });
+    const res = await w.run();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ result: "ok", sent: 0 });
+    expect(w.db.runs[0].error).toBe("Gmail returned 500");
+    expect(w.db.settings.lastError).toBe("Gmail returned 500");
+  });
+
+  it("without a send port the run leaves sends alone", async () => {
+    const w = world();
+    const a = w.db.approved({ leaseUntil: null });
+    await w.run();
+    expect(w.db.sends.get(a.sendId)!.state).toBe("sending");
+    expect(w.db.calls).not.toContain("listStuckSends");
   });
 });
 

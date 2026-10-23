@@ -14,7 +14,9 @@ import { runIntake, type GmailPort } from "./intake";
 import type { TeacherCalendar } from "./makeup";
 import type { PushOutcome } from "./notion-push";
 import { POLICY_VERSION } from "./policy";
-import { IrisRunResponse, type InboxMessage, type MessageDetail, type OwnerSettings, type RunSummary, type ThreadView } from "./schemas";
+import { IrisRunResponse, type ApproveSendOutcome, type InboxMessage, type MessageDetail, type OwnerSettings, type RetrySendOutcome, type RunSummary, type ThreadView } from "./schemas";
+import type { GmailSendPort } from "./gmail";
+import { attemptSend, runSends, type SendStore } from "./send";
 import type { IrisStore } from "./store";
 import { runSupersede } from "./supersede";
 
@@ -43,6 +45,8 @@ export type IrisRunDeps = {
   availability: ((staffId: string) => Promise<TeacherCalendar>) | null;
   /** The Notion phone backup, or null when Notion Work is not set up (REQ-44). */
   push: ((d: { store: IrisStore; directory: () => Promise<FamilyEntry[]>; now: () => Date }) => Promise<PushOutcome>) | null;
+  /** Gmail with the send token's port (REQ-48), or null: sends then wait for a run that has it. */
+  sender: GmailSendPort | null;
   /** The same model calls for the eval run (REQ-45); null when AI is not set up. */
   evalClassify: ClassifyPort | null;
   evalDraft: DraftPort | null;
@@ -57,9 +61,10 @@ export type IrisRunDeps = {
  * lease is "busy". Every run that took the lease purges, records a run row,
  * writes the last-run columns and releases the lease. Only a Gmail list or
  * token failure is 502. It never throws. After a good intake it reads
- * Charlie's sent replies, classifies (REQ-43), drafts and pushes the phone
- * copies (REQ-44), runs the owner's history import and eval (REQ-45), then
- * purges; Students & Parents is read at most once per run.
+ * Charlie's sent replies, retries stuck sends (REQ-48, before classify so a
+ * slow model call never delays them), classifies (REQ-43), drafts and pushes
+ * the phone copies (REQ-44), runs the owner's history import and eval
+ * (REQ-45), then purges; Students & Parents is read at most once per run.
  */
 export async function handleIrisRun(input: {
   authorization: string | null;
@@ -107,6 +112,9 @@ export async function handleIrisRun(input: {
   const intake = await runIntake({ store, gmail: deps.gmail, directory, now, mailbox: deps.mailbox, settings: claimed });
   const ok = intake.result === "ok";
   const superseded = ok ? await runSupersede({ store, gmail: deps.gmail, settings: claimed }) : { stored: 0, superseded: 0, error: null };
+  const sends = ok && deps.sender
+    ? await runSends({ store, gmail: deps.sender, mailbox: deps.mailbox, now, startedAtMs: now().getTime() })
+    : { sent: 0, failed: 0, error: null };
   const classified = ok
     ? await runClassify({ store, classify: deps.classify, directory, settings: claimed, now, startedAtMs: startedMs })
     : { result: "ok" as const, classified: 0, escalated: 0, failed: 0, error: null };
@@ -125,7 +133,7 @@ export async function handleIrisRun(input: {
     ? await runEval({ store, classify: deps.evalClassify, draft: deps.evalDraft, directory, settings: claimed, model: deps.model, now, startedAtMs: startedMs })
     : null;
   const outcome = { ...intake, result: failedStep ? ("failed" as const) : intake.result };
-  let error = intake.error ?? classified.error ?? drafted.error ?? superseded.error ?? pushed?.error ?? imported?.error ?? evaluated?.error ?? null;
+  let error = intake.error ?? classified.error ?? drafted.error ?? superseded.error ?? sends.error ?? pushed?.error ?? imported?.error ?? evaluated?.error ?? null;
   let purged = 0;
   try {
     purged = await store.purge();
@@ -134,8 +142,8 @@ export async function handleIrisRun(input: {
   }
   const finishedAt = now().toISOString();
   const counts = {
-    seen: intake.seen, stored: intake.stored + superseded.stored, matched: intake.matched, classified: classified.classified, drafted: drafted.drafted,
-    escalated: intake.escalated + classified.escalated + drafted.escalated, skipped: intake.skipped, failed: intake.failed + classified.failed + drafted.failed, purged,
+    seen: intake.seen, stored: intake.stored + superseded.stored, matched: intake.matched, classified: classified.classified, drafted: drafted.drafted, sent: sends.sent,
+    escalated: intake.escalated + classified.escalated + drafted.escalated, skipped: intake.skipped, failed: intake.failed + classified.failed + drafted.failed + sends.failed, purged,
   };
   let runId: string | null = null;
   try {
@@ -151,8 +159,8 @@ export async function handleIrisRun(input: {
   return send(outcome.gmailListFailed ? 502 : 200, IrisRunResponse.parse({ result: outcome.result, runId, ...counts }));
 }
 
-/** What the owner pages and routes read, through the owner's own client (RLS decides). */
-export type IrisReader = {
+/** What the owner pages and routes read, through the owner's own client (RLS decides). The send rows (REQ-48) come from SendStore. */
+export type IrisReader = SendStore & {
   getSettings(): Promise<OwnerSettings | null>;
   lastRun(): Promise<RunSummary | null>;
   listNeedsYou(limit: number): Promise<InboxMessage[]>;
@@ -170,8 +178,11 @@ export type IrisReader = {
   listFailed(limit: number): Promise<InboxMessage[]>;
   /** The message's thread and its drafts, newest version first; null when not in the org. */
   getThreadView(id: string): Promise<ThreadView | null>;
-  /** iris.approve_draft, save_draft_edit and reject_draft (REQ-44): atomic, owner checked inside. */
-  approveDraft(id: string, version: number): Promise<ReviewOutcome>;
+  /** iris.approve_draft_for_send (REQ-48): approves and creates the one send; a second call returns it. */
+  approveForSend(id: string, version: number): Promise<ApproveSendOutcome>;
+  /** iris.retry_send (REQ-48): a failed send back to sending, owner only. */
+  retrySend(sendId: string): Promise<RetrySendOutcome>;
+  /** iris.save_draft_edit and reject_draft (REQ-44): atomic, owner checked inside. */
   saveDraftEdit(id: string, version: number, body: string): Promise<{ result: ReviewOutcome; draftId: string | null }>;
   rejectDraft(id: string, reason: string): Promise<ReviewOutcome>;
 };
@@ -180,6 +191,8 @@ export type ReviewOutcome = "ok" | "conflict" | "not_found";
 export type IrisAdminDeps = {
   identity: () => Promise<SchedulerIdentity>;
   reader: (orgId: string) => IrisReader;
+  /** Gmail for sending and the mailbox (REQ-48), or null when the service account is not set up. */
+  sender?: () => { gmail: GmailSendPort; mailbox: string } | null;
 };
 
 const SettingsBody = z.strictObject({ paused: z.boolean(), confirmed: z.literal(true).optional() });
@@ -281,8 +294,63 @@ async function review<T extends z.ZodType>(
   return send(200, { ok: true, ...(out.draftId ? { draftId: out.draftId } : {}) });
 }
 
-export const handleApproveDraft = (deps: IrisAdminDeps, id: string, body: unknown) =>
-  review(deps, id, body, ApproveBody, async (r, b) => ({ result: await r.approveDraft(id, b.version) }));
+/**
+ * The approve route (REQ-48 AC1, AC7, AC8, AC12): approve
+ * and send. Owner only; the guard runs before the id or the body is read.
+ * Without the Gmail service account it is 503 before any write. The approval
+ * and its one send row are saved together; a second Approve returns that
+ * send's state with no Gmail call. Then one attempt, with no search first
+ * (nothing can have gone out yet). The answer reports the send state, never
+ * assumes it: a failed attempt is still 200, with its error line.
+ */
+export async function handleApproveDraft(deps: IrisAdminDeps, id: string, body: unknown): Promise<Response> {
+  const gate = requireScheduler(await deps.identity(), ["admin"]);
+  if (!gate.ok) return deny(gate);
+  if (!z.guid().safeParse(id).success) return send(404, { error: "not_found" });
+  const parsed = ApproveBody.safeParse(body);
+  if (!parsed.success) return send(400, { error: "invalid_request" });
+  const sender = deps.sender?.() ?? null;
+  if (!sender) return notConfigured();
+  const reader = deps.reader(gate.identity.orgId);
+  let out: ApproveSendOutcome;
+  try {
+    out = await reader.approveForSend(id, parsed.data.version);
+  } catch {
+    return send(500, { error: "save_failed" });
+  }
+  if (out.result === "paused") return send(409, { error: "paused" });
+  if (out.result === "conflict") return send(409, { error: "conflict" });
+  if (out.result === "not_found" || !out.sendId) return send(404, { error: "not_found" });
+  if (out.result === "existing") return send(200, { ok: true, state: out.state, error: null });
+  const r = await attemptSend({ store: reader, gmail: sender.gmail, sendId: out.sendId, mailbox: sender.mailbox, verifyFirst: false, now: () => new Date() });
+  return send(200, { ok: true, state: r.state, error: r.error });
+}
+
+/**
+ * POST /api/iris/sends/[id]/retry (REQ-48 AC6). Owner only, checked first. A
+ * send that is not failed, or a paused Iris, is 409; another org's send 404.
+ * The attempt searches Gmail before sending, so a reply that went out earlier
+ * is recorded rather than sent again.
+ */
+export async function handleRetrySend(deps: IrisAdminDeps, id: string): Promise<Response> {
+  const gate = requireScheduler(await deps.identity(), ["admin"]);
+  if (!gate.ok) return deny(gate);
+  if (!z.guid().safeParse(id).success) return send(404, { error: "not_found" });
+  const sender = deps.sender?.() ?? null;
+  if (!sender) return notConfigured();
+  const reader = deps.reader(gate.identity.orgId);
+  let out: RetrySendOutcome;
+  try {
+    out = await reader.retrySend(id);
+  } catch {
+    return send(500, { error: "save_failed" });
+  }
+  if (out.result === "paused") return send(409, { error: "paused" });
+  if (out.result === "not_failed") return send(409, { error: "not_failed" });
+  if (out.result === "not_found") return send(404, { error: "not_found" });
+  const r = await attemptSend({ store: reader, gmail: sender.gmail, sendId: id, mailbox: sender.mailbox, verifyFirst: true, now: () => new Date() });
+  return send(200, { ok: true, state: r.state, error: r.error });
+}
 export const handleEditDraft = (deps: IrisAdminDeps, id: string, body: unknown) =>
   review(deps, id, body, EditBody, (r, b) => r.saveDraftEdit(id, b.version, b.body));
 export const handleRejectDraft = (deps: IrisAdminDeps, id: string, body: unknown) =>
