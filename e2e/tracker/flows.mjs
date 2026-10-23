@@ -1577,10 +1577,11 @@ try {
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
       // REQ-56 wires the north star; REQ-57 the Sales next and radar slots; REQ-58 Sales capacity and three Operations
-      // panels; REQ-59 the trial funnel and cash pulse; REQ-60 three Creation panels. Every other panel is a placeholder.
-      const WIRED = ["northStar", "next", "radar", "capacity", "teacherLoad", "lessonGaps", "upcoming", "conversion", "cashflow", "trials", "finance", "nextAsset", "work", "pipeline"];
+      // panels; REQ-59 the trial funnel and cash pulse; REQ-60 three Creation panels; REQ-62 the signals slots and the
+      // integrations slot. Every other panel is a placeholder.
+      const WIRED = ["northStar", "next", "radar", "capacity", "teacherLoad", "lessonGaps", "upcoming", "conversion", "cashflow", "trials", "finance", "nextAsset", "work", "pipeline", "signals", "integrations"];
       check("REQ-55: production panels other than the wired ones are Not connected yet",
-        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 3
+        (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 2
           && (await p.locator(`[data-panel]${WIRED.map((id) => `:not([data-panel="${id}"])`).join("")} [data-panel-value]`).count()) === 0);
 
       // REQ-56 AC5, AC9: the mock Notion serves Invoices, so the north star is a real read of this stack's series.
@@ -2096,6 +2097,174 @@ try {
       const transition = await next(reduced).locator('[role="option"][aria-selected="true"]').evaluate((e) => getComputedStyle(e).transitionProperty);
       check("REQ-57: the selection transition is none under reduced motion", transition === "none", transition);
       await reduced.context().close();
+    }
+
+    // REQ-62: polled signals, protected-time snooze and integration health, against the mock Notion's console leads.
+    {
+      const mock = (path) => fetch(`${MOCK_NOTION}${path}`, { method: "POST", headers: { "x-e2e-probe": "1" } }).then((r) => r.json());
+      const setVisibility = (p, state) => p.evaluate((s) => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => s });
+        document.dispatchEvent(new Event("visibilitychange"));
+      }, state);
+      // Hidden then visible: the health poller polls at once, and each new check after the first refreshes the signals.
+      const kick = async (p) => {
+        await setVisibility(p, "hidden");
+        await setVisibility(p, "visible");
+      };
+      const bandRows = (p) => p.locator('[data-signal-band] [data-signal^="fresh_lead:"]');
+      const bandNames = (p) => bandRows(p).locator(".console-row-title").allTextContents();
+      const deferredText = (p) => p.locator("[data-deferred] > summary").textContent();
+      const waitFor = async (fn, timeout = 20000) => {
+        const end = Date.now() + timeout;
+        while (Date.now() < end) {
+          if (await fn()) return true;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        return false;
+      };
+      const signalsRequests = (p) => {
+        const seen = [];
+        p.on("request", (r) => { if (r.url().includes("/api/console/signals")) seen.push(r.url()); });
+        return seen;
+      };
+
+      // AC1, AC6: one band row per lead across polls; the header says it is polled.
+      const p = await bridgeAt(1440, 900, "/console?mode=sales");
+      await syncSettled(p);
+      check("REQ-62: the header says Polling, not live", ((await p.locator("[data-sync-line]").textContent()) ?? "").includes("Polling, not live"));
+      check("REQ-62: the owner sees one NEW band row for Nova New", (await bandNames(p)).join() === "Nova New" && (await bandRows(p).first().locator(".console-new-tag").textContent()) === "NEW", (await bandNames(p)).join());
+      const requests = signalsRequests(p);
+      await mock("/__console/add-lead");
+      await kick(p);
+      await waitFor(async () => (await bandRows(p).count()) === 2);
+      check("REQ-62: a new lead adds one band row and pulses once", (await bandNames(p)).join() === "Nova New,Fresh Lead 1" && requests.length >= 1, `${(await bandNames(p)).join()} ${requests.length}`);
+      await kick(p);
+      await waitFor(async () => requests.length >= 2);
+      await kick(p);
+      await waitFor(async () => requests.length >= 3);
+      check("REQ-62: repeated polls still give two band rows", (await bandRows(p).count()) === 2 && requests.length >= 3, `${await bandRows(p).count()} ${requests.length}`);
+      const json = await p.context().request.get(`${BASE}/api/console/signals`, { maxRedirects: 0 });
+      const jsonText = await json.text();
+      check("REQ-62: the signals JSON is no-store and carries no phone, email or Lead ID",
+        json.status() === 200 && json.headers()["cache-control"] === "no-store" && !/555-0177|@|E2E-LEAD-77|tel:/.test(jsonText), `${json.status()} ${jsonText.slice(0, 120)}`);
+
+      // AC1: snooze moves a lead to deferred; Show now brings it back.
+      await bandRows(p).nth(1).locator("[data-snooze] > summary").click();
+      await bandRows(p).nth(1).getByRole("button", { name: /^15 min/ }).click();
+      check("REQ-62: Snooze moves one lead to deferred", (await bandRows(p).count()) === 1 && (await deferredText(p)) === "1 deferred", `${await bandRows(p).count()} ${await deferredText(p)}`);
+      await p.locator("[data-deferred] > summary").click();
+      await p.locator("[data-deferred]").getByRole("button", { name: "Show now" }).click();
+      check("REQ-62: Show now brings it back", (await bandRows(p).count()) === 2 && (await deferredText(p)) === "0 deferred", `${await bandRows(p).count()} ${await deferredText(p)}`);
+
+      // AC3, AC7: a failed leads read is red in the health rail with its reason, and the signals panel says checks failed.
+      await mock("/__console/leads-fail");
+      await kick(p);
+      const leadsHealth = p.locator('[data-health-rail] [data-health="notionLeads"]');
+      await waitFor(async () => (await leadsHealth.getAttribute("data-status")) === "error");
+      const signalsPanel = p.locator('#console-panel-sales [data-panel="signals"]');
+      check("REQ-62: Notion leads is red in the health rail with its reason",
+        (await leadsHealth.getAttribute("data-status")) === "error" && (await leadsHealth.locator(".console-health-reason").count()) === 1 && (await leadsHealth.locator("[data-health-status]").textContent()) === "error",
+        (await leadsHealth.textContent()) ?? "");
+      check("REQ-62: the signals panel reads Some checks failed, never No exceptions found",
+        (await signalsPanel.getByText("Some checks failed", { exact: false }).count()) > 0 && (await signalsPanel.getByText("No exceptions found", { exact: true }).count()) === 0);
+      check("REQ-62: the health rail lists seven providers in order",
+        (await p.locator("[data-health-rail] [data-health]").evaluateAll((els) => els.map((e) => e.getAttribute("data-health")))).join() === "notionLeads,notionLessons,notionInvoices,notionWork,schedulerTables,peopleSync,outbox");
+      await mock("/__console/leads-fail");
+      await p.context().close();
+
+      // AC2: the quiet toggle holds a new lead in deferred with no pulse.
+      {
+        const q = await bridgeAt(1440, 900, "/console?mode=sales");
+        await syncSettled(q);
+        await q.locator("[data-quiet] button").click();
+        check("REQ-62: Quiet is a pressed toggle", (await q.locator("[data-quiet] button").getAttribute("aria-pressed")) === "true" && (await q.locator("[data-protected-note]").textContent()) === "Quiet");
+        const before = await bandRows(q).count();
+        await mock("/__console/add-lead");
+        await kick(q);
+        await waitFor(async () => (await deferredText(q)) === "1 deferred");
+        check("REQ-62: in quiet mode a new lead goes to deferred, with no pulse and no assertive region",
+          (await deferredText(q)) === "1 deferred" && (await bandRows(q).count()) === before && (await q.locator("[data-signal-band] [data-pulse]").count()) === 0
+            && (await q.locator('[data-signal-band] [aria-live="assertive"]').count()) === 0,
+          `${await deferredText(q)} ${await bandRows(q).count()}/${before}`);
+        await q.context().close();
+      }
+
+      // AC2: the owner's own class in progress holds new leads the same way; the header says until when.
+      {
+        const ORG = "10000000-0000-0000-0000-00000000aaaa";
+        const OWNER = "00000000-0000-0000-0000-00000000aaaa";
+        const STAFF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0062";
+        const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+          .formatToParts(new Date()).map((x) => [x.type, x.value]));
+        // On the 5-minute grid, at least 15 minutes long and never past midnight (class_series checks), still covering now.
+        const minutes = Math.min(1425, Math.max(0, Math.floor((Number(parts.hour) * 60 + Number(parts.minute) - 5) / 5) * 5));
+        const start = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        const duration = Math.min(60, 1440 - minutes);
+        psql(`insert into tracker.staff_links (org_id, notion_staff_id, email, user_id, approved_by) values ('${ORG}', '${STAFF}', 'teacher@example.com', '${OWNER}', '${OWNER}')`);
+        const series = psql(`insert into tracker.class_series (org_id, request_id, notion_staff_id, notion_student_id, subject, kind, start_date, start_time, duration_minutes, created_by) values ('${ORG}', gen_random_uuid(), '${STAFF}', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0062', 'MHF4U', 'one_off', '${parts.year}-${parts.month}-${parts.day}', '${start}', ${duration}, '${OWNER}') returning id`).split("\n")[0];
+        const t = await bridgeAt(1440, 900, "/console?mode=sales");
+        await syncSettled(t);
+        const note = (await t.locator("[data-protected-note]").textContent()) ?? "";
+        check("REQ-62: a class in progress shows Teaching until", /^Teaching until \d\d:\d\d$/.test(note), note);
+        const before = await bandRows(t).count();
+        await mock("/__console/add-lead");
+        await kick(t);
+        await waitFor(async () => (await deferredText(t)) === "1 deferred");
+        check("REQ-62: while teaching a new lead goes to deferred and the band has no data-pulse",
+          (await deferredText(t)) === "1 deferred" && (await bandRows(t).count()) === before && (await t.locator("[data-signal-band] [data-pulse]").count()) === 0,
+          `${await deferredText(t)} ${await bandRows(t).count()}/${before}`);
+        await t.locator("[data-deferred] > summary").click();
+        await t.locator("[data-deferred]").getByRole("button", { name: "Show now" }).click();
+        check("REQ-62: a lead held during the class is recoverable with Show now", (await bandRows(t).count()) === before + 1 && (await deferredText(t)) === "0 deferred");
+        await t.context().close();
+        psql(`delete from tracker.class_series where id = '${series}'`);
+        psql(`update tracker.staff_links set revoked_at = now() where notion_staff_id = '${STAFF}' and revoked_at is null`);
+      }
+
+      // AC6: a hidden tab sends nothing for two intervals, then polls once when shown.
+      {
+        const ctx = await signedIn(browser, "teacher@example.com", { viewport: { width: 1440, height: 900 } }).then((pg) => pg.context());
+        await ctx.clock.install({ time: new Date() });
+        const h = ctx.pages()[0];
+        await h.goto(`${BASE}/console?mode=sales`);
+        await h.locator("[data-console]").waitFor({ timeout: 15000 });
+        await syncSettled(h);
+        const hidden = [];
+        h.on("request", (r) => { if (/\/api\/console\/(signals|health)/.test(r.url())) hidden.push(r.url()); });
+        await setVisibility(h, "hidden");
+        await ctx.clock.runFor(130_000);
+        const whileHidden = hidden.length;
+        const shown = h.waitForRequest((r) => r.url().includes("/api/console/signals"), { timeout: 20000 }).then(() => true, () => false);
+        await setVisibility(h, "visible");
+        await ctx.clock.runFor(1_000);
+        check("REQ-62: a hidden tab sends nothing for two intervals and polls when shown", whileHidden === 0 && (await shown), `${whileHidden}`);
+        await ctx.close();
+      }
+
+      // AC5: non-owners get the fixed denial, a guest the login redirect.
+      for (const [label, who] of [["teacher2", teacher2], ["the role-less user", outsider]]) {
+        const res = await who.context().request.get(`${BASE}/api/console/signals`, { maxRedirects: 0 });
+        const body = await res.text();
+        check(`REQ-62: ${label} gets 403 forbidden from the signals route`, res.status() === 403 && body === '{"error":"forbidden"}', `${res.status()} ${body}`);
+      }
+      {
+        const guestContext = await browser.newContext();
+        const res = await guestContext.request.get(`${BASE}/api/console/signals`, { maxRedirects: 0 });
+        check("REQ-62: a guest's signals request gets 307 to login", res.status() === 307 && res.headers()["location"] === "/login?next=/tracker/api/console/signals", `${res.status()} ${res.headers()["location"]}`);
+        await guestContext.close();
+      }
+
+      // Widths: no sideways scroll with the band and the health rail.
+      const SHOTS62 = new URL("../../docs/spec/founder-console/screenshots/req-62/", import.meta.url);
+      mkdirSync(SHOTS62, { recursive: true });
+      for (const [w, hgt] of [[390, 844], [1280, 720], [1440, 900], [1920, 1080]]) {
+        const q = await bridgeAt(w, hgt, "/console?mode=sales");
+        await syncSettled(q);
+        check(`REQ-62: /console?mode=sales at ${w} has no sideways scroll`, await noSideScroll(q));
+        await q.screenshot({ path: new URL(`console-signals-${w}x${hgt}.png`, SHOTS62).pathname, fullPage: true });
+        await q.context().close();
+      }
+      check("REQ-62: screenshots written to docs/spec/founder-console/screenshots/req-62/", true);
     }
   }
 

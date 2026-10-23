@@ -76,7 +76,7 @@ describe("loadOperationsPanels, all reads ok", () => {
     expect(lessonGaps.count).toBe(3); // Ryan 22 Oct, Ana 12 and 19 Oct
     expect(lessonGaps.data!.gaps.filter((g) => g.key.includes(ID(1)))).toEqual([{
       id: `sched:${ID(1)}:2026-10-22`, key: `sched:${ID(1)}:2026-10-22`, title: "Sam S. with Ryan M., MHF4U", action: "log", reason: "Log",
-      ended: "ended Thu 22 Oct 11:00", href: `/tracker/schedule?date=2026-10-22&staffId=${RYAN}`,
+      ended: "ended Thu 22 Oct 11:00", endedAt: "2026-10-22T15:00:00.000Z", href: `/tracker/schedule?date=2026-10-22&staffId=${RYAN}`,
     }]);
     expect(lessonGaps.data!.noShows.map((n) => n.key)).toEqual([`sched:${ID(1)}:2026-10-15`]);
     expect(lessonGaps.data!.window).toMatchObject({ from: "2026-10-09", to: "2026-10-22", days: 14 });

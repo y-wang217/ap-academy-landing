@@ -8,6 +8,9 @@ import { useSync } from "../shell/sync-provider";
 type SalesContextValue = { state: SalesState; dispatch: Dispatch<SalesAction>; retry: () => void };
 const SalesContext = createContext<SalesContextValue | null>(null);
 
+/** The sales context when the console has a sales view, else null (REQ-62: the signal band works without one). */
+export const useOptionalSales = (): SalesContextValue | null => useContext(SalesContext);
+
 export function useSales(): SalesContextValue {
   const value = useContext(SalesContext);
   if (!value) throw new Error("useSales outside SalesProvider");
@@ -19,9 +22,10 @@ export function useSales(): SalesContextValue {
  * server's view. It refreshes from GET /api/console/sales in step with the
  * existing health poll, or on Retry, one request at a time. The last good
  * queue lives only in this React state: no browser storage, no server cache.
+ * `lead` is ?lead= (REQ-62), preselected when it is in the queue.
  */
-export function SalesProvider({ initial, children }: { initial: SalesView; children: ReactNode }) {
-  const [state, dispatch] = useReducer(salesReducer, initial, initialSalesState);
+export function SalesProvider({ initial, lead = null, children }: { initial: SalesView; lead?: string | null; children: ReactNode }) {
+  const [state, dispatch] = useReducer(salesReducer, initial, (view) => initialSalesState(view, lead));
   const sync = useSync();
   const seen = useRef<string | null>(null);
   const busy = useRef(false);

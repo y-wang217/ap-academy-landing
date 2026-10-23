@@ -144,3 +144,15 @@ describe("shouldRefreshOnSync", () => {
     expect(shouldRefreshOnSync("t2", { kind: "unavailable", checkedAt: null, lastGoodAt: "t2" })).toEqual({ refresh: false, seen: "t2" });
   });
 });
+
+// REQ-62: a "Call now" deep link (?lead=) preselects that lead when it is in the queue.
+describe("initialSalesState with a lead", () => {
+  it("selects the lead, dashed or not, and falls back to the first item", () => {
+    const v = view();
+    const items = v.queue.data!.items;
+    const second = items[1].id;
+    expect(initialSalesState(v, second.replaceAll("-", "").toUpperCase()).selectedId).toBe(second);
+    expect(initialSalesState(v, "ffffffff-0000-4000-8000-000000000999").selectedId).toBe(items[0].id);
+    expect(initialSalesState(v).selectedId).toBe(items[0].id);
+  });
+});

@@ -11,8 +11,8 @@ const KEY = (d: string) => `sched:c0000000-0000-4000-8000-000000000001:${d}`;
 const DATA: LessonGapsData = {
   window: { from: "2026-10-09", to: "2026-10-22", days: 14, label: "Last 14 days" },
   gaps: [
-    { id: KEY("2026-10-15"), key: KEY("2026-10-15"), title: "Sam S. with Ryan M., MHF4U", action: "log", reason: "Log", ended: "ended Thu 15 Oct 11:00", href: "/tracker/schedule?date=2026-10-15&staffId=r" },
-    { id: KEY("2026-10-22"), key: KEY("2026-10-22"), title: "Sam S. with Ryan M., MHF4U", action: "link", reason: "Link existing lesson (2 candidates)", ended: "ended Thu 22 Oct 11:00", href: "/tracker/schedule/lessons?from=2026-10-09&to=2026-10-22" },
+    { id: KEY("2026-10-15"), key: KEY("2026-10-15"), title: "Sam S. with Ryan M., MHF4U", action: "log", reason: "Log", ended: "ended Thu 15 Oct 11:00", endedAt: "2026-10-15T15:00:00.000Z", href: "/tracker/schedule?date=2026-10-15&staffId=r" },
+    { id: KEY("2026-10-22"), key: KEY("2026-10-22"), title: "Sam S. with Ryan M., MHF4U", action: "link", reason: "Link existing lesson (2 candidates)", ended: "ended Thu 22 Oct 11:00", endedAt: "2026-10-22T15:00:00.000Z", href: "/tracker/schedule/lessons?from=2026-10-09&to=2026-10-22" },
   ],
   moreGaps: 0,
   noShows: [{ id: "n1", key: KEY("2026-10-08"), title: "Sam S. with Ryan M., MHF4U", ended: "ended Thu 8 Oct 11:00", href: "/tracker/schedule?date=2026-10-08&staffId=r" }],

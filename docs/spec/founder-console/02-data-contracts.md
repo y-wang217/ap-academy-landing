@@ -282,8 +282,11 @@ One failed provider never blanks another panel.
   `attempts`, `last_error`, `next_attempt_at`), `tracker.sync_runs` (0022:
   `kind`, `trigger`, `result` ok or failed, `started_at`, `finished_at`,
   `error`).
-- **Adapter today:** `undiscovered` for any signal; outbox rows via
-  `apps/tracker/lib/scheduler/outbox-store.ts`.
+- **Adapter today:** `buildSignals` (`apps/tracker/lib/console/signals.ts`)
+  from the facade and Operations, `readFailedOutbox` and `readOwnerTeaching`
+  (`apps/tracker/lib/console/signals-read.ts`), served by
+  `GET /api/console/signals` (REQ-62, tracker ADR 0077); outbox delivery
+  stays in `apps/tracker/lib/scheduler/outbox-store.ts`.
 - **Console read path:** bounded polling. A fresh lead can only be found by
   polling Students & Parents on created time with `Stage = New`.
 - **Freshness:** the poll interval; never shown as live.
@@ -303,8 +306,10 @@ One failed provider never blanks another panel.
   than people sync:
   `grep -rnE "lastSuccessfulFetch|last_successful_fetch|fetched_at" apps/tracker/lib supabase/migrations`
   prints nothing.
-- **Console read path:** `loadSetupInput` as the setup page calls it, plus
-  the per-panel fetch times REQ-54 records.
+- **Console read path:** `buildHealth` (`apps/tracker/lib/console/signals.ts`,
+  REQ-62): seven providers from the facade panels' statuses and fetch times
+  REQ-54 records, Operations' schedule and lessons reads, the people panel and
+  the failed outbox rows. `loadSetupInput` stays the setup page's read.
 - **Freshness:** Postgres at read time.
 - **Failure state:** `error` per provider; one failed provider never marks
   another healthy.

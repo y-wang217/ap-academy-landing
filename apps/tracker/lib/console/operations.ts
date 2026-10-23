@@ -31,7 +31,8 @@ export type TeacherLoadRowView = {
 export type TeacherLoadData = { weeks: [WeekLabel, WeekLabel]; rows: TeacherLoadRowView[]; scheduleHref: string; conflictsHref: string };
 export type WeekLabel = DateRange & { label: string };
 
-export type GapItem = { id: string; key: string; title: string; action: GapRow["nextAction"]; reason: string; ended: string; href: string };
+/** `endedAt` is the class end instant (REQ-62 reads it for the 48 h signal). */
+export type GapItem = { id: string; key: string; title: string; action: GapRow["nextAction"]; reason: string; ended: string; endedAt: string; href: string };
 export type NoShowItem = { id: string; key: string; title: string; ended: string; href: string };
 export type LessonGapsData = {
   window: DateRange & { days: number; label: string };
@@ -208,6 +209,7 @@ export async function loadOperationsPanels(input: OperationsInput): Promise<Oper
       action: g.nextAction,
       reason: g.nextAction === "log" ? "Log" : g.nextAction === "link" ? `Link existing lesson (${plural(g.candidates ?? 0, "candidate")})` : "Review",
       ended: endedAt(g.occurrence),
+      endedAt: g.occurrence.endsAt,
       href: g.nextAction === "log" ? weekHref(g.occurrence.date, g.occurrence.staffId) : unlinkedHref(gapWindow),
     }));
     const noShows = result.noShows.map((o): NoShowItem => ({ id: o.occurrenceKey, key: `sched:${o.seriesId}:${o.originalDate}`, title: title(o), ended: endedAt(o), href: weekHref(o.date, o.staffId) }));

@@ -16,6 +16,10 @@ const walk = (dir: string): string[] =>
       })
     : [];
 const FILES = [...walk("app/console"), ...walk("app/api/console"), ...walk("lib/console"), ...walk("components/console")];
+const SIGNAL_FILES = [
+  "app/api/console/signals/route.ts", "lib/console/signals.ts", "lib/console/signals-read.ts", "lib/console/signals-state.ts",
+  ...walk("components/console/signals"),
+];
 
 describe("console source scan (AC7, AC8)", () => {
   it("covers the REQ-57 sales queue files", () => {
@@ -25,6 +29,23 @@ describe("console source scan (AC7, AC8)", () => {
     ]) {
       expect(FILES).toContain(f);
     }
+  });
+
+  it("covers the REQ-62 signals files", () => {
+    for (const f of SIGNAL_FILES) expect(FILES).toContain(f);
+  });
+
+  // REQ-62 AC2, AC4: the signals never sound, call, text, mail or write.
+  it.each(SIGNAL_FILES)("%s plays no sound, has no tel:, sms: or mailto:, no non-GET fetch and no write", (f) => {
+    const src = read(f);
+    for (const s of ["new Audio", "<audio", "tel:", "sms:", "mailto:"]) expect(src).not.toContain(s);
+    expect(src).not.toMatch(/method:\s*"(POST|PUT|PATCH|DELETE)"/i);
+    expect(src).not.toMatch(/\.(insert|update|upsert|delete)\(/);
+    for (const call of src.matchAll(/\.rpc\(\s*"([^"]+)"/g)) expect(call[1]).toBe("is_org_owner");
+  });
+
+  it("the header says Polling, not live (REQ-62 AC6)", () => {
+    expect(read("components/console/shell/sync-line.tsx")).toContain("Polling, not live");
   });
 
   it.each(FILES)("%s holds no tel: link or Parent Phone (REQ-57 AC8)", (f) => {
