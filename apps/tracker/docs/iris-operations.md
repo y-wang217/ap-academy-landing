@@ -133,6 +133,36 @@ most once, however many times Approve or Retry is pressed.
 - Do not send the same reply by hand from Gmail and then press Retry: Iris
   cannot see a copy you wrote yourself and would send its own.
 
+## Auto-send
+
+A reply type that passed the eval gate and 20 unedited approvals in a row
+at the current policy can send on its own (REQ-49, tracker ADR 0078). Both
+switches start off, and stay off after every deploy until you turn them on.
+
+- **Sending enabled.** The global switch, on `/tracker/iris/settings` under
+  Auto-send. Turning it on needs the tick; Turn off never asks. With it off,
+  no reply is sent automatically, whatever the types say.
+- **Per type.** A type shows a Turn on button only once it is eligible (20
+  unedited approvals at the current policy) and is not on the never list.
+  Turn on runs the full gate again; if anything is missing it says what and
+  stays off. Turn off always works.
+- **What goes out.** Only a drafted message with one intent, no flags,
+  confidence at or above the threshold, one student where the intent needs
+  one, and an unedited Iris draft. Anything else waits for you as before.
+  Each auto reply ends with the automated line after the signature, and the
+  message page says "Approved automatically".
+- **Quiet hours.** Between 21:00 and 07:00 Toronto an approved auto reply is
+  held; the page says "Sends at 07:00" and the first run at or after 07:00
+  sends it. Your own Approve at night still sends at once.
+- **Stop one held 07:00 send.** An approved draft cannot be edited. Turn off
+  its type (or Sending enabled): at its next attempt the send is withdrawn
+  and the draft goes back to your queue.
+- **What turns a type off by itself.** You edit or reject one of its drafts
+  (the streak restarts), an automatic send of it fails after 3 attempts
+  (the streak is kept; turn it back on once Gmail works), or the policy
+  version changes (every type, streaks restart). The settings page shows
+  the last reason for each type.
+
 ## Phone backup
 
 With Notion set up (REQ-44, tracker ADR 0064), each run adds one to-do per

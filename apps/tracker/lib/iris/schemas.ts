@@ -11,9 +11,11 @@ const States = z.enum(["received", "matched", "classified", "escalated", "drafte
 
 export const SettingsRow = z.object({
   id: z.guid(), org_id: z.guid(), paused: z.boolean(), retention_days: z.number().int(), confidence_threshold: numeric,
+  sending_enabled: z.boolean(), quiet_start: z.string().regex(/^\d{2}:\d{2}/), quiet_end: z.string().regex(/^\d{2}:\d{2}/),
   last_poll_at: ts.nullable(), last_poll_result: Result.nullable(), last_error: z.string().nullable(),
 }).transform((r): IrisSettings => ({
   id: r.id, orgId: r.org_id, paused: r.paused, retentionDays: r.retention_days, confidenceThreshold: r.confidence_threshold,
+  sendingEnabled: r.sending_enabled, quietStart: r.quiet_start.slice(0, 5), quietEnd: r.quiet_end.slice(0, 5),
   lastPollAt: r.last_poll_at, lastPollResult: r.last_poll_result as PollResult | null, lastError: r.last_error,
 }));
 
@@ -70,14 +72,23 @@ export const ReviewResult = z.object({ result: z.enum(["ok", "conflict", "not_fo
 /** REQ-48: the send rows and what the send functions return. */
 const SendState = z.enum(["sending", "sent", "failed"]);
 export const SendContextRow = z.object({
-  id: z.guid(), state: SendState, attempts: z.number().int(), rfc_message_id: z.string().min(1),
+  id: z.guid(), state: SendState, attempts: z.number().int(), rfc_message_id: z.string().min(1), mode: z.enum(["manual", "auto"]),
   draft: z.object({ body_text: z.string() }),
   message: z.object({ from_email: z.string(), rfc_message_id: z.string().nullable(), thread: z.object({ gmail_thread_id: z.string(), subject: z.string().nullable() }) }),
 }).transform((r): SendContext => ({
   sendId: r.id, state: r.state, attempts: r.attempts, rfcMessageId: r.rfc_message_id, draftText: r.draft.body_text, to: r.message.from_email,
-  subject: r.message.thread.subject, inReplyTo: r.message.rfc_message_id, gmailThreadId: r.message.thread.gmail_thread_id || null,
+  subject: r.message.thread.subject, inReplyTo: r.message.rfc_message_id, gmailThreadId: r.message.thread.gmail_thread_id || null, mode: r.mode,
 }));
-export const ClaimResultValue = z.enum(["claimed", "busy", "done", "exhausted", "paused", "not_found"]);
+export const ClaimResultValue = z.enum(["claimed", "busy", "done", "exhausted", "paused", "withdrawn", "not_found"]);
+/** iris.auto_approve_draft (REQ-49). */
+export const AutoApproveRow = z.union([
+  z.object({ result: z.literal("ok"), send_id: z.guid() }).transform((r) => ({ result: "ok" as const, sendId: r.send_id })),
+  z.object({ result: z.literal("skipped"), reason: z.string().max(64) }).transform((r) => ({ result: "skipped" as const, reason: r.reason })),
+]);
+/** iris.set_auto_send (REQ-49). */
+export const SetAutoSendResult = z.object({ result: z.enum(["ok", "gate_failed", "not_found"]), failing: z.array(z.string()).optional() })
+  .transform((r) => ({ result: r.result, failing: r.failing ?? [] }));
+export type SetAutoSendOutcome = z.infer<typeof SetAutoSendResult>;
 export const FinishResultValue = z.enum(["ok", "done", "not_found"]);
 export const FailResultValue = z.enum(["retrying", "failed", "done", "not_found"]);
 export const ApproveSendResult = z.object({
@@ -98,14 +109,17 @@ export type DraftView = {
   id: string; version: number; replyType: string; bodyText: string; policyVersion: number;
   state: "proposed" | "approved" | "rejected" | "superseded" | "sent" | "failed"; createdBy: "iris" | "owner"; edited: boolean;
   approvedAt: string | null; rejectedReason: string | null; createdAt: string;
+  /** REQ-49: auto for a gate approval; sendAfter while it waits for the end of quiet hours. */
+  approvalMode: "manual" | "auto" | null; sendAfter: string | null;
 };
 export const DraftRow = z.object({
   id: z.guid(), version: z.number().int(), reply_type: z.string(), body_text: z.string(), policy_version: z.number().int(),
   state: z.enum(["proposed", "approved", "rejected", "superseded", "sent", "failed"]), created_by: z.enum(["iris", "owner"]), edited: z.boolean(),
   approved_at: ts.nullable(), rejected_reason: z.string().nullable(), created_at: ts,
+  approval_mode: z.enum(["manual", "auto"]).nullable(), send_after: ts.nullable(),
 }).transform((r): DraftView => ({
   id: r.id, version: r.version, replyType: r.reply_type, bodyText: r.body_text, policyVersion: r.policy_version, state: r.state, createdBy: r.created_by,
-  edited: r.edited, approvedAt: r.approved_at, rejectedReason: r.rejected_reason, createdAt: r.created_at,
+  edited: r.edited, approvedAt: r.approved_at, rejectedReason: r.rejected_reason, createdAt: r.created_at, approvalMode: r.approval_mode, sendAfter: r.send_after,
 }));
 
 /** Another message of the same thread, for the message page. */
@@ -117,10 +131,18 @@ export const ThreadMessageRow = z.object({
 export type ThreadView = { thread: ThreadMessage[]; drafts: DraftView[]; send: SendView | null };
 
 /** What the owner sees: settings without the lease. */
-export type OwnerSettings = { paused: boolean; mailbox: string | null; lastPollAt: string | null; lastPollResult: PollResult | null; lastError: string | null; confidenceThreshold: number };
+export type OwnerSettings = {
+  paused: boolean; mailbox: string | null; lastPollAt: string | null; lastPollResult: PollResult | null; lastError: string | null; confidenceThreshold: number;
+  /** REQ-49: the global auto-send switch and quiet hours (read-only on the page). */
+  sendingEnabled: boolean; quietStart: string; quietEnd: string;
+};
 export const OwnerSettingsRow = z.object({
   paused: z.boolean(), mailbox: z.string().nullable(), last_poll_at: ts.nullable(), last_poll_result: Result.nullable(), last_error: z.string().nullable(), confidence_threshold: numeric,
-}).transform((r): OwnerSettings => ({ paused: r.paused, mailbox: r.mailbox, lastPollAt: r.last_poll_at, lastPollResult: r.last_poll_result, lastError: r.last_error, confidenceThreshold: r.confidence_threshold }));
+  sending_enabled: z.boolean(), quiet_start: z.string(), quiet_end: z.string(),
+}).transform((r): OwnerSettings => ({
+  paused: r.paused, mailbox: r.mailbox, lastPollAt: r.last_poll_at, lastPollResult: r.last_poll_result, lastError: r.last_error, confidenceThreshold: r.confidence_threshold,
+  sendingEnabled: r.sending_enabled, quietStart: r.quiet_start.slice(0, 5), quietEnd: r.quiet_end.slice(0, 5),
+}));
 
 export type RunSummary = { startedAt: string; result: PollResult; stored: number; matched: number; escalated: number; failed: number; error: string | null };
 export const RunRow = z.object({

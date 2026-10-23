@@ -5,16 +5,19 @@ import type { FamilyEntry } from "../notion/parents";
 import { requireScheduler, type Denial } from "../scheduler/guard";
 import type { SchedulerIdentity } from "../scheduler/identity";
 import type { ClassifyPort } from "./classify";
+import { runAutoSend } from "./auto-send";
 import { runClassify } from "./classify-step";
 import type { DraftPort } from "./draft";
 import { runDraft, type StudentSchedule } from "./draft-step";
+import type { EvalAdminDeps } from "./eval-handlers";
 import { runEval } from "./eval-step";
+import { AUTO_SEND_CANDIDATES, evaluateGate } from "./gate";
 import { runHistoryImport } from "./history-import";
 import { runIntake, type GmailPort } from "./intake";
 import type { TeacherCalendar } from "./makeup";
 import type { PushOutcome } from "./notion-push";
-import { POLICY_VERSION } from "./policy";
-import { IrisRunResponse, type ApproveSendOutcome, type InboxMessage, type MessageDetail, type OwnerSettings, type RetrySendOutcome, type RunSummary, type ThreadView } from "./schemas";
+import { NEVER_AUTO_SEND, POLICY_VERSION } from "./policy";
+import { IrisRunResponse, type ApproveSendOutcome, type InboxMessage, type MessageDetail, type OwnerSettings, type RetrySendOutcome, type RunSummary, type SetAutoSendOutcome, type ThreadView } from "./schemas";
 import type { GmailSendPort } from "./gmail";
 import { attemptSend, runSends, type SendStore } from "./send";
 import type { IrisStore } from "./store";
@@ -65,6 +68,9 @@ export type IrisRunDeps = {
  * slow model call never delays them), classifies (REQ-43), drafts and pushes
  * the phone copies (REQ-44), runs the owner's history import and eval
  * (REQ-45), then purges; Students & Parents is read at most once per run.
+ * REQ-49: right after the claim the policy reset restarts every streak at
+ * another policy version, and between draft and push the auto-send gate
+ * approves and sends what passes, so an auto-approved message is never pushed.
  */
 export async function handleIrisRun(input: {
   authorization: string | null;
@@ -107,6 +113,12 @@ export async function handleIrisRun(input: {
 
   const startedMs = now().getTime();
   const startedAt = new Date(startedMs).toISOString();
+  let resetError: string | null = null;
+  try {
+    await store.resetForPolicy(POLICY_VERSION);
+  } catch {
+    resetError = "Could not reset streaks for the policy";
+  }
   let once: Promise<FamilyEntry[]> | undefined;
   const directory = () => (once ??= deps.directory());
   const intake = await runIntake({ store, gmail: deps.gmail, directory, now, mailbox: deps.mailbox, settings: claimed });
@@ -120,8 +132,11 @@ export async function handleIrisRun(input: {
     : { result: "ok" as const, classified: 0, escalated: 0, failed: 0, error: null };
   const drafted = ok && classified.result === "ok"
     ? await runDraft({ store, draft: deps.draft, directory, schedule: deps.schedule, availability: deps.availability, now, startedAtMs: startedMs })
-    : { result: "ok" as const, drafted: 0, escalated: 0, failed: 0, error: null };
+    : { result: "ok" as const, drafted: 0, escalated: 0, failed: 0, error: null, draftedIds: [] };
   const failedStep = classified.result === "failed" || drafted.result === "failed";
+  const auto = ok && drafted.result === "ok"
+    ? await runAutoSend({ store, sender: deps.sender, mailbox: deps.mailbox, settings: claimed, drafted: drafted.draftedIds, now, startedAtMs: now().getTime() })
+    : { approved: 0, sent: 0, failed: 0, skipped: 0, error: null };
   const pushed = ok && !failedStep && deps.push && now().getTime() - startedMs < TUNING.irisPushBudgetMs
     ? await deps.push({ store, directory, now })
     : null;
@@ -133,7 +148,7 @@ export async function handleIrisRun(input: {
     ? await runEval({ store, classify: deps.evalClassify, draft: deps.evalDraft, directory, settings: claimed, model: deps.model, now, startedAtMs: startedMs })
     : null;
   const outcome = { ...intake, result: failedStep ? ("failed" as const) : intake.result };
-  let error = intake.error ?? classified.error ?? drafted.error ?? superseded.error ?? sends.error ?? pushed?.error ?? imported?.error ?? evaluated?.error ?? null;
+  let error = intake.error ?? classified.error ?? drafted.error ?? superseded.error ?? sends.error ?? auto.error ?? resetError ?? pushed?.error ?? imported?.error ?? evaluated?.error ?? null;
   let purged = 0;
   try {
     purged = await store.purge();
@@ -142,8 +157,8 @@ export async function handleIrisRun(input: {
   }
   const finishedAt = now().toISOString();
   const counts = {
-    seen: intake.seen, stored: intake.stored + superseded.stored, matched: intake.matched, classified: classified.classified, drafted: drafted.drafted, sent: sends.sent,
-    escalated: intake.escalated + classified.escalated + drafted.escalated, skipped: intake.skipped, failed: intake.failed + classified.failed + drafted.failed + sends.failed, purged,
+    seen: intake.seen, stored: intake.stored + superseded.stored, matched: intake.matched, classified: classified.classified, drafted: drafted.drafted, sent: sends.sent + auto.sent,
+    escalated: intake.escalated + classified.escalated + drafted.escalated, skipped: intake.skipped, failed: intake.failed + classified.failed + drafted.failed + sends.failed + auto.failed, purged,
   };
   let runId: string | null = null;
   try {
@@ -167,6 +182,10 @@ export type IrisReader = SendStore & {
   listRecent(limit: number): Promise<InboxMessage[]>;
   /** Rows updated: 0 means RLS or the grant refused it. */
   updatePaused(paused: boolean): Promise<number>;
+  /** REQ-49: the global Sending switch. Rows updated, as updatePaused. */
+  updateSendingEnabled(on: boolean): Promise<number>;
+  /** REQ-49: iris.set_auto_send, the only way to switch a type; the floor is checked in SQL. */
+  setAutoSend(type: string, enabled: boolean, policyVersion: number): Promise<SetAutoSendOutcome>;
   /** One inbound message, or null when it is not in the owner's org. */
   getMessage(id: string): Promise<MessageDetail | null>;
   /** Sets handled_at and handled_by on an unhandled escalated message and logs one event (REQ-43). */
@@ -195,23 +214,74 @@ export type IrisAdminDeps = {
   sender?: () => { gmail: GmailSendPort; mailbox: string } | null;
 };
 
-const SettingsBody = z.strictObject({ paused: z.boolean(), confirmed: z.literal(true).optional() });
+const SettingsBody = z.union([
+  z.strictObject({ paused: z.boolean(), confirmed: z.literal(true).optional() }),
+  z.strictObject({ sendingEnabled: z.boolean(), confirmed: z.literal(true).optional() }),
+]);
 
-/** PATCH /api/iris/settings. Owner only; the guard runs before anything is read. Unpause needs the tick. */
+/**
+ * PATCH /api/iris/settings. Owner only; the guard runs before anything is
+ * read. One switch per call: Paused, or Sending enabled (REQ-49). Unpause and
+ * turning Sending on need the tick. The settings audit trigger records each.
+ */
 export async function handleIrisSettings(deps: IrisAdminDeps, body: unknown): Promise<Response> {
   const gate = requireScheduler(await deps.identity(), ["admin"]);
   if (!gate.ok) return deny(gate);
   const parsed = SettingsBody.safeParse(body);
   if (!parsed.success) return send(400, { error: "invalid_request" });
-  if (!parsed.data.paused && !parsed.data.confirmed) return send(400, { error: "confirm_required" });
+  const b = parsed.data;
+  const risky = "paused" in b ? !b.paused : b.sendingEnabled;
+  if (risky && !b.confirmed) return send(400, { error: "confirm_required" });
   let updated: number;
   try {
-    updated = await deps.reader(gate.identity.orgId).updatePaused(parsed.data.paused);
+    const reader = deps.reader(gate.identity.orgId);
+    updated = "paused" in b ? await reader.updatePaused(b.paused) : await reader.updateSendingEnabled(b.sendingEnabled);
   } catch {
     return unavailable();
   }
   if (updated === 0) return send(403, { error: "forbidden" });
-  return send(200, { paused: parsed.data.paused });
+  return send(200, "paused" in b ? { paused: b.paused } : { sendingEnabled: b.sendingEnabled });
+}
+
+const AutoSendBody = z.strictObject({ enabled: z.boolean() });
+
+/**
+ * POST /api/iris/reply-types/[type]/auto-send (REQ-49 AC10). Owner only; the
+ * guard runs before the type or the body is read. A never-list type is 422,
+ * any other unknown type 404. Enabling runs the full gate over the latest
+ * recorded eval run first (422 with every failing condition), then
+ * iris.set_auto_send, which enforces the floor again in SQL. Switching off
+ * always succeeds for the owner.
+ */
+export async function handleAutoSendSwitch(deps: IrisAdminDeps, evalDeps: EvalAdminDeps, type: string, body: unknown): Promise<Response> {
+  const gate = requireScheduler(await deps.identity(), ["admin"]);
+  if (!gate.ok) return deny(gate);
+  if (!(AUTO_SEND_CANDIDATES as readonly string[]).includes(type)) {
+    if ((NEVER_AUTO_SEND as readonly string[]).includes(type)) return send(422, { error: "gate_failed", failing: ["never_auto_send"] });
+    return send(404, { error: "not_found" });
+  }
+  const parsed = AutoSendBody.safeParse(body);
+  if (!parsed.success) return send(400, { error: "invalid_request" });
+  const orgId = gate.identity.orgId;
+  if (parsed.data.enabled) {
+    let check: ReturnType<typeof evaluateGate>;
+    try {
+      const { run, replyTypes } = await evalDeps.reader(orgId).gateInputs();
+      check = evaluateGate({ type, run, replyType: replyTypes[type] ?? null, policyVersion: POLICY_VERSION, model: evalDeps.model });
+    } catch {
+      return unavailable();
+    }
+    if (!check.pass) return send(422, { error: "gate_failed", failing: check.failing });
+  }
+  let out: SetAutoSendOutcome;
+  try {
+    out = await deps.reader(orgId).setAutoSend(type, parsed.data.enabled, POLICY_VERSION);
+  } catch {
+    return send(500, { error: "save_failed" });
+  }
+  if (out.result === "gate_failed") return send(422, { error: "gate_failed", failing: out.failing });
+  if (out.result === "not_found") return send(403, { error: "forbidden" });
+  return send(200, { type, enabled: parsed.data.enabled });
 }
 
 /**
@@ -438,7 +508,11 @@ export async function loadMessage(deps: IrisAdminDeps & { studentNames: (orgId: 
 export type IrisSettingsResult =
   | { kind: "denied" }
   | { kind: "error" }
-  | { kind: "ok"; paused: boolean; lastRun: RunSummary | null; lastError: string | null; missing: string[]; aiConfigured: boolean; confidenceThreshold: number; phoneAlertsOff: boolean };
+  | {
+      kind: "ok"; paused: boolean; lastRun: RunSummary | null; lastError: string | null; missing: string[]; aiConfigured: boolean; confidenceThreshold: number; phoneAlertsOff: boolean;
+      /** REQ-49: the global Sending switch and the quiet hours, read-only. */
+      sendingEnabled: boolean; quietStart: string; quietEnd: string;
+    };
 
 /**
  * The /iris/settings page: state, the last run, its error, the unset env
@@ -451,7 +525,10 @@ export async function loadIrisSettings(deps: IrisAdminDeps, missing: string[], a
     const reader = deps.reader(gate.orgId);
     const [settings, lastRun] = await Promise.all([reader.getSettings(), reader.lastRun()]);
     if (!settings) return { kind: "error" };
-    return { kind: "ok", paused: settings.paused, lastRun, lastError: settings.lastError, missing, aiConfigured, confidenceThreshold: settings.confidenceThreshold, phoneAlertsOff };
+    return {
+      kind: "ok", paused: settings.paused, lastRun, lastError: settings.lastError, missing, aiConfigured, confidenceThreshold: settings.confidenceThreshold, phoneAlertsOff,
+      sendingEnabled: settings.sendingEnabled, quietStart: settings.quietStart, quietEnd: settings.quietEnd,
+    };
   } catch {
     return { kind: "error" };
   }

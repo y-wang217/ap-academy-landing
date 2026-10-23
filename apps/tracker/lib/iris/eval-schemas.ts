@@ -104,4 +104,9 @@ export type EvalStatus = {
   counts: { imported: number; labelled: number; evalTotal: number; evalDone: number; unratedDrafts: number };
 };
 
-export type GateInputs = { run: (GateRun & { ranAt: string }) | null; replyTypes: Record<string, GateStreak> };
+/** REQ-49: the rest of a reply type's row, for the settings page. Absent where a caller only has the streak. */
+export type ReplyTypeState = {
+  autoSendEligible: boolean; autoSendEnabled: boolean; approvedUneditedTotal: number; editedTotal: number; rejectedTotal: number;
+  disabledReason: string | null; disabledAt: string | null;
+};
+export type GateInputs = { run: (GateRun & { ranAt: string }) | null; replyTypes: Record<string, GateStreak & Partial<ReplyTypeState>> };

@@ -37,6 +37,13 @@ export type EscalateOnly = (typeof ESCALATE_ONLY)[number];
 
 export const NEVER_AUTO_SEND: readonly (ReplyType | EscalateOnly)[] = ["pause_or_stop", ...ESCALATE_ONLY];
 
+/**
+ * Appended by code after the signature of an auto-sent reply only (REQ-49,
+ * spec decision 13). Not policy text a prompt reads: POLICY_VERSION stays.
+ */
+export const AUTOMATED_LINE =
+  "This reply was sent automatically from AP Academy's written policy. If anything here is not right, reply to this email and Charlie will pick it up personally.";
+
 export type PolicySection = { title: string; text: string; autoSendAllowed: boolean };
 
 export const POLICY: Record<ReplyType | EscalateOnly, PolicySection> = {

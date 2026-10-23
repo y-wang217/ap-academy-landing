@@ -2,6 +2,7 @@ import { TUNING } from "../domain/tuning";
 import { buildReply, ComposeError } from "./compose";
 import { withSignature } from "./draft-rules";
 import { GmailError, type GmailSendPort } from "./gmail";
+import { AUTOMATED_LINE } from "./policy";
 
 /**
  * Sending an approved reply (REQ-48, tracker ADR 0069). One iris.sends row
@@ -25,9 +26,12 @@ export type SendContext = {
   /** The inbound message's Message-ID, for In-Reply-To and References. */
   inReplyTo: string | null;
   gmailThreadId: string | null;
+  /** auto (REQ-49) carries the automated line after the signature; manual never does. */
+  mode: "manual" | "auto";
 };
 
-export type ClaimResult = "claimed" | "busy" | "done" | "exhausted" | "paused" | "not_found";
+/** withdrawn (REQ-49): a held auto send whose switch went off went back to the manual queue. */
+export type ClaimResult = "claimed" | "busy" | "done" | "exhausted" | "paused" | "withdrawn" | "not_found";
 
 /** The send rows, through the owner's client (Approve, Retry) or the service client (the run). */
 export type SendStore = {
@@ -64,7 +68,7 @@ export async function attemptSend(d: { store: SendStore; gmail: GmailSendPort; s
   }
   if (!ctx) return { state: "sending", error: "Send not found" };
   if (ctx.state !== "sending") return { state: ctx.state, error: null };
-  const body = withSignature(ctx.draftText);
+  const body = ctx.mode === "auto" ? `${withSignature(ctx.draftText)}\n\n${AUTOMATED_LINE}` : withSignature(ctx.draftText);
   const finish = async (gmailMessageId: string): Promise<AttemptResult> => {
     try {
       await store.finishSend(sendId, { gmailMessageId, from: d.mailbox, body, sentAt: d.now().toISOString() });

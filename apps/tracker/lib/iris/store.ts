@@ -15,6 +15,11 @@ export type IrisSettings = {
   retentionDays: number;
   /** Under this confidence a classification escalates (REQ-43). */
   confidenceThreshold: number;
+  /** The global auto-send switch (REQ-49). */
+  sendingEnabled: boolean;
+  /** Quiet hours, HH:MM America/Toronto; the window may wrap midnight (REQ-49). */
+  quietStart: string;
+  quietEnd: string;
   lastPollAt: string | null;
   lastPollResult: PollResult | null;
   lastError: string | null;
@@ -199,8 +204,31 @@ export type EvalResultInsert = {
   error: string | null;
 };
 
+/** What the auto-send gate reads about one draft (REQ-49): ids, states and codes, never a body. */
+export type AutoSendCandidate = {
+  draftId: string;
+  messageId: string;
+  replyType: string;
+  version: number;
+  createdBy: "iris" | "owner";
+  edited: boolean;
+  policyVersion: number;
+  message: { state: MessageState | null; intent: string | null; flags: string[]; confidence: number | null; notionStudentId: string | null; notionStudentIds: string[] };
+  /** The type's iris.reply_types row, or null when it has none. */
+  typeSwitch: { autoSendEnabled: boolean; streakPolicyVersion: number | null } | null;
+};
+
+/** iris.auto_approve_draft's answer. */
+export type AutoApproveResult = { result: "ok"; sendId: string } | { result: "skipped"; reason: string };
+
 /** The run's store. The send rows (REQ-48) come from SendRunStore. */
 export interface IrisStore extends SendRunStore {
+  /** REQ-49: iris.reset_for_policy, the number of reply types reset. Idempotent. */
+  resetForPolicy(policyVersion: number): Promise<number>;
+  /** REQ-49: the gate's inputs for these drafts, in one read. */
+  autoSendCandidates(draftIds: string[]): Promise<AutoSendCandidate[]>;
+  /** REQ-49: iris.auto_approve_draft. A null sendAfter leaves the send claimable now. */
+  autoApprove(draftId: string, sendAfter: string | null): Promise<AutoApproveResult>;
   getSettings(): Promise<IrisSettings | null>;
   /** iris.claim_poll: the row to the first caller, null while another run holds the lease. */
   claimPoll(leaseSeconds: number): Promise<IrisSettings | null>;
