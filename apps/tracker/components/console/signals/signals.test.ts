@@ -20,7 +20,7 @@ const signal = (kind: Signal["kind"], n: number, over: Partial<Signal> = {}): Si
 const OK_CHECKS: SignalsView["checks"] = ["fresh_lead", "followup_overdue", "trial_undecided", "lesson_gap", "people_stale", "outbox_failed"].map((kind) => ({ kind, state: "ok" }) as SignalsView["checks"][number]);
 const viewOf = (over: Partial<SignalsView> = {}): SignalsView => ({ checkedAt: at(0), signals: [], checks: OK_CHECKS, health: health(), protectedTime: { state: "free" }, ...over });
 const FRAME = { id: "signals", title: "Signals", emptyText: "No exceptions found" };
-const list = (v: SignalsView) => renderToStaticMarkup(h(SignalsProvider, { initial: v, orgId: "org" }, h(SignalList, FRAME)));
+const list = (v: SignalsView) => renderToStaticMarkup(h(SignalsProvider, { initial: v, orgId: "org", children: h(SignalList, FRAME) }));
 const count = (s: string, needle: string) => s.split(needle).length - 1;
 
 describe("SignalList", () => {
@@ -52,7 +52,7 @@ describe("SignalList", () => {
 });
 
 describe("HealthRail", () => {
-  const rail = (v: SignalsView) => renderToStaticMarkup(h(SignalsProvider, { initial: v, orgId: "org" }, h(HealthRail)));
+  const rail = (v: SignalsView) => renderToStaticMarkup(h(SignalsProvider, { initial: v, orgId: "org", children: h(HealthRail) }));
 
   it("renders seven entries in order, Not checked for a provider with no read, the reason in text on error", () => {
     const out = rail(viewOf({ health: health({
@@ -74,8 +74,10 @@ describe("HealthRail", () => {
   });
 
   it("the integrations panel is stale while a provider is not ok", () => {
-    const out = renderToStaticMarkup(h(SignalsProvider, { initial: viewOf({ health: health({ notionLeads: { status: "error", errorMessage: "x" } }) }), orgId: "org" },
-      h(HealthPanel, { id: "integrations", title: "Integration health", emptyText: "No checks run yet" })));
+    const out = renderToStaticMarkup(h(SignalsProvider, {
+      initial: viewOf({ health: health({ notionLeads: { status: "error", errorMessage: "x" } }) }), orgId: "org",
+      children: h(HealthPanel, { id: "integrations", title: "Integration health", emptyText: "No checks run yet" }),
+    }));
     expect(out).toContain('data-status="stale"');
     expect(out).toContain("Not ok: Notion leads");
   });
