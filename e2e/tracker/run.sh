@@ -21,9 +21,13 @@ trap cleanup EXIT
 "$here/stack.sh" > "$logs/env"
 set -a; source "$logs/env"; set +a
 
+# REQ-63 (tracker ADR 0079): first a production-shaped tracker build, without CONSOLE_PREVIEW, checked for the
+# preview route, demo data and secrets (bundle-check.mjs). Then the build the flows use.
+echo "build tracker (production shape)"; (cd "$root/apps/tracker" && pnpm build >"$logs/tracker-prod-build.log" 2>&1) || { tail -30 "$logs/tracker-prod-build.log"; exit 1; }
+echo "build landing"; (cd "$root/apps/landing" && TRACKER_URL=http://localhost:3001 pnpm build >"$logs/landing-build.log" 2>&1) || { tail -30 "$logs/landing-build.log"; exit 1; }
+echo "bundle check"; node "$here/bundle-check.mjs" "$root/apps/tracker/.next" "$root/apps/landing/.next"
 # CONSOLE_PREVIEW=1 builds and serves /tracker/console/preview (REQ-55, tracker ADR 0066); never set in a deploy.
 echo "build tracker"; (cd "$root/apps/tracker" && CONSOLE_PREVIEW=1 pnpm build >"$logs/tracker-build.log" 2>&1) || { tail -30 "$logs/tracker-build.log"; exit 1; }
-echo "build landing"; (cd "$root/apps/landing" && TRACKER_URL=http://localhost:3001 pnpm build >"$logs/landing-build.log" 2>&1) || { tail -30 "$logs/landing-build.log"; exit 1; }
 
 (cd "$root/apps/tracker" && CONSOLE_PREVIEW=1 exec pnpm exec next start -p 3001) >"$logs/tracker.log" 2>&1 & pids+=($!)
 (cd "$root/apps/landing" && exec pnpm exec next start -p 3000) >"$logs/landing.log" 2>&1 & pids+=($!)

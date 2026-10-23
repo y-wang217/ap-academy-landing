@@ -21,7 +21,8 @@ import { creationPanels } from "../../lib/console/creation";
 /**
  * Neutral test values for the kit preview and unit tests (REQ-55). Never imported by
  * production source; the console scan allows only app/console/preview/page.preview.tsx.
- * Sales carries one panel per non-ready status, so the preview shows every variant.
+ * Sales carries a stale, an unverifiable and an empty panel; Creation's signals is an error and
+ * Operations' signals is loading (REQ-63), so the preview shows every variant.
  */
 const minutesAgo = (now: Date, m: number) => new Date(now.getTime() - m * 60_000).toISOString();
 
@@ -183,6 +184,8 @@ export function demoPanels(now: Date): ConsolePanels {
       ], { canonical: { href: "#schedule", label: "Open schedule" } }),
       finance: finance.cash,
       trials: finance.funnel,
+      // REQ-63: the loading state, so the preview shows all five non-ready-or-ready variants.
+      signals: result<QueueItem[]>("signals", now, "loading", null),
       integrations: result<QueueItem[]>("integrations", now, "ready", [{ id: "int-1", title: "Notion", reason: "Read in time" }]),
     },
   };
@@ -208,7 +211,8 @@ function demoCreation(now: Date): ConsolePanels["creation"] {
     staleReason: null, errorMessage: null, sourceEvidence: [],
   };
   const p = creationPanels(work, { today, selectedId: null, search: new URLSearchParams("mode=creation"), workSourceId: "d0000000-0000-4000-8000-0000000000ff", weeklyReviewId: id(5) });
-  return { nextAsset: p.nextAsset, work: p.work, pipeline: p.pipeline, signals: result<QueueItem[]>("signals", now, "ready", [{ id: "sig-2", title: "Worksheet past its date", reason: "Unit 2 review" }]) };
+  // REQ-63: the error state, with the source's message, so the preview shows a failed panel and its Retry link.
+  return { nextAsset: p.nextAsset, work: p.work, pipeline: p.pipeline, signals: result<QueueItem[]>("signals", now, "error", null, { errorMessage: "Source did not answer in time" }) };
 }
 
 /** REQ-57: a Sales queue and radar from the ranking fixtures, for the preview's NEXT and radar slots. */

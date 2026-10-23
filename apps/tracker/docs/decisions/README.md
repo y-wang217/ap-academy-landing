@@ -83,3 +83,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0076](0076-console-call-outcomes.md) | Console call outcomes follow the OPS transition table, are logged by request and confirmed by read-back | accepted |
 | [0077](0077-console-signals-and-protected-time.md) | Console signals are polled, held in the browser, and a failed check becomes a provider failure | accepted |
 | [0078](0078-iris-auto-send.md) | Iris sends a reply type on its own only behind two switches, with fail-safes | accepted |
+| [0079](0079-console-release-acceptance.md) | The founder console is accepted by one e2e pack, axe-core in e2e only, and a production-bundle check | accepted |

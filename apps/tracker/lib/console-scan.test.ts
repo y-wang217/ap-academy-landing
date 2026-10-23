@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CONSOLE_MODES } from "./console/modes";
 import { slotsFor } from "./console/panel-slots";
+import { FICTION } from "../test/console/fiction";
 
 // REQ-53 AC7, AC8: the console reads through the owner's own client only.
 // REQ-54 AC6, AC12: it never writes, never uses the service client, and only providers.ts reaches lib/notion/.
@@ -164,20 +165,19 @@ describe("console source scan (AC7, AC8)", () => {
   });
 });
 
-// REQ-55: the bridge shell and instrument kit.
-const UI = [...walk("app/console"), ...walk("lib/console"), ...walk("components/console")];
+// REQ-63 AC9: the lib/notion files the console imports, from providers.ts and the outcomes route, fakes excluded.
+const NOTION_CONSOLE = [
+  ...[...read("lib/console/providers.ts").matchAll(/from "\.\.\/notion\/([^"]+)"/g)].map((m) => `lib/notion/${m[1]}.ts`),
+  ...[...read("app/api/console/outcomes/route.ts").matchAll(/from "@\/lib\/notion\/([^"]+)"/g)].map((m) => `lib/notion/${m[1]}.ts`),
+].filter((f, i, all) => all.indexOf(f) === i && !/\.fake\.ts$/.test(f));
+
+// REQ-55: the bridge shell and instrument kit. REQ-63 AC9 adds the console API routes and the console's lib/notion readers.
+const UI = [...walk("app/console"), ...walk("app/api/console"), ...walk("lib/console"), ...walk("components/console"), ...NOTION_CONSOLE];
 const CSS = read("app/console/console.css");
 const rule = (selector: string, css = CSS) => {
   const at = css.indexOf(`${selector} {`);
   return at < 0 ? "" : css.slice(at, css.indexOf("}", at) + 1);
 };
-// The reference render's and the offline preview's fiction (design, AC7 scan list).
-const FICTION = [
-  "Priya Sharma", "James Chen", "Aisha Khan", "Michael Tan", "Sarah Wilson", "Daniel Park", "Emma Liu", "Oliver Grant",
-  "48,320", "62,000", "18,400", "2,400", "28 May 2024", "May 2024", "+6.0", "Systems Online", "Comms Nominal", "Payments Online",
-  "Integrations Synced", "Growth On Track", "all systems operational", "Territory: Global", "High intent lead surge", "95% capacity",
-  "Simulated", "Demo data", "Illustrative",
-];
 
 describe("REQ-55 console source scan", () => {
   it.each(UI)("%s has no raster image (AC1)", (f) => {
@@ -198,6 +198,31 @@ describe("REQ-55 console source scan", () => {
     const src = read(f).toLowerCase();
     for (const s of FICTION) expect(src).not.toContain(s.toLowerCase());
     expect(src).not.toMatch(/\bonline\b/);
+  });
+
+  it("covers the console API routes and the lib/notion files the console imports (REQ-63 AC9)", () => {
+    for (const f of ["app/api/console/health/route.ts", "app/api/console/sales/route.ts", "app/api/console/signals/route.ts", "app/api/console/outcomes/route.ts"]) expect(UI).toContain(f);
+    for (const f of ["lib/notion/config.ts", "lib/notion/leads.ts", "lib/notion/touches.ts", "lib/notion/lessons.ts", "lib/notion/work.ts", "lib/notion/billing.ts", "lib/notion/lead-writer.ts"]) {
+      expect(UI).toContain(f);
+      expect(existsSync(join(APP, f))).toBe(true);
+    }
+  });
+
+  it("no non-test file under app/, lib/ or components/ imports the FICTION list (REQ-63 AC9)", () => {
+    const sources = [...walk("app"), ...walk("lib"), ...walk("components")];
+    expect(sources.length).toBeGreaterThan(100);
+    expect(sources.filter((f) => /test\/console\/fiction/.test(read(f)))).toEqual([]);
+  });
+
+  it("every FICTION entry and fixture sentinel is a real string, and each sentinel is in test/console/ (REQ-63 AC10)", () => {
+    const sentinels = JSON.parse(readFileSync(join(APP, "../../e2e/tracker/console-sentinels.json"), "utf8")) as unknown[];
+    const fixtures = readdirSync(join(APP, "test/console")).map((n) => readFileSync(join(APP, "test/console", n), "utf8")).join("\n");
+    expect(sentinels.length).toBeGreaterThan(0);
+    for (const s of [...FICTION, ...sentinels]) {
+      expect(typeof s).toBe("string");
+      expect((s as string).length).toBeGreaterThanOrEqual(4);
+    }
+    for (const s of sentinels as string[]) expect(fixtures, s).toContain(s);
   });
 
   it("only the preview page imports from test/ (AC7)", () => {
