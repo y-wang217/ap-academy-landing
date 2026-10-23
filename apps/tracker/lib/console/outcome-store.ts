@@ -106,7 +106,8 @@ export function createOutcomeStore(tracker: Db["tracker"], orgId: string): Outco
       return rows[0] ?? null;
     },
     async mark(requestId, marks) {
-      const update = Object.fromEntries(Object.entries(marks).map(([k, v]) => [MARK_COLUMNS[k as keyof TransitionMarks], v]));
+      const update: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(marks)) update[MARK_COLUMNS[k as keyof TransitionMarks]] = v;
       const { error } = await table().update(update).eq("request_id", requestId);
       if (error) throw unavailable();
     },
