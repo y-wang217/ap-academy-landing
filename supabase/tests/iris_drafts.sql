@@ -166,7 +166,7 @@ begin
   perform idt.as_super();
 end $$;
 
--- Owner writes: drafts only through the functions; reply_types not at all (0030
+-- Owner writes: drafts only through the functions; reply_types not at all (0031
 -- revoked the auto_send_enabled grant: iris.set_auto_send is the only switch).
 do $$
 declare stmt text;

@@ -1,4 +1,4 @@
--- REQ-49: Iris auto-send (0030). Run by run-rls.sh on a fresh copy of the
+-- REQ-49: Iris auto-send (0031). Run by run-rls.sh on a fresh copy of the
 -- migrated database. Privilege-sensitive steps switch role because the runner
 -- connects as a superuser. Each check raises on failure.
 
