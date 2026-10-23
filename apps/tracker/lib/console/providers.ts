@@ -7,7 +7,10 @@ import { fetchRecentTouches, lastTouchesByStudent } from "../notion/touches";
 import { fetchWorkItems } from "../notion/work";
 import type { FacadeDeps, NotionPorts } from "./facade";
 import type { OwnerViewer } from "./guard";
-import type { UnlinkedLessonsPort } from "./operations-read";
+import type { SignalSources } from "./handlers";
+import { loadOperationsPanels } from "./operations";
+import { createOperationsReader, type UnlinkedLessonsPort } from "./operations-read";
+import { settleOutbox, settleTeaching } from "./signals-read";
 import { createConsolePeopleReader } from "./people-read";
 
 /**
@@ -67,4 +70,19 @@ export function createOperationsLessons(): UnlinkedLessonsPort {
   const config = readLessonsConfig();
   if (!config) return null;
   return (range, signal) => createLessonsPort(config, bound(signal)).listUnlinkedLessons(range);
+}
+
+/** The default lesson-gap window, as Operations opens without ?gapDays= (REQ-58). */
+const SIGNAL_GAP_DAYS = 14;
+
+/** The signals route's reads besides the facade (REQ-62): Operations on the shared people read, the outbox, teaching time. */
+export function createSignalSources(viewer: OwnerViewer, deps: FacadeDeps, now: Date): SignalSources {
+  const reader = createOperationsReader(viewer, createOperationsLessons());
+  return {
+    operations: (people) => loadOperationsPanels({
+      reader, people, now, gapDays: SIGNAL_GAP_DAYS, orgId: viewer.orgId, lessonsSourceId: deps.sources.trialLessons, query: {}, freshness: consoleFreshness, timeoutMs: deps.timeoutMs,
+    }),
+    outbox: () => settleOutbox(viewer, now, deps.timeoutMs),
+    teaching: () => settleTeaching(viewer, now, reader, deps.timeoutMs),
+  };
 }

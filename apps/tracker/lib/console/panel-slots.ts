@@ -31,6 +31,7 @@ export const PANEL_SLOTS: PanelSlot[] = [
   slot("operations", "upcoming", "list", "Upcoming classes", "No classes in the next 7 days"),
   slot("operations", "finance", "metric", "Finance", "No verified payments"),
   slot("operations", "trials", "metric", "Trials", "No trials in this period"),
+  slot("operations", "signals", "list", "Signals", "No exceptions found"),
   slot("operations", "integrations", "list", "Integration health", "No checks run yet"),
 ];
 

@@ -1,3 +1,4 @@
+import { normalId } from "../domain/billing";
 import { hhmm } from "./format";
 import type { PanelView } from "./panel-view";
 import type { SalesFilter, SalesLead, SalesQueue, SalesRadarStage, SalesView } from "./sales-view";
@@ -27,10 +28,12 @@ export type SalesAction =
 /** A view worth keeping: a complete read, ready, empty or stale for a reason other than the page cap. */
 const isGood = (v: SalesView) => v.queue.data !== null && v.queue.status !== "error" && !v.queue.data.truncated;
 
-export function initialSalesState(view: SalesView): SalesState {
+/** `lead` is ?lead= (REQ-62): selected when it is in the queue, else the first item is. */
+export function initialSalesState(view: SalesView, lead: string | null = null): SalesState {
   const lastGood = isGood(view) ? view : null;
-  const first = view.queue.data?.items[0]?.id ?? null;
-  return { shown: view, lastGood, fetch: "idle", failure: null, filter: "all", selectedId: first };
+  const items = view.queue.data?.items ?? [];
+  const wanted = lead === null ? undefined : items.find((i) => normalId(i.id) === normalId(lead));
+  return { shown: view, lastGood, fetch: "idle", failure: null, filter: "all", selectedId: wanted?.id ?? items[0]?.id ?? null };
 }
 
 function failedView(view: SalesView, message: string, at: string): SalesView {

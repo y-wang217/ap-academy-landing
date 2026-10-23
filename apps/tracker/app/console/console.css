@@ -672,6 +672,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .console-sweep { animation: none; }
+  .console-band-row[data-pulse] { animation: none; }
   .console-motion-on { display: none; }
   .console-motion-reduced { display: inline; }
   .console-sales-option { transition: none; }
@@ -771,6 +772,201 @@
   font-weight: 600;
 }
 
+/* REQ-62: the fresh-lead band, deferred strip, signals list, quiet mode and health rail. */
+.console-polling {
+  margin-left: 8px;
+  color: var(--muted);
+}
+.console-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.console-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.console-quiet button,
+.console-band button,
+.console-signal-actions button,
+.console-snooze summary {
+  padding: 2px 10px;
+  font-family: var(--font-readout);
+  font-size: 13px;
+  color: var(--amber);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.console-quiet button[aria-pressed="true"] {
+  color: #FFE0B8;
+  background: #4D2339;
+  border-color: var(--coral);
+}
+.console-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 16px;
+  padding: 8px clamp(12px, 2vw, 28px);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.console-band-rows {
+  display: grid;
+  flex: 1 1 520px;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console-band-empty {
+  flex: 1 1 520px;
+  margin: 0;
+}
+.console-band-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.console-band-row[data-pulse] {
+  animation: console-pulse 1.5s ease-out 1;
+}
+[data-hidden] .console-band-row[data-pulse] {
+  animation-play-state: paused;
+}
+@keyframes console-pulse {
+  from { box-shadow: 0 0 0 0 #FFC07899; border-color: var(--amber); }
+  to { box-shadow: 0 0 0 10px #FFC07800; border-color: var(--border); }
+}
+.console-new-tag {
+  padding: 1px 6px;
+  font-family: var(--font-readout);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--canvas);
+  background: var(--amber);
+  border-radius: 3px;
+}
+.console-band-text {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  min-width: 0;
+}
+.console-band-text .console-row-title,
+.console-band-text .console-row-reason {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.console-band-actions,
+.console-signal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 13px;
+}
+.console-band a,
+.console-signal a {
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.console-snooze {
+  position: relative;
+}
+.console-snooze ul,
+.console-deferred ul {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.console-deferred {
+  flex: 0 1 320px;
+  min-width: 0;
+  font-size: 13px;
+}
+.console-deferred summary {
+  font-family: var(--font-readout);
+  color: var(--amber);
+  cursor: pointer;
+}
+.console-deferred li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.console-signal-list {
+  display: grid;
+  gap: 8px;
+}
+.console-signal-kind {
+  margin: 0 0 4px;
+  font-family: var(--font-readout);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.console-signal {
+  flex-wrap: wrap;
+}
+.console-health-rail {
+  flex: 1 1 100%;
+}
+.console-health {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console-health-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+  font-family: var(--font-readout);
+  font-size: 13px;
+}
+.console-health-label {
+  color: var(--text);
+}
+.console-health-time {
+  color: var(--muted);
+}
+.console-health-reason {
+  flex-basis: 100%;
+  color: var(--coral);
+  overflow-wrap: anywhere;
+}
+@media (width <= 640px) {
+  .console-health {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .console-deferred {
+    flex-basis: 100%;
+  }
+}
+
 /* Grid areas per mode at each range (design, Layout). Area names are slot ids. */
 @media (min-width: 1440px) {
   .console-grid-sales {
@@ -792,7 +988,7 @@
     grid-template-areas:
       "teacherLoad lessonGaps finance"
       "teacherLoad lessonGaps trials"
-      "upcoming upcoming upcoming"
+      "upcoming upcoming signals"
       "integrations integrations integrations";
   }
 }
@@ -807,7 +1003,7 @@
   }
   .console-grid-operations {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "teacherLoad lessonGaps" "upcoming upcoming" "finance trials" "integrations integrations";
+    grid-template-areas: "teacherLoad lessonGaps" "upcoming upcoming" "finance trials" "signals integrations";
   }
 }
 @media (min-width: 901px) and (max-width: 1279px) {
@@ -821,7 +1017,7 @@
   }
   .console-grid-operations {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "teacherLoad lessonGaps" "upcoming upcoming" "finance trials" "integrations integrations";
+    grid-template-areas: "teacherLoad lessonGaps" "upcoming upcoming" "finance trials" "signals integrations";
   }
 }
 @media (min-width: 641px) and (max-width: 900px) {
@@ -835,7 +1031,7 @@
   }
   .console-grid-operations {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "lessonGaps lessonGaps" "teacherLoad upcoming" "finance trials" "integrations integrations";
+    grid-template-areas: "lessonGaps lessonGaps" "teacherLoad upcoming" "finance trials" "signals integrations";
   }
 }
 @media (max-width: 640px) {
@@ -849,7 +1045,7 @@
   }
   .console-grid-operations {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "teacherLoad" "lessonGaps" "upcoming" "finance" "trials" "integrations";
+    grid-template-areas: "teacherLoad" "lessonGaps" "upcoming" "finance" "trials" "signals" "integrations";
   }
   .console-horizon {
     display: none;

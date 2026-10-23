@@ -58,3 +58,9 @@ export function withParam(search: URLSearchParams, key: string, value: string): 
   next.set(key, value);
   return `?${next}`;
 }
+
+/** The lead ?lead= preselects in Sales (REQ-62): a Notion page id, dashed or not, else null. */
+export function parseLead(value: unknown): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === "string" && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(first) ? first : null;
+}
