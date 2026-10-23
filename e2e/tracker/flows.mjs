@@ -1577,8 +1577,8 @@ try {
       check("REQ-55: the bottom rail has five indicators and the shortcuts help",
         (await p.locator("[data-indicator]").count()) === 5 && (await p.locator('[data-indicator="access"] [data-indicator-value]').textContent()) === "Owner verified" && (await p.getByText("Keyboard shortcuts", { exact: true }).count()) === 1);
       // REQ-56 wires the north star; REQ-57 the Sales next and radar slots; REQ-58 Sales capacity and three Operations
-      // panels; REQ-59 the trial funnel and cash pulse. Every other panel is a placeholder.
-      const WIRED = ["northStar", "next", "radar", "capacity", "teacherLoad", "lessonGaps", "upcoming", "conversion", "cashflow", "trials", "finance"];
+      // panels; REQ-59 the trial funnel and cash pulse; REQ-60 three Creation panels. Every other panel is a placeholder.
+      const WIRED = ["northStar", "next", "radar", "capacity", "teacherLoad", "lessonGaps", "upcoming", "conversion", "cashflow", "trials", "finance", "nextAsset", "work", "pipeline"];
       check("REQ-55: production panels other than the wired ones are Not connected yet",
         (await p.locator("#console-panel-sales [data-panel]").count()) === 9 && (await p.locator("#console-panel-sales").getByText("Not connected yet", { exact: true }).count()) === 3
           && (await p.locator(`[data-panel]${WIRED.map((id) => `:not([data-panel="${id}"])`).join("")} [data-panel-value]`).count()) === 0);
@@ -1653,6 +1653,98 @@ try {
           !keys14.includes(lessonRef(-14)) && (await ops("lessonGaps").getByRole("link", { name: "Show 31 days" }).count()) === 1, keys14.join(","));
         check("REQ-58: Sales capacity is wired", (await p.locator('#console-panel-sales [data-panel="capacity"]').getAttribute("data-status")) !== null
           && (await p.locator('#console-panel-sales [data-panel="capacity"]').getByText("Not connected yet", { exact: true }).count()) === 0);
+      }
+
+      // REQ-60: Creation mode over the mock Notion's seeded Marketing Work rows (mock-notion.mjs, CONSOLE_WORK).
+      {
+        const W = {
+          project: "eeeeeeee-6060-4000-8000-000000000001", childNext: "eeeeeeee-6060-4000-8000-000000000002", childDefined: "eeeeeeee-6060-4000-8000-000000000003",
+          standalone: "eeeeeeee-6060-4000-8000-000000000004", waiting: "eeeeeeee-6060-4000-8000-000000000005", done: "eeeeeeee-6060-4000-8000-000000000006",
+          delivery: "eeeeeeee-6060-4000-8000-000000000007", weekly: "3ead6ae7-3dd7-811e-b525-e3626520b805",
+        };
+        const SEEDED = Object.values(W);
+        const cr = (id) => p.locator(`#console-panel-creation [data-panel="${id}"]`);
+        const shownTask = () => cr("nextAsset").locator("[data-task-id]").getAttribute("data-task-id");
+        const creationAt = async (path = "/console?mode=creation") => {
+          await p.goto(`${BASE}${path}`);
+          await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        };
+        const startAt = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).length;
+        await creationAt();
+        const creationText = await p.locator("#console-panel-creation").innerText();
+        check("REQ-60: the next asset is the project's Next child, with its Task Type name and expected result",
+          (await cr("nextAsset").getAttribute("data-status")) === "ready" && (await shownTask()) === W.childNext
+            && /Script/.test(await cr("nextAsset").innerText()) && /One reviewed script/.test(await cr("nextAsset").innerText()),
+          (await cr("nextAsset").innerText()).slice(0, 300));
+        check("REQ-60: neither the Done nor the Delivery task is on the page",
+          !creationText.includes("E2E finished marketing task") && !creationText.includes("E2E delivery task"));
+        const topLevel = await cr("work").locator("ol.console-creation-queue > li").evaluateAll((els) => els.map((e) => e.getAttribute("data-task")));
+        const nested = await cr("work").locator(`li[data-task="${W.project}"] ol li`).evaluateAll((els) => els.map((e) => e.getAttribute("data-task")));
+        check("REQ-60: the queue nests the children under the project and lists Waiting last",
+          JSON.stringify(nested) === JSON.stringify([W.childNext, W.childDefined]) && topLevel[0] === W.project && topLevel.at(-1) === W.waiting
+            && !topLevel.includes(W.childNext) && topLevel.includes(W.standalone) && topLevel.includes(W.weekly),
+          `${topLevel.join(",")} | ${nested.join(",")}`);
+        check("REQ-60: the weekly media review panel shows the pinned row",
+          (await cr("pipeline").locator("h2").textContent()) === "Weekly media review" && (await cr("pipeline").locator("[data-task-id]").getAttribute("data-task-id")) === W.weekly
+            && /Overdue/.test(await cr("pipeline").innerText()));
+        check("REQ-60: each Creation panel links the Work database",
+          (await p.locator('#console-panel-creation [data-canonical]').evaluateAll((els) => els.map((e) => e.textContent))).filter((t) => t === "Open Work in Notion").length === 3);
+
+        // AC6: Select the Defined child, switch to Sales and back with the tabs, reload: the selection holds.
+        await cr("work").getByRole("link", { name: "Select E2E video 02 recording" }).click();
+        await p.waitForURL(/task=/);
+        await p.getByRole("tab", { name: "Sales", exact: true }).click();
+        await p.getByRole("tab", { name: "Creation", exact: true }).click();
+        await p.reload();
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        const url = new URL(p.url());
+        check("REQ-60: a selection survives the mode tabs and a reload, tagged Selected with aria-current",
+          url.searchParams.get("mode") === "creation" && url.searchParams.get("task") === W.childDefined && (await shownTask()) === W.childDefined
+            && /Selected/.test(await cr("nextAsset").innerText()) && (await cr("work").locator(`li[data-task="${W.childDefined}"]`).getAttribute("aria-current")) === "true",
+          p.url());
+
+        // Open gap 2: by keyboard. Tab from the queue panel to the standalone task's Select link and press Enter.
+        await creationAt();
+        await cr("work").focus();
+        let reached = false;
+        for (let i = 0; i < 40 && !reached; i++) {
+          await p.keyboard.press("Tab");
+          reached = (await p.evaluate(() => document.activeElement?.getAttribute("aria-label"))) === "Select E2E course page update";
+        }
+        const ring = reached ? await p.evaluate(() => getComputedStyle(document.activeElement).outlineStyle) : "";
+        await p.keyboard.press("Enter");
+        await p.waitForURL(/task=/).catch(() => {});
+        await p.locator("[data-console]").waitFor({ timeout: 15000 });
+        check("REQ-60: Tab reaches a Select link with a visible focus ring, and Enter selects that task",
+          reached && ring !== "none" && (await shownTask()) === W.standalone && (await cr("work").locator(`li[data-task="${W.standalone}"]`).getAttribute("aria-current")) === "true",
+          `${reached} ${ring} ${await shownTask()}`);
+
+        // AC4: the visits wrote nothing to a console row and created no Marketing page.
+        const visit = (await (await fetch(`${MOCK_NOTION}/__journal`)).json()).slice(startAt);
+        const isRead = (j) => j.method === "GET" || (j.method === "POST" && /\/v1\/data_sources\/[^/]+\/query(\?|$)/.test(j.path));
+        const touchesSeeded = (j) => SEEDED.some((id) => j.path.includes(id) || JSON.stringify(j.body ?? {}).includes(id)) || JSON.stringify(j.body ?? {}).includes('"Marketing"');
+        const work = await (await fetch(`${MOCK_NOTION}/__work`, { headers: { "x-e2e-probe": "1" } })).json();
+        check("REQ-60: Creation mode wrote nothing to Notion's Work rows",
+          visit.filter(touchesSeeded).every(isRead) && !work.pages.some((pg) => pg.props?.Area?.select?.name === "Marketing")
+            && visit.some((j) => j.path.startsWith("/v1/data_sources/3031b455-9be0-4f8d-b200-70fcfcf1a0b8/query?")),
+          JSON.stringify(visit.filter((j) => touchesSeeded(j) && !isRead(j)).slice(0, 3)));
+
+        // AC7: a failing Work read is an error on all three Creation panels and changes no Sales panel.
+        const salesStatuses = async () => p.locator("#console-panel-sales [data-panel]").evaluateAll((els) => els.map((e) => `${e.getAttribute("data-panel")}=${e.getAttribute("data-status")}`));
+        const salesBefore = await salesStatuses();
+        await fetch(`${MOCK_NOTION}/__work/fail-console`, { method: "POST" });
+        try {
+          await creationAt();
+          const failed = await Promise.all(["nextAsset", "work", "pipeline"].map(async (id) => [await cr(id).getAttribute("data-status"), (await cr(id).innerText()).includes("Open Work in Notion")]));
+          check("REQ-60: with the Work read failing, the three Creation panels are errors that still link Work, and Sales keeps its statuses",
+            failed.every(([st, link]) => st === "error" && link) && JSON.stringify(await salesStatuses()) === JSON.stringify(salesBefore),
+            JSON.stringify(failed));
+        } finally {
+          await fetch(`${MOCK_NOTION}/__work/heal-console`, { method: "POST" });
+        }
+        const health = await consoleHealth(teacher);
+        check("REQ-60: the health route still lists six providers", Object.keys(JSON.parse(health.body).providers ?? {}).length === 6, health.body.slice(0, 200));
+        await creationAt("/console?mode=operations&gapDays=14");
       }
 
       // REQ-59: the trial funnel and cash pulse over the mock's console leads, one trial lesson and the six invoices.
@@ -1774,6 +1866,25 @@ try {
       }
     }
     check("REQ-55: screenshots written to docs/spec/founder-console/screenshots/req-55/", true);
+
+    // REQ-60 (Open gap 1): Creation at the four guardrail widths, live and in the preview, with screenshots.
+    {
+      const SHOTS60 = new URL("../../docs/spec/founder-console/screenshots/req-60/", import.meta.url);
+      mkdirSync(SHOTS60, { recursive: true });
+      for (const [w, h] of [[390, 844], [1280, 720], [1440, 900], [1920, 1080]]) {
+        for (const [name, path] of [["preview-creation", "/console/preview?mode=creation"], ["console-creation", "/console?mode=creation"]]) {
+          const p = await bridgeAt(w, h, path);
+          await syncSettled(p);
+          const next = await boxOf(p, "creation", "nextAsset");
+          const work = await boxOf(p, "creation", "work");
+          // 390: one column, next asset first. 1280 to 1439: next asset beside the queue. 1440 and up: next asset spans the left column.
+          const layout = w < 641 ? next.x === work.x && next.y < work.y : next.y === work.y && next.x < work.x;
+          check(`REQ-60: ${path} at ${w}x${h} has no sideways scroll and the expected Creation layout`, (await noSideScroll(p)) && layout, `${JSON.stringify(next)} ${JSON.stringify(work)}`);
+          if (name === "preview-creation") await p.screenshot({ path: new URL(`${name}-${w}x${h}.png`, SHOTS60).pathname, fullPage: true });
+          await p.context().close();
+        }
+      }
+    }
 
     // AC5: no sideways scroll, the mode switch and NEXT reachable, the horizon a strip then gone, one column at 640.
     for (const [w, h] of [[390, 844], [1280, 720]]) {

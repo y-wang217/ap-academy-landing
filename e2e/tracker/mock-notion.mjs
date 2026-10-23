@@ -4,6 +4,9 @@
 // written (the scheduler adopts a student and regenerates that one property). REQ-8 adds in-memory Work and
 // Work Log pages with blocks: create a page, list and edit its blocks, and GET /__work to see what was written.
 // REQ-44: POST /v1/comments (Iris mention comments), kept in /__work as `comments`.
+// REQ-60: the console's Work read. GET the Work and Task Type schemas, and a Work query carrying filter_properties
+// gets CONSOLE_WORK filtered by its State and Area clauses (the daily task's title query is unchanged). POST
+// /__work/fail-console and /__work/heal-console toggle a 500 on that query. Seeded rows are never written.
 // REQ-25 adds Invoices, Missed Sessions & Credits, billing pages, /files/*.pdf and POST /__billing/fail (toggles a 500 on invoices).
 // REQ-28 adds POST /__schedule/fail: toggles a 500 on student-page PATCHes (the Weekly Schedule write).
 // REQ-38 adds the Staff schema (the people sync asks for property IDs), a Stage on every student, and
@@ -189,6 +192,45 @@ const dump = () => ({
   })),
   comments,
 });
+// REQ-60: seeded Marketing rows for Creation mode, apart from the in-memory pages the daily task writes.
+const TASK_TYPES_DS = "80e411f2-eb5b-4055-b560-55061669d9f7";
+const WORK_SCHEMA = { properties: Object.fromEntries(
+  ["Name", "Area", "State", "Type", "Due / Review", "Owner", "Task Type", "Parent Project", "Expected result", "Alignment", "Children"].map((n, i) => [n, { id: `w${i}` }]),
+) };
+const TASK_TYPES_SCHEMA = { properties: { "Task type": { id: "title" } } };
+const torontoDate = (offsetDays) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(Date.now() + offsetDays * 86_400_000));
+const CONSOLE_WORK_IDS = {
+  project: "eeeeeeee-6060-4000-8000-000000000001", childNext: "eeeeeeee-6060-4000-8000-000000000002", childDefined: "eeeeeeee-6060-4000-8000-000000000003",
+  standalone: "eeeeeeee-6060-4000-8000-000000000004", waiting: "eeeeeeee-6060-4000-8000-000000000005", done: "eeeeeeee-6060-4000-8000-000000000006",
+  delivery: "eeeeeeee-6060-4000-8000-000000000007", weekly: "3ead6ae7-3dd7-811e-b525-e3626520b805", taskType: "eeeeeeee-6060-4000-8000-0000000000aa",
+};
+const W = CONSOLE_WORK_IDS;
+const workRow = (id, { name, area = "Marketing", state = "Next", type = "Task", due = null, parent = null, types = [], expected = "" }) => ({
+  object: "page", id, properties: {
+    Name: { title: [{ plain_text: name }] }, Area: { select: { name: area } }, State: { select: { name: state } }, Type: { select: { name: type } },
+    "Due / Review": { date: due ? { start: due } : null }, Owner: { rich_text: [{ plain_text: "Charlie" }] },
+    "Task Type": { relation: types.map((t) => ({ id: t })) }, "Parent Project": { relation: parent ? [{ id: parent }] : [] },
+    "Expected result": { rich_text: expected ? [{ plain_text: expected }] : [] },
+  },
+});
+const CONSOLE_WORK = [
+  workRow(W.project, { name: "E2E video series", state: "Doing", type: "Project" }),
+  workRow(W.childNext, { name: "E2E video 01 script", parent: W.project, types: [W.taskType], expected: "One reviewed script" }),
+  workRow(W.childDefined, { name: "E2E video 02 recording", state: "Defined", parent: W.project }),
+  workRow(W.standalone, { name: "E2E course page update", state: "Inbox", due: torontoDate(1) }),
+  workRow(W.waiting, { name: "E2E waiting on footage", state: "Waiting / Blocked" }),
+  workRow(W.done, { name: "E2E finished marketing task", state: "Done" }),
+  workRow(W.delivery, { name: "E2E delivery task", area: "Delivery" }),
+  workRow(W.weekly, { name: "E2E weekly marketing review", type: "Recurring", due: torontoDate(-1) }),
+];
+let consoleWorkFails = false;
+const clauseOk = (row, c) => {
+  const v = row.properties[c.property]?.select?.name ?? null;
+  if (c.select?.does_not_equal !== undefined) return v !== c.select.does_not_equal;
+  if (c.select?.equals !== undefined) return v === c.select.equals;
+  return true;
+};
+
 // The body is buffered once, up front, so the journal and the handlers can both read it.
 const readBody = async (req) => (req.rawBody ? JSON.parse(req.rawBody) : {});
 const bufferBody = (req) =>
@@ -446,6 +488,16 @@ async function workApi(req, res) {
     Object.assign(workPages.get(pageId).props, body.properties ?? {});
     return res.end("{}"), true;
   }
+  if (req.method === "GET" && url === `/v1/data_sources/${WORK_DS}`) return res.end(JSON.stringify(WORK_SCHEMA)), true;
+  if (req.method === "GET" && url === `/v1/data_sources/${TASK_TYPES_DS}`) return res.end(JSON.stringify(TASK_TYPES_SCHEMA)), true;
+  if (req.method === "POST" && url.startsWith(`/v1/data_sources/${TASK_TYPES_DS}/query?`)) {
+    return res.end(JSON.stringify({ results: [{ object: "page", id: W.taskType, properties: { "Task type": { title: [{ plain_text: "Script" }] } } }], has_more: false, next_cursor: null })), true;
+  }
+  if (req.method === "POST" && url.startsWith(`/v1/data_sources/${WORK_DS}/query?`)) {
+    if (consoleWorkFails) { res.statusCode = 500; return res.end(JSON.stringify({ object: "error", status: 500 })), true; }
+    const clauses = (await readBody(req)).filter?.and ?? [];
+    return res.end(JSON.stringify({ results: CONSOLE_WORK.filter((r) => clauses.every((c) => clauseOk(r, c))), has_more: false, next_cursor: null })), true;
+  }
   if (req.method === "POST" && url === `/v1/data_sources/${WORK_DS}/query`) {
     const body = await readBody(req);
     const title = body.filter?.title?.equals;
@@ -481,6 +533,8 @@ async function workApi(req, res) {
 http.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   if (req.method === "GET" && req.url === "/__journal") return res.end(JSON.stringify(journal));
+  if (req.method === "POST" && req.url === "/__work/fail-console") { consoleWorkFails = true; return res.end(JSON.stringify({ consoleWorkFails })); }
+  if (req.method === "POST" && req.url === "/__work/heal-console") { consoleWorkFails = false; return res.end(JSON.stringify({ consoleWorkFails })); }
   if (req.method === "POST" && req.url === "/__billing/fail") { billingFails = !billingFails; return res.end(JSON.stringify({ billingFails })); }
   if (req.method === "POST" && req.url === "/__schedule/fail") { scheduleFails = !scheduleFails; return res.end(JSON.stringify({ scheduleFails })); }
   if (req.method === "POST" && req.url === "/__people/fail") { peopleFails = !peopleFails; return res.end(JSON.stringify({ peopleFails })); }

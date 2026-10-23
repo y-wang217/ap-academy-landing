@@ -235,3 +235,38 @@ describe("REQ-55 console source scan", () => {
     }
   });
 });
+
+// REQ-60 AC3, AC4, AC8: Creation mode creates nothing, writes no Work row, and calls no recording or publishing host.
+const CREATION_FILES = [
+  "lib/console/creation.ts", "components/console/creation/task-facts.tsx", "components/console/creation/next-asset.tsx",
+  "components/console/creation/work-queue.tsx", "components/console/creation/weekly-review.tsx",
+];
+// The files REQ-60 adds or changes. providers.ts is exempt from the fetch( rule only: it hosts the abort-bound
+// fetcher the Notion reader ports run on (Open gap 3), and the reader tests prove those ports only read.
+const CREATION_TOUCHED = [...CREATION_FILES, "lib/console/contracts.ts", "lib/console/panel-slots.ts", "components/console/shell/bridge.tsx", "app/console/page.tsx", "app/console/console.css"];
+const NO_CREATE_OR_WRITE = ['"/pages"', "/v1/pages", "pages.create", "createTaskPage", "createLogEntry", "appendToDo", "appendTeacher", "NOTION_WORK_WRITE_ENABLED", '"PATCH"'];
+const HOSTS = /youtube|youtu\.be|tiktok|instagram|facebook|linkedin|vimeo|buffer\.com|hootsuite|\bx\.com|twitter/i;
+
+describe("REQ-60 Creation scan", () => {
+  it("covers the Creation files", () => {
+    for (const f of [...CREATION_FILES, "lib/console/providers.ts"]) expect(FILES).toContain(f);
+  });
+
+  it.each(FILES)("%s creates no Notion page and writes no Work row (AC3, AC4)", (f) => {
+    const src = read(f);
+    for (const s of NO_CREATE_OR_WRITE) expect(src, s).not.toContain(s);
+  });
+
+  it.each(FILES)("%s names no recording or publishing host (AC8)", (f) => {
+    expect(read(f)).not.toMatch(HOSTS);
+  });
+
+  it.each(CREATION_TOUCHED)("%s makes no fetch call (AC8)", (f) => {
+    expect(read(f)).not.toContain("fetch(");
+  });
+
+  it("providers.ts reaches the Work reader through fetchWorkItems and fetchTaskTypeNames only", () => {
+    const src = read("lib/console/providers.ts");
+    expect(src).toMatch(/import \{ fetchTaskTypeNames, fetchWorkItems \} from "\.\.\/notion\/work";/);
+  });
+});
