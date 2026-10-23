@@ -584,6 +584,77 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+/* REQ-61: the outcome form under the Rolodex. No motion. */
+.console-sales-detail {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.console-outcome {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: #160F1B;
+  border: 1px solid #563240;
+  border-radius: 4px;
+}
+.console-outcome-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.console-outcome-choices legend {
+  margin-bottom: 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.console-outcome-choices label,
+.console-outcome-field {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.console-outcome-field {
+  flex-direction: column;
+  align-items: stretch;
+  font-size: 12px;
+}
+.console-outcome-field input,
+.console-outcome-field select,
+.console-outcome-field textarea {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: #0F0A12;
+  border: 1px solid #563240;
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+.console-outcome-hint,
+.console-outcome-status {
+  margin: 0;
+  font-size: 12px;
+}
+.console-outcome-submit,
+.console-outcome-action {
+  padding: 2px 10px;
+  font-size: 13px;
+  color: #1B1015;
+  background: var(--amber);
+  border: 0;
+  border-radius: 3px;
+}
+a.console-outcome-action {
+  text-decoration: none;
+}
+.console-outcome-submit:disabled {
+  opacity: 0.5;
+}
 @media (width <= 640px) {
   .console-sales-fields div {
     grid-template-columns: minmax(0, 1fr);

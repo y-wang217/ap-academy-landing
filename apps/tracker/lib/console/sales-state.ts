@@ -23,7 +23,8 @@ export type SalesAction =
   | { type: "refreshFailed"; message: string; at: string }
   | { type: "setFilter"; filter: Filter }
   | { type: "move"; key: string }
-  | { type: "select"; id: string };
+  | { type: "select"; id: string }
+  | { type: "advance"; loggedId: string };
 
 /** A view worth keeping: a complete read, ready, empty or stale for a reason other than the page cap. */
 const isGood = (v: SalesView) => v.queue.data !== null && v.queue.status !== "error" && !v.queue.data.truncated;
@@ -79,6 +80,15 @@ export function selectedOf(state: SalesState): string | null {
   return visible.some((i) => i.id === state.selectedId) ? state.selectedId : visible[0]?.id ?? null;
 }
 
+/**
+ * After an outcome is logged (REQ-61 AC11): the first visible lead that is not
+ * the logged one; the logged one when it is all that is left; else none.
+ */
+export function nextAfter(state: SalesState, loggedId: string): string | null {
+  const visible = visibleItems(state);
+  return visible.find((i) => i.id !== loggedId)?.id ?? visible.find((i) => i.id === loggedId)?.id ?? null;
+}
+
 /** Arrow keys move by one with no wrap; Home and End go to the ends; anything else is null. */
 export function queueKeyTarget(key: string, index: number, count: number): number | null {
   if (count === 0) return null;
@@ -128,6 +138,8 @@ export function salesReducer(state: SalesState, action: SalesAction): SalesState
     }
     case "select":
       return { ...state, selectedId: action.id };
+    case "advance":
+      return { ...state, selectedId: nextAfter(state, action.loggedId) };
   }
 }
 

@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../../../lib/data/client";
 import type { Viewer } from "../../../lib/data/queries";
-import { handleConsoleHealth, handleConsoleSales, handleConsoleSignals, type SignalSources } from "../../../lib/console/handlers";
+import { handleConsoleHealth, handleConsoleOutcome, handleConsoleSales, handleConsoleSignals, type SignalSources } from "../../../lib/console/handlers";
+import { fakeOutcomeStore } from "../../../lib/console/outcome-store.fake";
+import { fakeLeadWriter } from "../../../lib/notion/lead-writer.fake";
 import type { OperationsPanels } from "../../../lib/console/operations";
 import { SignalsViewSchema } from "../../../lib/console/signals";
 import { SalesViewSchema } from "../../../lib/console/sales-view";
@@ -170,10 +172,11 @@ describe("console routes", () => {
     }
   });
 
-  it("every console route answers GET only", () => {
+  it("every console route answers GET only, except the outcomes write (REQ-61), which is POST only", () => {
     for (const f of routes(root)) {
       const src = readFileSync(f, "utf8");
-      expect([...src.matchAll(/export (?:async )?function (\w+)/g)].map((m) => m[1]), f).toEqual(["GET"]);
+      const write = f.endsWith(join("outcomes", "route.ts"));
+      expect([...src.matchAll(/export (?:async )?function (\w+)/g)].map((m) => m[1]), f).toEqual([write ? "POST" : "GET"]);
       expect(src, f).not.toMatch(/export const (POST|PUT|PATCH|DELETE)\b/);
     }
   });
@@ -291,5 +294,117 @@ describe("GET /api/console/signals", () => {
     const throwing = vi.fn((): SignalSources => { throw new Error("x"); });
     const { res, text } = await signals(owner(fakeDb({ data: true, error: null }).db), fakeDeps(), throwing);
     expect([res.status, text]).toEqual([503, '{"error":"console_unavailable"}']);
+  });
+});
+
+// REQ-61 AC5: POST /api/console/outcomes, the console's one write route.
+describe("POST /api/console/outcomes", () => {
+  const PAGE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa00f1";
+  const STAFF = "cccccccc-cccc-4ccc-8ccc-cccccccc0001";
+  const EDITED = "2026-10-22T11:00:00.000Z";
+  const valid = (over: Record<string, unknown> = {}) => ({
+    requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001", pageId: PAGE, outcome: "no_answer",
+    expected: { stage: "Working", attempts: 1, lastEditedAt: EDITED }, note: "Left a message", ...over,
+  });
+  function rig(rpc: (fn: string) => { data: unknown; error: unknown } = (fn) => ({ data: fn === "my_staff_id" ? STAFF : true, error: null })) {
+    const calls: string[] = [];
+    const db = { tracker: { rpc: vi.fn(async (fn: string) => (calls.push(fn), rpc(fn))) } } as unknown as Db;
+    const notion = fakeLeadWriter({ id: PAGE, stage: "Working", attempts: 1, lastEditedAt: EDITED }, () => NOW);
+    const log = fakeOutcomeStore(() => NOW);
+    const deps = vi.fn(() => ({ store: log.store, writer: notion.writer }));
+    return { db, calls, notion, log, deps };
+  }
+  const post = async (viewer: Viewer, r: ReturnType<typeof rig>, body: unknown = valid()) => {
+    const request = new Request("http://localhost/tracker/api/console/outcomes", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
+    const res = await handleConsoleOutcome({ viewer: async () => viewer, request, now: () => NOW, deps: r.deps });
+    return { res, text: await res.text() };
+  };
+  const owner = (db: Db): Viewer => ({ kind: "staff", ...base, orgId: ORG, role: "owner", db });
+
+  const denied: [string, (db: Db) => Viewer, number, string][] = [
+    ["grade teacher", (db) => ({ kind: "staff", ...base, orgId: ORG, role: "teacher", db }), 403, '{"error":"forbidden"}'],
+    ["student", (db) => ({ kind: "student", ...base, studentId: "s1", db }), 403, '{"error":"forbidden"}'],
+    ["parent", (db) => ({ kind: "parent", ...base, db }), 403, '{"error":"forbidden"}'],
+    ["role-less user", () => ({ kind: "none", ...base }), 403, '{"error":"forbidden"}'],
+    ["signed-out request", () => ({ kind: "signed_out" }), 401, '{"error":"unauthenticated"}'],
+    ["not-configured request", () => ({ kind: "not_configured" }), 503, '{"error":"console_not_configured"}'],
+  ];
+  for (const [who, make, status, body] of denied) {
+    it(`a ${who} gets ${status}, and nothing touches Notion or the transition log`, async () => {
+      const r = rig();
+      const { res, text } = await post(make(r.db), r);
+      expect([res.status, text]).toEqual([status, body]);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(r.calls).toEqual([]);
+      expect(r.deps).not.toHaveBeenCalled();
+      expect(r.notion.log).toEqual([]);
+      expect(r.log.calls).toEqual([]);
+    });
+  }
+
+  it("an owner whose is_org_owner says false is 403 before any write", async () => {
+    const r = rig((fn) => ({ data: fn === "is_org_owner" ? false : STAFF, error: null }));
+    const { res } = await post(owner(r.db), r);
+    expect(res.status).toBe(403);
+    expect(r.deps).not.toHaveBeenCalled();
+  });
+
+  for (const [what, body] of [
+    ["not JSON", "{"],
+    ["an unknown key", valid({ lastPaymentDate: "2026-10-01" })],
+    ["an unknown outcome", valid({ outcome: "paid" })],
+    ["a note over 2000 characters", valid({ note: "x".repeat(2001) })],
+    ["a bad page id", valid({ pageId: "not-a-page" })],
+    ["no expected values", valid({ expected: undefined })],
+    ["an unlisted next action", valid({ outcome: "follow_up", nextAction: "Assign teacher", due: "2026-10-23T18:00:00.000Z" })],
+  ] as const) {
+    it(`a body with ${what} is 400 and writes nothing`, async () => {
+      const r = rig();
+      const { res, text } = await post(owner(r.db), r, body);
+      expect([res.status, text]).toEqual([400, '{"error":"bad_request"}']);
+      expect(r.notion.log).toEqual([]);
+      expect(r.log.calls).toEqual([]);
+    });
+  }
+
+  it("the owner logs an outcome: 200 with the read-back, the staff id from their own client", async () => {
+    const r = rig();
+    const { res, text } = await post(owner(r.db), r);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const body = JSON.parse(text);
+    expect(body).toMatchObject({ status: "done", cadenceUsedUp: false, staffLinked: true, result: { stage: "Working", attempts: 2 } });
+    expect(r.calls).toEqual(["is_org_owner", "my_staff_id"]);
+    expect(r.notion.touches[0].input.staffId).toBe(STAFF);
+  });
+
+  it("maps each run result to its status", async () => {
+    const r = rig();
+    expect((await post(owner(r.db), r, valid({ expected: { stage: "New", attempts: 1, lastEditedAt: EDITED } }))).res.status).toBe(409);
+    expect((await post(owner(r.db), r, valid({ outcome: "won" }))).res.status).toBe(422);
+    r.notion.state.missing = ["Txn ID"];
+    const notReady = await post(owner(r.db), r);
+    expect([notReady.res.status, notReady.text]).toEqual([503, '{"error":"notion_not_ready","missing":["Txn ID"]}']);
+    r.notion.state.missing = [];
+    r.notion.faults.patch = ["timeout-after"];
+    expect((await post(owner(r.db), r)).res.status).toBe(202);
+    const blocked = await post(owner(r.db), r, valid({ requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0002" }));
+    expect([blocked.res.status, JSON.parse(blocked.text)]).toEqual([409, { error: "unresolved_transition", requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbb0001" }]);
+    const r2 = rig();
+    r2.notion.faults.patch = ["400"];
+    expect((await post(owner(r2.db), r2)).res.status).toBe(502);
+  });
+
+  it("no Notion connection is 503 notion_not_ready, with no write", async () => {
+    const r = rig();
+    const request = new Request("http://localhost/x", { method: "POST", body: JSON.stringify(valid()) });
+    const res = await handleConsoleOutcome({ viewer: async () => owner(r.db), request, now: () => NOW, deps: () => null });
+    expect([res.status, await res.text()]).toEqual([503, '{"error":"notion_not_ready","missing":["Notion connection"]}']);
+  });
+
+  it("is POST only", () => {
+    const src = readFileSync(join(__dirname, "outcomes/route.ts"), "utf8");
+    expect(src).toMatch(/export async function POST/);
+    expect(src).not.toMatch(/export async function (GET|PUT|PATCH|DELETE)/);
   });
 });

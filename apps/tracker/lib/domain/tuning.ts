@@ -122,4 +122,12 @@ export const TUNING = {
   consoleLessonGapSignalHours: 48,
   /** A dismissed signal stays hidden this long, then shows again if its condition still holds (REQ-62). */
   consoleSignalDismissMinutes: 120,
+  /** No-answer calls before the cadence is used up and the next action becomes the final text (REQ-61). */
+  consoleNoAnswerCadenceAttempts: 4,
+  /** A Touch create sent less than this long ago and not yet found stays uncertain; Notion's query can lag a new page (REQ-61). */
+  consoleTouchSettleSeconds: 60,
+  /** An outcome write holds its transition this long; a retry after that takes it over (REQ-61). */
+  consoleTransitionLeaseSeconds: 30,
+  /** The longest note an outcome carries to the Touch (REQ-61). */
+  consoleNoteMaxChars: 2000,
 } as const;

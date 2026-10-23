@@ -51,7 +51,8 @@ describe("console source scan (AC7, AC8)", () => {
   it.each(FILES)("%s holds no tel: link or Parent Phone (REQ-57 AC8)", (f) => {
     const src = read(f);
     expect(src).not.toContain("tel:");
-    expect(src).not.toContain("Parent Phone");
+    // REQ-61: outcomes.ts names Parent Phone as a contract A field to fill in Notion; it only ever sees a boolean for it.
+    if (f !== "lib/console/outcomes.ts") expect(src).not.toContain("Parent Phone");
   });
 
   it("dedupeKey appears only in contracts, facade and the ranking (REQ-57 AC8)", () => {
@@ -91,21 +92,45 @@ describe("console source scan (AC7, AC8)", () => {
     }
   });
 
+  // REQ-61: the one write path. Each file may reach exactly these Notion modules and rpcs; only the store writes, and only the transition log.
+  const OUTCOME_WRITE: Record<string, { notion: string[]; rpc: string[] }> = {
+    "app/api/console/outcomes/route.ts": { notion: ["@/lib/notion/config", "@/lib/notion/lead-writer"], rpc: [] },
+    "lib/console/handlers.ts": { notion: ["../notion/lead-writer"], rpc: ["is_org_owner", "my_staff_id"] },
+    "lib/console/outcome-run.ts": { notion: ["../notion/lead-writer"], rpc: [] },
+    "lib/console/outcome-store.ts": { notion: [], rpc: ["claim_console_transition"] },
+  };
+
+  it("covers the REQ-61 outcome files", () => {
+    for (const f of [...Object.keys(OUTCOME_WRITE), "lib/console/outcomes.ts", "lib/console/outcome-schema.ts", "components/console/sales/outcome-form.tsx"]) {
+      expect(FILES).toContain(f);
+    }
+  });
+
   it.each(FILES)("%s uses no service client, scheduler identity or write, and reaches Notion only from providers.ts", (f) => {
     const src = read(f);
     expect(src).not.toMatch(/@ap-academy\/db\/service|getServiceClient/);
     expect(src).not.toMatch(/resolveSchedulerIdentity|requireScheduler/);
     const notion = [...src.matchAll(/from "([^"]*\/notion\/[^"]*)"/g)].map((m) => m[1]);
+    const write = OUTCOME_WRITE[f];
     if (f === "lib/console/providers.ts") {
       for (const m of notion) expect(["../notion/config", "../notion/leads", "../notion/touches", "../notion/lessons", "../notion/work", "../notion/billing"]).toContain(m);
+    } else if (write) {
+      for (const m of notion) expect(write.notion).toContain(m);
     } else {
       expect(notion).toEqual([]);
       expect(src).not.toMatch(/lib\/notion\/|\.\.\/notion\//);
     }
     expect(src).not.toContain("claim_staff_link");
-    expect(src).not.toMatch(/\.(insert|update|upsert|delete|patch)\(/);
+    if (f === "lib/console/outcome-store.ts") {
+      expect([...src.matchAll(/from\(\s*"([^"]+)"/g)].map((m) => m[1])).toEqual(["console_transitions"]);
+      expect(src).not.toMatch(/\.(upsert|delete)\(/);
+    } else {
+      // outcome-run.ts writes the transition log only through the store port.
+      const scanned = f === "lib/console/outcome-run.ts" ? src.replaceAll("store.insert(", "") : src;
+      expect(scanned).not.toMatch(/\.(insert|update|upsert|delete|patch)\(/);
+    }
     expect(src).not.toMatch(/pages\.create|"PATCH"|"DELETE"/);
-    for (const call of src.matchAll(/rpc\(\s*"([^"]+)"/g)) expect(["is_org_owner", "people_synced_at"]).toContain(call[1]);
+    for (const call of src.matchAll(/rpc\(\s*"([^"]+)"/g)) expect(write?.rpc ?? ["is_org_owner", "people_synced_at"]).toContain(call[1]);
     expect(src).not.toContain("—");
   });
 

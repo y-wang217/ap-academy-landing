@@ -3,6 +3,10 @@ import { healthOf, type ConsolePanels, type HealthProvider } from "./contracts";
 import { loadConsolePanels, type FacadeDeps } from "./facade";
 import { CONSOLE_DENIALS, requireOwner, type OwnerViewer } from "./guard";
 import type { OperationsPanels } from "./operations";
+import type { LeadWriter } from "../notion/lead-writer";
+import { runOutcome, type OutcomeRun } from "./outcome-run";
+import { OutcomeBodySchema } from "./outcome-schema";
+import type { OutcomeStore } from "./outcome-store";
 import { buildSalesView } from "./sales-view";
 import { buildSignals, SignalsViewSchema, type OutboxRead, type ProtectedTime } from "./signals";
 
@@ -21,7 +25,7 @@ type HandlerInput = {
  * check comes first and a denial reads nothing; then is_org_owner on the
  * owner's own client, so RLS agrees with the app check.
  */
-async function gateOwner(input: HandlerInput): Promise<{ ok: true; viewer: OwnerViewer } | { ok: false; response: Response }> {
+async function gateOwner(input: Pick<HandlerInput, "viewer">): Promise<{ ok: true; viewer: OwnerViewer } | { ok: false; response: Response }> {
   let viewer: Viewer;
   try {
     viewer = await input.viewer();
@@ -108,4 +112,66 @@ export async function handleConsoleSignals(input: HandlerInput & { sources: (vie
   } catch {
     return unavailable();
   }
+}
+
+/** What POST /api/console/outcomes writes through; null when Notion is not configured. */
+export type OutcomeDeps = { store: OutcomeStore; writer: LeadWriter } | null;
+
+const OUTCOME_STATUS: Record<OutcomeRun["kind"], number> = {
+  done: 200, uncertain: 202, stale: 409, in_progress: 409, request_id_reused: 409, unresolved_transition: 409,
+  contract_missing: 422, disallowed: 422, bad_form: 422, failed: 502, notion_not_ready: 503, unavailable: 503,
+};
+
+function outcomeBody(run: OutcomeRun): unknown {
+  switch (run.kind) {
+    case "done":
+      return { status: "done", result: run.result, cadenceUsedUp: run.cadenceUsedUp, staffLinked: run.staffLinked };
+    case "uncertain":
+      return { error: "uncertain", message: run.message, retryAfterSeconds: run.retryAfterSeconds };
+    case "stale":
+      return { error: "stale", current: run.current };
+    case "unresolved_transition":
+      return { error: "unresolved_transition", requestId: run.openRequestId };
+    case "contract_missing":
+      return { error: "contract_missing", missing: run.missing, notionUrl: run.notionUrl };
+    case "disallowed":
+      return { error: "disallowed", message: run.message, notionUrl: run.notionUrl };
+    case "bad_form":
+    case "failed":
+      return { error: run.kind, message: run.message };
+    case "notion_not_ready":
+      return { error: "notion_not_ready", missing: run.missing };
+    case "unavailable":
+      return CONSOLE_DENIALS.unavailable;
+    default:
+      return { error: run.kind };
+  }
+}
+
+/**
+ * POST /api/console/outcomes (REQ-61, tracker ADR 0076). The owner gate
+ * first, so a denial reads no body, no Notion page and no transition row;
+ * then the strict body, the owner's staff id on their own client, and the
+ * outcome run. Never throws.
+ */
+export async function handleConsoleOutcome(input: {
+  viewer: () => Promise<Viewer>; request: Request; now?: () => Date; deps: (viewer: OwnerViewer) => OutcomeDeps;
+}): Promise<Response> {
+  const now = input.now ?? (() => new Date());
+  const gate = await gateOwner(input);
+  if (!gate.ok) return gate.response;
+  const parsed = OutcomeBodySchema.safeParse(await input.request.json().catch(() => undefined));
+  if (!parsed.success) return send(400, { error: "bad_request" });
+  const deps = input.deps(gate.viewer);
+  if (!deps) return send(503, { error: "notion_not_ready", missing: ["Notion connection"] });
+  let staffId: string | null;
+  try {
+    const { data, error } = await gate.viewer.db.tracker.rpc("my_staff_id", { target_org: gate.viewer.orgId });
+    if (error) return unavailable();
+    staffId = typeof data === "string" ? data : null;
+  } catch {
+    return unavailable();
+  }
+  const run = await runOutcome({ body: parsed.data, store: deps.store, writer: deps.writer, staffId, now });
+  return send(OUTCOME_STATUS[run.kind], outcomeBody(run));
 }
