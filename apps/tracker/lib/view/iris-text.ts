@@ -74,6 +74,7 @@ export const IRIS_TEXT = {
 
 const FLAG_LABELS: Record<string, string> = {
   money_dispute: "money dispute",
+  schedule_unknown: "schedule unknown",
   legal_threat: "legal threat",
   crisis: "crisis",
   hardship: "hardship",
@@ -113,6 +114,8 @@ export function reasonLabel(reason: string | null, extra: { flags?: string[]; in
       return "Iris wants you to check";
     case "draft_rule":
       return "Draft held back";
+    case "schedule_no_show":
+      return "Wrote after class started";
     case "draft_rejected":
       return "You rejected the draft";
     case "answered_by_charlie":

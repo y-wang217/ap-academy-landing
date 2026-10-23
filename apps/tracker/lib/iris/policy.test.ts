@@ -1,15 +1,15 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CHILD_SCOPED, CLASSIFIER_INTENTS, ESCALATE_ONLY, FLAG_HINTS, FLAGS, HARD_RULES, INTENT_HINTS, NEVER_AUTO_SEND, NOTICE_HOURS, POLICY, POLICY_VERSION, REPLY_TYPES, SENSITIVE_TRIGGERS } from "./policy";
+import { CHILD_SCOPED, CLASSIFIER_INTENTS, ESCALATE_ONLY, FLAG_HINTS, FLAGS, HARD_RULES, INTENT_HINTS, NEVER_AUTO_SEND, NOTICE_HOURS, POLICY, POLICY_VERSION, REPLY_TYPES, SCHEDULE_FLAGS, SCHEDULE_REPLY_TYPES, SENSITIVE_TRIGGERS } from "./policy";
 
 // REQ-42 AC7: the versioned policy file, with the founder values of Oct 16, 2026.
 const ROOT = join(__dirname, "..", "..");
 const SOURCE = readFileSync(join(__dirname, "policy.ts"), "utf8");
 
 describe("policy.ts", () => {
-  it("is version 3 (REQ-44) with a 12-hour notice window", () => {
-    expect(POLICY_VERSION).toBe(3);
+  it("is version 4 (REQ-46) with a 12-hour notice window", () => {
+    expect(POLICY_VERSION).toBe(4);
     expect(NOTICE_HOURS).toBe(12);
   });
 
@@ -80,5 +80,20 @@ describe("policy.ts", () => {
       expect(SENSITIVE_TRIGGERS[f].length, f).toBeGreaterThanOrEqual(3);
       for (const t of SENSITIVE_TRIGGERS[f]) expect(t, f).toBe(t.toLowerCase().trim());
     }
+  });
+
+  // REQ-46: the schedule split's reply types and its flag.
+  it("splits cancellations into two reply types the classifier never answers", () => {
+    expect([...SCHEDULE_REPLY_TYPES]).toEqual(["cancel_with_notice", "late_cancel"]);
+    for (const t of SCHEDULE_REPLY_TYPES) {
+      expect(REPLY_TYPES as readonly string[], t).toContain(t);
+      expect(CLASSIFIER_INTENTS as readonly string[], t).not.toContain(t);
+    }
+  });
+
+  it("keeps schedule_unknown out of the sensitive flags, so it never escalates", () => {
+    expect([...SCHEDULE_FLAGS]).toEqual(["schedule_unknown"]);
+    expect(FLAGS as readonly string[]).not.toContain("schedule_unknown");
+    expect(SENSITIVE_TRIGGERS).not.toHaveProperty("schedule_unknown");
   });
 });

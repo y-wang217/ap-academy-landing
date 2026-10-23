@@ -1,12 +1,13 @@
 import { TUNING } from "../domain/tuning";
 import { fetchOrgInvoices } from "../notion/billing";
-import { consoleDataSourceIds, readConsoleNotionConfig } from "../notion/config";
+import { consoleDataSourceIds, readConsoleNotionConfig, readLessonsConfig } from "../notion/config";
 import { fetchLeads } from "../notion/leads";
-import { fetchTrialLessons } from "../notion/lessons";
+import { createLessonsPort, fetchTrialLessons } from "../notion/lessons";
 import { fetchRecentTouches, lastTouchesByStudent } from "../notion/touches";
 import { fetchWorkItems } from "../notion/work";
 import type { FacadeDeps, NotionPorts } from "./facade";
 import type { OwnerViewer } from "./guard";
+import type { UnlinkedLessonsPort } from "./operations-read";
 import { createConsolePeopleReader } from "./people-read";
 
 /**
@@ -55,4 +56,15 @@ export function createConsoleDeps(viewer: OwnerViewer, now: () => Date = () => n
 export function sharePeopleRead(deps: FacadeDeps): FacadeDeps {
   let read: Promise<Awaited<ReturnType<FacadeDeps["people"]>>> | null = null;
   return { ...deps, people: () => (read ??= deps.people()) };
+}
+
+/**
+ * The read-only Lessons query Operations mode needs (REQ-58): rows dated in the range whose
+ * Class occurrence is empty, through the existing Lessons port, abandoned with the signal.
+ * Null when Notion has no token. Only listUnlinkedLessons is ever called on the port.
+ */
+export function createOperationsLessons(): UnlinkedLessonsPort {
+  const config = readLessonsConfig();
+  if (!config) return null;
+  return (range, signal) => createLessonsPort(config, bound(signal)).listUnlinkedLessons(range);
 }

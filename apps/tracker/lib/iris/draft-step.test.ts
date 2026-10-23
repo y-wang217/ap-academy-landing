@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { ClassException, ClassSeries } from "../domain/schedule/recurrence";
 import { TUNING } from "../domain/tuning";
 import type { FamilyEntry } from "../notion/parents";
 import type { DraftAnswer, DraftPort } from "./draft";
-import { runDraft, type DraftStepDeps } from "./draft-step";
-import { POLICY_VERSION, SIGNATURE } from "./policy";
+import { runDraft, type DraftStepDeps, type StudentSchedule } from "./draft-step";
+import { POLICY, POLICY_VERSION, SIGNATURE } from "./policy";
 import type { MessageInsert, MessagePatch } from "./store";
 import { fakeIrisStore } from "./store.fake";
 
@@ -190,5 +191,137 @@ describe("runDraft: failures, caps and budget (AC7)", () => {
     await w.add();
     w.db.fail.add("insertDraft");
     expect(await runDraft(w.deps())).toMatchObject({ result: "failed", error: "Iris run failed" });
+  });
+});
+
+// REQ-46 AC6 to AC10: cancellations split by the notice the scheduler shows.
+describe("runDraft: schedule-aware cancellations (REQ-46)", () => {
+  const weekly = (o: Partial<ClassSeries> = {}): ClassSeries => ({
+    id: "s1", staffId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009", studentId: SAM, subject: "MPM2D", kind: "weekly",
+    startDate: "2026-10-06", startTime: "17:00", durationMinutes: 60, effectiveUntil: null, ...o,
+  });
+  // T0 is Wed 2026-10-21 08:00 Toronto; each message arrives about 07:00.
+  const scheduleOf = (series: ClassSeries[], exceptions: ClassException[] = []) => {
+    const calls: string[] = [];
+    const port = async (id: string): Promise<StudentSchedule> => (calls.push(id), { series, exceptions });
+    return { calls, port };
+  };
+
+  it("with notice: the draft is cancel_with_notice, the prompt names the two dates and no time", async () => {
+    const w = world();
+    const id = await w.add();
+    const s = scheduleOf([weekly()]);
+    const out = await runDraft(w.deps({ schedule: s.port }));
+    expect(out).toMatchObject({ drafted: 1, escalated: 0, error: null });
+    expect(s.calls).toEqual([SAM]);
+    expect(w.draftsOf(id)[0].replyType).toBe("cancel_with_notice");
+    expect(w.msg(id).state).toBe("drafted");
+    expect(w.prompts[0].system).toContain(POLICY.cancel_with_notice.text);
+    expect(w.prompts[0].system).not.toContain(POLICY.cancellation.text);
+    expect(w.prompts[0].user).toContain("Missed class: Tuesday 27 October");
+    expect(w.prompts[0].user).toContain("Next scheduled class: Tuesday 3 November");
+    expect(w.prompts[0].user).not.toMatch(/\d{1,2}:\d{2}/);
+    const [e] = w.eventsOf(id);
+    expect(e.detail).toMatchObject({ state: "drafted", reply_type: "cancel_with_notice", class_date: "2026-10-27" });
+    expect(e.detail.notice_minutes).toBeGreaterThan(24 * 60);
+  });
+
+  it("late: the draft is late_cancel", async () => {
+    const w = world();
+    const id = await w.add();
+    await runDraft(w.deps({ schedule: scheduleOf([weekly({ kind: "one_off", startDate: "2026-10-21", startTime: "15:00" })]).port }));
+    expect(w.draftsOf(id)[0].replyType).toBe("late_cancel");
+    expect(w.prompts[0].system).toContain(POLICY.late_cancel.text);
+    expect(w.prompts[0].user).toContain("Missed class: Wednesday 21 October");
+    expect(w.prompts[0].user).toContain("Next scheduled class: none on the schedule");
+  });
+
+  it("no-show: escalated schedule_no_show with intent no_show, one escalated event, then a no_show draft", async () => {
+    const w = world();
+    const id = await w.add();
+    const out = await runDraft(w.deps({ schedule: scheduleOf([weekly({ kind: "one_off", startDate: "2026-10-21", startTime: "07:00" })]).port }));
+    expect(out).toMatchObject({ drafted: 1, escalated: 1 });
+    expect(w.msg(id)).toMatchObject({ state: "escalated", intent: "no_show", escalationReason: "schedule_no_show", handledAt: null });
+    const events = w.eventsOf(id);
+    expect(events.map((e) => e.kind)).toEqual(["escalated", "drafted"]);
+    expect(events[0].detail).toEqual({ state: "escalated", reason: "schedule_no_show", classified_intent: "cancellation", class_date: "2026-10-21", notion_student_id: SAM });
+    expect(events[1].detail).toMatchObject({ state: "escalated", reason: "schedule_no_show", reply_type: "no_show" });
+    expect(w.draftsOf(id)[0].replyType).toBe("no_show");
+    expect(w.prompts[0].system).toContain(POLICY.no_show.text);
+    expect(w.prompts[0].user).not.toContain("Missed class:");
+  });
+
+  it("no-show whose draft call fails is drafted by the next run, still escalated", async () => {
+    const w = world();
+    const id = await w.add();
+    const s = scheduleOf([weekly({ kind: "one_off", startDate: "2026-10-21", startTime: "07:00" })]);
+    w.setReply(() => bad());
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(w.msg(id)).toMatchObject({ state: "escalated", escalationReason: "schedule_no_show", retryCount: 1 });
+    w.setReply(() => good());
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(w.draftsOf(id).map((d) => d.replyType)).toEqual(["no_show"]);
+    expect(w.msg(id)).toMatchObject({ state: "escalated", escalationReason: "schedule_no_show" });
+    expect(w.eventsOf(id).filter((e) => e.kind === "drafted")[0].detail).toMatchObject({ reason: "schedule_no_show" });
+  });
+
+  it("no series: cancellation with the schedule_unknown flag, not escalated", async () => {
+    const w = world();
+    const id = await w.add({ flags: [] });
+    await runDraft(w.deps({ schedule: scheduleOf([]).port }));
+    expect(w.draftsOf(id)[0].replyType).toBe("cancellation");
+    expect(w.msg(id)).toMatchObject({ state: "drafted", flags: ["schedule_unknown"] });
+    expect(w.prompts[0].system).toContain(POLICY.cancellation.text);
+  });
+
+  it("no matched student: cancellation with the flag, and the schedule is never read", async () => {
+    const w = world();
+    const id = await w.add({ notionStudentId: null });
+    const s = scheduleOf([weekly()]);
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(s.calls).toHaveLength(0);
+    expect(w.draftsOf(id)[0].replyType).toBe("cancellation");
+    expect(w.msg(id)).toMatchObject({ state: "drafted", flags: ["schedule_unknown"] });
+  });
+
+  it("a failed schedule read leaves the message classified, spends no retry, and the next message is still drafted", async () => {
+    const w = world();
+    const broken = await w.add();
+    const fine = await w.add({ notionStudentId: LEO, students: [LEO] });
+    const port = async (id: string): Promise<StudentSchedule> => {
+      if (id === SAM) throw new Error("boom");
+      return { series: [weekly({ studentId: LEO })], exceptions: [] };
+    };
+    const out = await runDraft(w.deps({ schedule: port }));
+    expect(out).toMatchObject({ result: "ok", drafted: 1, error: "Could not read the schedule" });
+    expect(w.msg(broken)).toMatchObject({ state: "classified", retryCount: 0 });
+    expect(w.draftsOf(broken)).toEqual([]);
+    expect(w.msg(fine).state).toBe("drafted");
+  });
+
+  it("reads each student's schedule once per run", async () => {
+    const w = world();
+    await w.add();
+    await w.add();
+    const s = scheduleOf([weekly()]);
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(s.calls).toEqual([SAM]);
+  });
+
+  it("other intents never read the schedule", async () => {
+    const w = world();
+    const id = await w.add({ intent: "general_question" });
+    const s = scheduleOf([weekly()]);
+    await runDraft(w.deps({ schedule: s.port }));
+    expect(s.calls).toHaveLength(0);
+    expect(w.draftsOf(id)[0].replyType).toBe("general_question");
+  });
+
+  it("with no schedule port the step behaves as before", async () => {
+    const w = world();
+    const id = await w.add();
+    await runDraft(w.deps({ schedule: null }));
+    expect(w.draftsOf(id)[0].replyType).toBe("cancellation");
+    expect(w.msg(id).flags ?? []).toEqual([]);
   });
 });

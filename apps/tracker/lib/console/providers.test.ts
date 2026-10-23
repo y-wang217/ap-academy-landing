@@ -52,3 +52,35 @@ describe("sharePeopleRead", () => {
     expect(shared.freshness).toBe(base.freshness);
   });
 });
+
+// REQ-58 AC10: the facade and the operations builder share the one people read.
+describe("the operations builder and the facade", () => {
+  it("invoke deps.people once between them", async () => {
+    const { loadConsolePanels } = await import("./facade");
+    const { loadOperationsPanels } = await import("./operations");
+    const base = createConsoleDeps(viewer("10000000-0000-0000-0000-00000000aaaa"));
+    let calls = 0;
+    const deps = sharePeopleRead({ ...base, notion: null, people: async () => (calls++, { students: [], staff: [], syncedAt: null }) });
+    const empty = async () => [];
+    await Promise.all([
+      loadConsolePanels(deps),
+      loadOperationsPanels({
+        reader: { schedule: async () => ({ series: [], exceptions: [] }), availability: empty, outcomes: empty, unlinkedLessons: async () => ({ ok: false, code: "not_configured" }) },
+        people: deps.people, now: new Date("2026-10-22T20:00:00Z"), gapDays: 14, orgId: deps.orgId, lessonsSourceId: deps.sources.trialLessons,
+        query: {}, freshness: new Map(), timeoutMs: 1_000,
+      }),
+    ]);
+    expect(calls).toBe(1);
+  });
+
+  it("createOperationsLessons is null without a Notion token", async () => {
+    const { createOperationsLessons } = await import("./providers");
+    const saved = process.env.NOTION_TOKEN;
+    delete process.env.NOTION_TOKEN;
+    try {
+      expect(createOperationsLessons()).toBeNull();
+    } finally {
+      if (saved !== undefined) process.env.NOTION_TOKEN = saved;
+    }
+  });
+});

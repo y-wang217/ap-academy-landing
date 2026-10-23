@@ -1,13 +1,17 @@
 import { SessionExpired } from "@/components/console/session-expired";
 import { ConsoleBridge } from "@/components/console/shell/bridge";
 import { loadConsolePanels } from "@/lib/console/facade";
-import { parseMode, parseWeek } from "@/lib/console/modes";
+import { buildCashPulsePanel, buildTrialFunnelPanel } from "@/lib/console/finance-panels";
+import { parseGapDays, parseMode, parseWeek, parseWindow } from "@/lib/console/modes";
 import { buildNorthStar, CANNOT_VERIFY } from "@/lib/console/north-star";
+import { loadOperationsPanels } from "@/lib/console/operations";
+import { createOperationsReader } from "@/lib/console/operations-read";
 import { placeholderPanels } from "@/lib/console/panel-slots";
 import type { PanelView } from "@/lib/console/panel-view";
-import { createConsoleDeps, sharePeopleRead } from "@/lib/console/providers";
+import { consoleFreshness, createConsoleDeps, createOperationsLessons, sharePeopleRead } from "@/lib/console/providers";
 import { buildSalesView, type SalesView } from "@/lib/console/sales-view";
 import { createConsoleSeriesReader } from "@/lib/console/series-read";
+import { windowOf } from "@/lib/console/trial-funnel";
 import { priorWeek } from "@/lib/domain/schedule/net-new";
 import { ownerViewer } from "@/lib/pages";
 import { todayIso } from "@/lib/time";
@@ -19,12 +23,15 @@ const settle = <T,>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok: false
 
 /**
  * The founder console (REQ-53 gate, REQ-55 bridge). Owner only, checked again
- * here. One facade load per request, with one shared people read and the
- * series read: the north star (REQ-56) and the Sales queue and radar (REQ-57)
- * are wired from it; every other panel is "Not connected yet" until the later
- * Console cards fill their slots.
+ * here. One facade load per request. The north star (REQ-56) is wired from
+ * it, one shared people read and the series read; the Sales queue and radar
+ * (REQ-57) from the same facade result; Operations' teacher load, lesson gaps
+ * and upcoming classes and the Sales capacity gauge (REQ-58) from the
+ * scheduler tables on the same people read; the trial funnel and cash pulse
+ * (REQ-59) from the same facade result. Every other panel is "Not connected
+ * yet" until the later Console cards fill their slots.
  */
-export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[] }> }) {
+export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[]; gapDays?: string | string[]; window?: string | string[] }> }) {
   const gate = await ownerViewer();
   if (gate.kind === "expired") return <SessionExpired />;
   const sp = await searchParams;
@@ -33,10 +40,22 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   const week = parseWeek(sp.week, todayIso(now));
   const deps = sharePeopleRead(createConsoleDeps(gate.viewer, () => now));
   const readSeries = createConsoleSeriesReader(gate.viewer.db.tracker, gate.viewer.orgId);
-  const [facade, people, series] = await Promise.all([
+  const query = Object.fromEntries(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : Array.isArray(v) && v[0] ? [[k, v[0]]] : [])));
+  const [facade, people, series, ops] = await Promise.all([
     loadConsolePanels(deps),
     settle(deps.people()),
     settle(readSeries({ from: priorWeek(week).from, to: week.to })),
+    loadOperationsPanels({
+      reader: createOperationsReader(gate.viewer, createOperationsLessons()),
+      people: deps.people,
+      now,
+      gapDays: parseGapDays(sp.gapDays),
+      orgId: gate.viewer.orgId,
+      lessonsSourceId: deps.sources.trialLessons,
+      query,
+      freshness: consoleFreshness,
+      timeoutMs: deps.timeoutMs,
+    }),
   ]);
   const panels = placeholderPanels(now);
   try {
@@ -56,5 +75,17 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   }
   panels.sales.next = sales.queue;
   panels.sales.radar = sales.radar;
+  panels.operations.teacherLoad = ops.teacherLoad;
+  panels.operations.lessonGaps = ops.lessonGaps;
+  panels.operations.upcoming = ops.upcoming;
+  panels.sales.capacity = ops.capacity;
+  const search = new URLSearchParams(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : Array.isArray(v) && v[0] ? [[k, v[0]]] : [])));
+  const trialWindow = windowOf(parseWindow(sp.window), todayIso(now));
+  const funnel = buildTrialFunnelPanel(facade, trialWindow, now, search);
+  const cash = buildCashPulsePanel(facade, trialWindow, now, search);
+  panels.sales.conversion = funnel;
+  panels.operations.trials = funnel;
+  panels.sales.cashflow = cash;
+  panels.operations.finance = cash;
   return <ConsoleBridge mode={mode} panels={panels} sales={sales} email={gate.viewer.email} now={now} />;
 }

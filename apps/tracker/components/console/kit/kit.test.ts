@@ -187,3 +187,15 @@ describe("FreshnessLine", () => {
     expect(out).toContain("No successful read yet");
   });
 });
+
+// REQ-58 AC5: a canonical link renders in the header for every status, the failure ones included.
+describe("PanelFrame canonical", () => {
+  it.each(PANEL_STATUSES)("%s renders the canonical link in the header", (status) => {
+    const out = renderToStaticMarkup(h(QueueList, { ...frame, canonical: { href: "/tracker/schedule", label: "Open schedule" }, result: view(status, []) }));
+    const head = out.slice(out.indexOf("<header"), out.indexOf("</header>"));
+    expect(head).toContain('<a href="/tracker/schedule" class="console-canonical" data-canonical="">Open schedule</a>');
+  });
+  it("is absent when not given", () => {
+    expect(renderToStaticMarkup(h(QueueList, { ...frame, result: view("ready", []) }))).not.toContain("data-canonical");
+  });
+});

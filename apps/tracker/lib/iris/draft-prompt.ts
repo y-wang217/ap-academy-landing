@@ -1,5 +1,5 @@
 import { historyLines, messageBlock, scrubber, type HistoryLine } from "./classify-prompt";
-import { HOLDING_LINE, POLICY, VOICE_RULES, type DraftableType } from "./policy";
+import { HOLDING_LINE, POLICY, SCHEDULE_REPLY_TYPES, VOICE_RULES, type DraftableType } from "./policy";
 
 /**
  * What Iris sends to Claude to draft one reply (REQ-44 AC1, tracker ADR
@@ -17,7 +17,18 @@ export type DraftInput = {
   surnames: string[];
   history: HistoryLine[];
   body: string;
+  /** The missed and next class dates, YYYY-MM-DD, for the two schedule-aware types only (REQ-46). */
+  schedule?: { missedDate: string; nextDate: string | null };
 };
+
+const dayFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
+/** "Tuesday 20 October": weekday, day and month, never a year or a time. */
+function classDay(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const parts = dayFormat.formatToParts(new Date(Date.UTC(y, m - 1, d)));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("weekday")} ${get("day")} ${get("month")}`;
+}
 
 export const DRAFT_SYSTEM_FIRST_LINE = "You draft one email reply for Charlie, who runs AP Academy, a tutoring business.";
 
@@ -47,9 +58,16 @@ export function buildDraftPrompt(input: DraftInput): { system: string; user: str
   const user = [
     `Parent first name: ${input.parentFirstName ? scrub(input.parentFirstName) : "unknown"}`,
     `Child first name: ${input.childFirstName ? scrub(input.childFirstName) : "unknown"}`,
+    ...scheduleLines(input),
     history.length > 0 ? `Earlier messages in this thread (oldest first):\n${history.join("\n")}` : "Earlier messages in this thread: none",
     "",
     `<message>\n${messageBlock(input.body, scrub)}\n</message>`,
   ].join("\n");
   return { system, user };
+}
+
+function scheduleLines(input: DraftInput): string[] {
+  if (!input.schedule || !(SCHEDULE_REPLY_TYPES as readonly string[]).includes(input.replyType)) return [];
+  const next = input.schedule.nextDate ? classDay(input.schedule.nextDate) : "none on the schedule";
+  return [`Missed class: ${classDay(input.schedule.missedDate)}`, `Next scheduled class: ${next}`];
 }

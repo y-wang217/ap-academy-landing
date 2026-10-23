@@ -37,3 +37,24 @@ export function parseWeek(value: unknown, today: string): { from: string; to: st
   const valid = typeof first === "string" && /^\d{4}-\d{2}-\d{2}$/.test(first) && addDays(first, 0) === first;
   return weekOf(valid && first <= today ? first : today);
 }
+
+/** The lesson-gap window ?gapDays= picks (REQ-58 AC8): a whole number from 1 to 31, else 14. */
+export function parseGapDays(value: unknown): number {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (typeof first !== "string" || !/^\d{1,2}$/.test(first)) return 14;
+  const n = Number(first);
+  return n >= 1 && n <= 31 ? n : 14;
+}
+
+/** The trial and cash window ?window= picks (REQ-59 AC6): 7, 30 or 90 days, else 30. */
+export function parseWindow(value: unknown): 7 | 30 | 90 {
+  const first = Array.isArray(value) ? value[0] : value;
+  return first === "7" ? 7 : first === "90" ? 90 : 30;
+}
+
+/** A "?..." href with one parameter set and every other one kept. */
+export function withParam(search: URLSearchParams, key: string, value: string): string {
+  const next = new URLSearchParams(search);
+  next.set(key, value);
+  return `?${next}`;
+}

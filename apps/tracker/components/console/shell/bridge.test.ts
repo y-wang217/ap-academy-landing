@@ -18,7 +18,7 @@ const tabpanel = (out: string, mode: ConsoleMode) => {
   return out.slice(out.lastIndexOf("<", start), Math.min(...ends));
 };
 const indicator = (out: string, key: string) => out.match(new RegExp(`data-indicator="${key}"[^]*?data-indicator-value="">(.*?)</span></li>`))?.[1];
-const TOTALS: Record<ConsoleMode, number> = { sales: 9, creation: 4, operations: 5 };
+const TOTALS: Record<ConsoleMode, number> = { sales: 9, creation: 4, operations: 6 };
 
 describe("panel slots", () => {
   it("Sales is in the AC12 order, next first", () => {
@@ -74,7 +74,7 @@ describe.each(CONSOLE_MODES)("ConsoleBridge, %s", (mode) => {
       expect(count(panel, "data-panel=")).toBe(TOTALS[m]);
       expect(count(panel, "Not connected yet")).toBe(TOTALS[m]);
     }
-    expect(count(out, "Not connected yet")).toBe(18);
+    expect(count(out, "Not connected yet")).toBe(19);
     expect(out).not.toContain("data-panel-value");
   });
 
@@ -158,5 +158,54 @@ describe("the north-star slot", () => {
     expect(north).toContain("data-north-star");
     expect(north).toContain("Cannot verify weekly hours");
     expect(count(tabpanel(out, "sales"), "Not connected yet")).toBe(8);
+  });
+});
+
+// REQ-59 AC8: the four funnel and cash slots render the new panels, full in Operations and headline in Sales.
+describe("the funnel and cash slots", () => {
+  const unverifiable = (panel: string) => ({
+    panel, status: "unverifiable" as const, data: null, count: null, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: null,
+    staleReason: "Payment records unavailable: Notion returned 500", errorMessage: null,
+    sourceEvidence: [{ source: "notion", sourceId: "ds", sourceUrl: "https://www.notion.so/ds", observedAt: NOW.toISOString() }],
+  });
+  it("render the funnel and cash panels with their Notion links and leave the other slots unchanged", () => {
+    const panels = placeholderPanels(NOW);
+    panels.sales.conversion = unverifiable("trialFunnel");
+    panels.sales.cashflow = unverifiable("cashPulse");
+    panels.operations.trials = unverifiable("trialFunnel");
+    panels.operations.finance = unverifiable("cashPulse");
+    const sales = tabpanel(renderToStaticMarkup(h(ConsoleBridge, { mode: "sales", panels, now: NOW })), "sales");
+    expect(sales).toContain("Open Students &amp; Parents in Notion");
+    expect(sales).toContain("Open Invoices in Notion");
+    expect(count(sales, "Not connected yet")).toBe(7);
+    const ops = tabpanel(renderToStaticMarkup(h(ConsoleBridge, { mode: "operations", panels, now: NOW })), "operations");
+    expect(count(ops, "data-notion-link")).toBe(2);
+    expect(count(ops, "Not connected yet")).toBe(4);
+  });
+});
+
+// REQ-58 AC5, AC7: the Operations slots render the teacher load and lesson gaps instruments, upcoming as a list.
+describe("the Operations slots", () => {
+  const view = (panel: string, data: unknown, canonical = { href: "/tracker/schedule", label: "Open schedule" }) => ({
+    panel, status: "ready" as const, data, count: null, lastCheckedAt: NOW.toISOString(), lastSuccessfulFetchAt: NOW.toISOString(),
+    staleReason: null, errorMessage: null, sourceEvidence: [], canonical,
+  });
+  it("renders TeacherLoad, LessonGaps and the upcoming list with their canonical links", () => {
+    const panels = placeholderPanels(NOW);
+    panels.operations.teacherLoad = view("teacherLoad", { weeks: [{ from: "a", to: "b", label: "W1" }, { from: "c", to: "d", label: "W2" }], rows: [], scheduleHref: "/tracker/schedule", conflictsHref: "/tracker/schedule/conflicts" });
+    panels.operations.lessonGaps = view("lessonGaps", {
+      window: { from: "a", to: "b", days: 14, label: "Last 14 days" }, gaps: [], moreGaps: 0, noShows: [], moreNoShows: 0, pendingLogs: 0,
+      toggle: { href: "?mode=operations&gapDays=31", label: "Show 31 days" }, unlinkedHref: "/tracker/schedule/lessons",
+    }, { href: "/tracker/schedule/lessons?from=a&to=b", label: "Open unlinked lessons" });
+    panels.operations.upcoming = view("upcoming", [{ id: "u1", title: "Sam with Ryan, MHF4U", reason: "Regular", due: "Mon 26 Oct 16:00", href: "/tracker/schedule?date=2026-10-26" }]);
+    const out = renderToStaticMarkup(h(ConsoleBridge, { mode: "operations", panels, now: NOW }));
+    const ops = tabpanel(out, "operations");
+    expect([...ops.matchAll(/data-panel="([^"]+)"/g)].map((m) => m[1])).toEqual(["teacherLoad", "lessonGaps", "upcoming", "finance", "trials", "integrations"]);
+    expect(ops).toContain("console-load");
+    expect(ops).toContain("Show 31 days");
+    expect(ops).toContain("Sam with Ryan, MHF4U");
+    expect(ops).toContain('href="/tracker/schedule/lessons?from=a&amp;to=b"');
+    expect(count(ops, "data-canonical")).toBe(3);
+    expect(count(ops, "Not connected yet")).toBe(3);
   });
 });

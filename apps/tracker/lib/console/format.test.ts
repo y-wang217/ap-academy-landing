@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bridgeClock, formatReadout, hhmm } from "./format";
+import { bridgeClock, formatCents, formatReadout, hhmm } from "./format";
 
 // REQ-55 AC1, AC9: the header clock is Toronto wall time, readouts are en-CA.
 describe("bridgeClock", () => {
@@ -40,4 +40,9 @@ describe("formatReadout", () => {
   it("groups thousands en-CA and keeps a decimal", () => {
     expect(formatReadout(12345.5, {})).toBe("12,345.5");
   });
+});
+
+// REQ-59 AC3: money in integer cents, two decimals.
+describe("formatCents", () => {
+  it.each([[123450, "$1,234.50"], [0, "$0.00"], [9750, "$97.50"], [30, "$0.30"]])("%i is %s", (cents, text) => expect(formatCents(cents)).toBe(text));
 });

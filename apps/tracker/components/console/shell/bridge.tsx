@@ -9,7 +9,13 @@ import type { SalesView } from "../../../lib/console/sales-view";
 import { NextLead } from "../sales/next-lead";
 import { SalesProvider } from "../sales/sales-provider";
 import { SalesRadar } from "../sales/sales-radar";
+import { CashPulsePanel } from "../cash-pulse";
+import { LessonGaps } from "../lesson-gaps";
 import { NorthStar } from "../north-star";
+import { TeacherLoad } from "../teacher-load";
+import { TrialFunnelPanel } from "../trial-funnel";
+import type { CashPanelData, FunnelPanelData } from "../../../lib/console/finance-panels";
+import type { LessonGapsData, TeacherLoadData } from "../../../lib/console/operations";
 import type { NorthStarData } from "../../../lib/console/north-star";
 import { HeaderRail } from "./header-rail";
 import { Horizon } from "./horizon";
@@ -26,11 +32,20 @@ function Instrument({ slot, result, live }: { slot: PanelSlot; result: PanelView
     primary: slot.primary,
     retryHref: `?mode=${slot.mode}`,
     headingId: `console-${slot.mode}-${slot.id}-title`,
+    canonical: result.canonical,
   };
   // REQ-57: with a sales view, the Sales queue and radar are live from the SalesProvider.
   if (live && slot.mode === "sales" && slot.id === "next") return <NextLead {...frame} />;
   if (live && slot.mode === "sales" && slot.id === "radar") return <SalesRadar {...frame} />;
   if (slot.id === "northStar") return <NorthStar {...frame} result={result as PanelView<NorthStarData>} />;
+  if (slot.mode === "operations" && slot.id === "teacherLoad") return <TeacherLoad {...frame} result={result as PanelView<TeacherLoadData>} />;
+  if (slot.mode === "operations" && slot.id === "lessonGaps") return <LessonGaps {...frame} result={result as PanelView<LessonGapsData>} />;
+  if (slot.id === "conversion" || slot.id === "trials") {
+    return <TrialFunnelPanel {...frame} variant={slot.id === "trials" ? "full" : "headline"} result={result as PanelView<FunnelPanelData>} />;
+  }
+  if (slot.id === "cashflow" || slot.id === "finance") {
+    return <CashPulsePanel {...frame} variant={slot.id === "finance" ? "full" : "headline"} result={result as PanelView<CashPanelData>} />;
+  }
   switch (slot.kind) {
     case "metric":
       return <Metric {...frame} result={result as PanelView<MetricData>} />;

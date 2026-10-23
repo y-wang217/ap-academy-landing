@@ -50,6 +50,8 @@ describe("console source scan (AC7, AC8)", () => {
       "app/console/layout.tsx", "app/console/page.tsx", "app/console/loading.tsx", "app/api/console/health/route.ts", "lib/console/guard.ts",
       "lib/console/handlers.ts", "components/console/session-expired.tsx", "lib/console/contracts.ts", "lib/console/facade.ts",
       "lib/console/people-read.ts", "lib/console/providers.ts",
+      "lib/console/operations.ts", "lib/console/operations-read.ts", "components/console/teacher-load.tsx", "components/console/lesson-gaps.tsx",
+      "lib/console/trial-funnel.ts", "lib/console/cash-pulse.ts", "lib/console/finance-panels.ts", "components/console/trial-funnel.tsx", "components/console/cash-pulse.tsx",
     ]) {
       expect(FILES).toContain(f);
     }
