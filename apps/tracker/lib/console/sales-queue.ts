@@ -14,9 +14,11 @@ export type QueueEntry = { lead: LeadRow; bucket: Bucket; effectiveBucket: Bucke
 export type QueueException = { id: string; pageUrl: string; name: string; stage: string | null; reason: "No Next Action Due" | "No Stage" };
 export type RankedQueue = { items: QueueEntry[]; exceptions: QueueException[]; mergedDuplicates: number };
 
-const ACTIVE = new Set(["New", "Working", "Trial Booked", "Trial Claimed", "Awaiting Close", "Onboarding"]);
+/** The stages a lead is worked in (OPS SYSTEM); REQ-62 reads it for overdue follow-ups. */
+export const ACTIVE: ReadonlySet<string> = new Set(["New", "Working", "Trial Booked", "Trial Claimed", "Awaiting Close", "Onboarding"]);
 const NEEDS_DUE = new Set(["New", "Working", "Awaiting Close", "Onboarding"]);
-const OPTED_OUT = new Set(["Do not contact", "Duplicate"]);
+/** Lost Reasons that end contact for good. */
+export const OPTED_OUT: ReadonlySet<string> = new Set(["Do not contact", "Duplicate"]);
 const CALLBACK = new Set(["Call", "Text"]);
 const LIFTED = " (moved up: due earlier)";
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;

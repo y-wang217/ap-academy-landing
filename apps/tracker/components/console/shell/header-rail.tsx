@@ -1,9 +1,10 @@
 import SignOutButton from "../../../app/sign-out-button";
+import { QuietToggle } from "../signals/quiet-toggle";
 import { BridgeClock } from "./bridge-clock";
 import { ModeTabs } from "./mode-tabs";
 import { SyncLine } from "./sync-line";
 
-/** The header rail (REQ-55, VISUAL_DIRECTION B): brand, mode switch, clock, sync line, home and sign out. */
+/** The header rail (REQ-55, VISUAL_DIRECTION B): brand, mode switch, clock, sync line, quiet mode (REQ-62), home and sign out. */
 export function HeaderRail({ email, now }: { email?: string; now: Date }) {
   return (
     <header className="console-header">
@@ -15,6 +16,7 @@ export function HeaderRail({ email, now }: { email?: string; now: Date }) {
       <div className="console-status">
         <BridgeClock initialIso={now.toISOString()} />
         <SyncLine />
+        <QuietToggle />
       </div>
       <nav className="console-exit" aria-label="Leave the console">
         {email && <span className="console-email">{email}</span>}

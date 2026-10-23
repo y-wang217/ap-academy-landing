@@ -110,4 +110,16 @@ export const TUNING = {
   consoleOperationsListCap: 25,
   /** Rows a console detail list (trial funnel, cash pulse) shows before an "N more in Notion" link (REQ-59). */
   consoleDetailListCap: 25,
+  /** The console's health poll, which also paces the Sales and signals refreshes, while the tab is visible (REQ-62). */
+  consoleSignalsPollMs: 60_000,
+  /** After failed polls the interval doubles up to this (REQ-62). */
+  consolePollMaxBackoffMs: 600_000,
+  /** A Stage = New lead created within this many hours is a fresh-lead candidate (REQ-62). */
+  consoleFreshLeadLookbackHours: 72,
+  /** A trial attended this many hours ago with no close decision is a signal (REQ-62). */
+  consoleTrialDecisionHours: 24,
+  /** A lesson-log gap whose class ended this many hours ago is a signal (REQ-62). */
+  consoleLessonGapSignalHours: 48,
+  /** A dismissed signal stays hidden this long, then shows again if its condition still holds (REQ-62). */
+  consoleSignalDismissMinutes: 120,
 } as const;

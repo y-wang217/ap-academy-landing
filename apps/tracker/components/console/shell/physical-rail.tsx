@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { MODE_LABELS, type ConsoleMode } from "../../../lib/console/modes";
 import { syncLabel } from "../../../lib/console/sync";
 import { useMode } from "./mode-context";
+import { HealthRail } from "../signals/health-rail";
 import { ShortcutHelp } from "./shortcut-help";
 import { syncTone } from "./sync-line";
 import { useSync } from "./sync-provider";
@@ -21,7 +22,8 @@ function Indicator({ name, label, tone, children }: { name: string; label: strin
 /**
  * The bottom rail (REQ-55 AC9): five indicators, each from real state, the
  * keyboard help and CSS trim. Nothing here looks like a button that is not one.
- * Access is known because the page rendered past the owner gate. Motion's two
+ * Access is known because the page rendered past the owner gate. With
+ * signals (REQ-62) the seven providers' health sits above the indicators. Motion's two
  * labels are both rendered; the reduced-motion media query shows one.
  */
 export function PhysicalRail({ connectedByMode }: { connectedByMode: Record<ConsoleMode, { connected: number; total: number }> }) {
@@ -30,6 +32,7 @@ export function PhysicalRail({ connectedByMode }: { connectedByMode: Record<Cons
   const panels = connectedByMode[mode];
   return (
     <footer data-rail="" className="console-rail">
+      <HealthRail />
       <ul className="console-indicators" aria-label="Console status">
         <Indicator name="sources" label="Sources" tone={syncTone(sync)}>
           {syncLabel(sync)}

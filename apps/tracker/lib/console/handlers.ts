@@ -2,7 +2,9 @@ import type { Viewer } from "../data/queries";
 import { healthOf, type ConsolePanels, type HealthProvider } from "./contracts";
 import { loadConsolePanels, type FacadeDeps } from "./facade";
 import { CONSOLE_DENIALS, requireOwner, type OwnerViewer } from "./guard";
+import type { OperationsPanels } from "./operations";
 import { buildSalesView } from "./sales-view";
+import { buildSignals, SignalsViewSchema, type OutboxRead, type ProtectedTime } from "./signals";
 
 const HEADERS = { "Cache-Control": "no-store" };
 const send = (status: number, body: unknown) => Response.json(body, { status, headers: HEADERS });
@@ -71,6 +73,38 @@ export async function handleConsoleSales(input: HandlerInput): Promise<Response>
   try {
     const panels = await loadConsolePanels(input.deps(gate.viewer, now));
     return send(200, buildSalesView(panels, now()));
+  } catch {
+    return unavailable();
+  }
+}
+
+/** What the signals route reads besides the facade (REQ-62); each never throws. */
+export type SignalSources = {
+  operations(people: FacadeDeps["people"]): Promise<OperationsPanels>;
+  outbox(): Promise<OutboxRead>;
+  teaching(): Promise<ProtectedTime>;
+};
+
+/**
+ * GET /api/console/signals (REQ-62, tracker ADR 0077). After the owner gate,
+ * the facade, Operations, the failed outbox rows and the owner's teaching
+ * time together, one people read shared, then the signals view parsed with
+ * SignalsViewSchema, so no phone, email or last_error leaves. Reads only.
+ * Never throws.
+ */
+export async function handleConsoleSignals(input: HandlerInput & { sources: (viewer: OwnerViewer, deps: FacadeDeps, now: Date) => SignalSources }): Promise<Response> {
+  const now = input.now ?? (() => new Date());
+  const gate = await gateOwner(input);
+  if (!gate.ok) return gate.response;
+  try {
+    const base = input.deps(gate.viewer, now);
+    let people: ReturnType<FacadeDeps["people"]> | null = null;
+    const deps: FacadeDeps = { ...base, people: () => (people ??= base.people()) };
+    const at = now();
+    const sources = input.sources(gate.viewer, deps, at);
+    const [panels, ops, outbox, protectedTime] = await Promise.all([loadConsolePanels(deps), sources.operations(deps.people), sources.outbox(), sources.teaching()]);
+    const view = buildSignals({ panels, lessonGaps: ops.lessonGaps, schedule: ops.upcoming, outbox, protectedTime }, at);
+    return send(200, SignalsViewSchema.parse(view));
   } catch {
     return unavailable();
   }

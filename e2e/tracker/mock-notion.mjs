@@ -26,7 +26,7 @@
 // REQ-59 funnel leads (FUNNEL_LEADS, Stage Trial, which the queue ignores), the Touches data source answers two
 // touches, and a Lessons Type = Trial query gets CONSOLE_TRIALS plus the REQ-59 trial lesson. Ezra's trial sits 100 days
 // back, outside the funnel's window. Other Students and Lessons queries are unchanged. POST /__console/leads-fail toggles a 500 on the console lead read; POST
-// /__console/lose makes Gail Overdue Stage Lost.
+// /__console/lose makes Gail Overdue Stage Lost. REQ-62: POST /__console/add-lead appends a Stage = New lead created now.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -109,6 +109,10 @@ const CONSOLE_LEADS = [
   consoleLead(6, "Will Later", "Working", { "Next Action": sel("Text"), "Next Action Due": dt(atHours(72)), "Last Contact": dt(atHours(-120)) }),
   consoleLead(7, "Exa Nodue", "Working", { "Last Contact": dt(atHours(-24)) }),
 ];
+// REQ-62: Nova New is a fresh lead (created 2 h ago, inside the 72 h lookback); POST /__console/add-lead appends
+// another Stage = New lead created now, so the signal band sees a new arrival.
+CONSOLE_LEADS[0].created_time = atHours(-2);
+let addedLeads = 0;
 const CONSOLE_LEAD_PROPS = [
   "Owner", "Next Action", "Next Action Due", "Attempts", "Last Contact", "Source", "Lost Reason", "Contacted At", "Trial Booked At", "Trial Attended At",
   "Closed At", "Trial Time", "Trial Teacher", "Level", "Major Gaps", "Recommended Plan", "Trial Summary", "Lead ID", "Grade", "Subjects",
@@ -545,6 +549,13 @@ http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ status: now }));
   }
   if (req.method === "POST" && req.url === "/__console/leads-fail") { consoleLeadsFail = !consoleLeadsFail; return res.end(JSON.stringify({ consoleLeadsFail })); }
+  if (req.method === "POST" && req.url === "/__console/add-lead") {
+    addedLeads += 1;
+    const lead = consoleLead(20 + addedLeads, `Fresh Lead ${addedLeads}`, "New", { "Next Action Due": dt(atHours(2)), Source: sel("Website") });
+    lead.created_time = new Date().toISOString();
+    CONSOLE_LEADS.push(lead);
+    return res.end(JSON.stringify({ id: lead.id, name: `Fresh Lead ${addedLeads}` }));
+  }
   if (req.method === "POST" && req.url === "/__console/lose") {
     CONSOLE_LEADS[1].properties.Stage = sel("Lost");
     return res.end("{}");

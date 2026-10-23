@@ -80,3 +80,4 @@ Workspace-level decisions live in the repo-root `docs/adr/`.
 | [0073](0073-trial-funnel-and-cash-pulse.md) | Trial funnel and cash pulse: separate evidence counts, Paid-only collected, honest failure states | accepted |
 | [0074](0074-iris-evaluation-harness.md) | Iris is measured on Charlie's own past replies before any reply type can auto-send | accepted |
 | [0075](0075-iris-make-up-offers.md) | Iris offers make-up times from teacher availability, written in by code | accepted |
+| [0077](0077-console-signals-and-protected-time.md) | Console signals are polled, held in the browser, and a failed check becomes a provider failure | accepted |

@@ -3,7 +3,7 @@ import { ConsoleBridge } from "@/components/console/shell/bridge";
 import { creationPanels } from "@/lib/console/creation";
 import { loadConsolePanels } from "@/lib/console/facade";
 import { buildCashPulsePanel, buildTrialFunnelPanel } from "@/lib/console/finance-panels";
-import { parseGapDays, parseMode, parseWeek, parseWindow } from "@/lib/console/modes";
+import { parseGapDays, parseLead, parseMode, parseWeek, parseWindow } from "@/lib/console/modes";
 import { buildNorthStar, CANNOT_VERIFY } from "@/lib/console/north-star";
 import { loadOperationsPanels } from "@/lib/console/operations";
 import { createOperationsReader } from "@/lib/console/operations-read";
@@ -12,6 +12,8 @@ import type { PanelView } from "@/lib/console/panel-view";
 import { consoleFreshness, createConsoleDeps, createOperationsLessons, sharePeopleRead } from "@/lib/console/providers";
 import { buildSalesView, type SalesView } from "@/lib/console/sales-view";
 import { createConsoleSeriesReader } from "@/lib/console/series-read";
+import { buildSignals, healthSlotView, signalsSlotView, type SignalsView } from "@/lib/console/signals";
+import { settleOutbox, settleTeaching } from "@/lib/console/signals-read";
 import { windowOf } from "@/lib/console/trial-funnel";
 import { priorWeek } from "@/lib/domain/schedule/net-new";
 import { ownerViewer } from "@/lib/pages";
@@ -30,10 +32,12 @@ const settle = <T,>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok: false
  * and upcoming classes and the Sales capacity gauge (REQ-58) from the
  * scheduler tables on the same people read; the trial funnel and cash pulse
  * (REQ-59) from the same facade result; Creation's next asset, work queue and
- * weekly review (REQ-60) from the same facade's Work read. Every other panel is
- * "Not connected yet" until the later Console cards fill their slots.
+ * weekly review (REQ-60) from the same facade's Work read; the signals, quiet
+ * mode and health rail (REQ-62) from the same facade and Operations results
+ * plus the outbox and teaching-time reads. Every other panel is "Not connected
+ * yet" until the later Console cards fill their slots.
  */
-export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[]; gapDays?: string | string[]; window?: string | string[]; task?: string | string[] }> }) {
+export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ mode?: string | string[]; week?: string | string[]; gapDays?: string | string[]; window?: string | string[]; task?: string | string[]; lead?: string | string[] }> }) {
   const gate = await ownerViewer();
   if (gate.kind === "expired") return <SessionExpired />;
   const sp = await searchParams;
@@ -43,12 +47,13 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   const deps = sharePeopleRead(createConsoleDeps(gate.viewer, () => now));
   const readSeries = createConsoleSeriesReader(gate.viewer.db.tracker, gate.viewer.orgId);
   const query = Object.fromEntries(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : Array.isArray(v) && v[0] ? [[k, v[0]]] : [])));
-  const [facade, people, series, ops] = await Promise.all([
+  const reader = createOperationsReader(gate.viewer, createOperationsLessons());
+  const [facade, people, series, ops, outbox, teaching] = await Promise.all([
     loadConsolePanels(deps),
     settle(deps.people()),
     settle(readSeries({ from: priorWeek(week).from, to: week.to })),
     loadOperationsPanels({
-      reader: createOperationsReader(gate.viewer, createOperationsLessons()),
+      reader,
       people: deps.people,
       now,
       gapDays: parseGapDays(sp.gapDays),
@@ -58,6 +63,8 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
       freshness: consoleFreshness,
       timeoutMs: deps.timeoutMs,
     }),
+    settleOutbox(gate.viewer, now, deps.timeoutMs),
+    settleTeaching(gate.viewer, now, reader, deps.timeoutMs),
   ]);
   const panels = placeholderPanels(now);
   try {
@@ -96,5 +103,18 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   panels.creation.nextAsset = creation.nextAsset;
   panels.creation.work = creation.work;
   panels.creation.pipeline = creation.pipeline;
-  return <ConsoleBridge mode={mode} panels={panels} sales={sales} email={gate.viewer.email} now={now} />;
+  // REQ-62: the same facade and Operations results, plus the outbox and teaching-time reads. A throw leaves the slots unwired.
+  let signals: SignalsView | undefined;
+  try {
+    signals = buildSignals({ panels: facade, lessonGaps: ops.lessonGaps, schedule: ops.upcoming, outbox, protectedTime: teaching }, now);
+    for (const m of ["sales", "creation", "operations"] as const) panels[m].signals = signalsSlotView(signals);
+    panels.operations.integrations = healthSlotView(signals);
+  } catch {
+    signals = undefined;
+  }
+  return (
+    <ConsoleBridge
+      mode={mode} panels={panels} sales={sales} signals={signals} orgId={gate.viewer.orgId} lead={parseLead(sp.lead)} email={gate.viewer.email} now={now}
+    />
+  );
 }
