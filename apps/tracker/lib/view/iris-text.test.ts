@@ -113,3 +113,14 @@ describe("iris-text: schedule-aware cancellations", () => {
     expect([flagLabel("schedule_unknown"), reasonLabel("schedule_no_show")].join("\n")).not.toMatch(/[–—]/);
   });
 });
+
+// REQ-47 AC11: the two new schedule flags and the offer note.
+describe("iris-text: make-up offers", () => {
+  it("labels the flags and carries the offer note, with no em dash", () => {
+    expect(flagLabel("availability_not_entered")).toBe("teacher availability not entered");
+    expect(flagLabel("no_free_slot")).toBe("no free make-up time");
+    expect(IRIS_TEXT.offerNote).toBe("Times come from the teacher's availability. Nothing is booked: book the time the family picks in Schedule.");
+    expect(IRIS_TEXT.bookInSchedule).toBe("Open Schedule");
+    expect([IRIS_TEXT.offerNote, IRIS_TEXT.bookInSchedule, flagLabel("availability_not_entered"), flagLabel("no_free_slot")].join("\n")).not.toMatch(/[–—]/);
+  });
+});

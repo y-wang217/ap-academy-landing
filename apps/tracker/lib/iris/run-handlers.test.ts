@@ -237,3 +237,47 @@ describe("handleIrisRun: drafting and the phone backup", () => {
     expect(w.db.settings.lastError).toBe("Notion returned 500");
   });
 });
+
+// REQ-47 AC10: the run wires the teacher read into the draft step; a parent's pick is a new message, classified
+// like any other, that changes nothing already drafted and books nothing (every scheduler port is a read).
+describe("handleIrisRun: make-up offers", () => {
+  const SAM = "11111111-1111-4111-8111-111111111111";
+  const STAFF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0009";
+  const family = [{ studentId: SAM, studentName: "Sam Lee", stage: "Active", parentEmail: "ann@x.com", parentName: "Ann Lee" }];
+
+  it("drafts an offer, then classifies the pick on the same thread as a new message", async () => {
+    const intents = ["reschedule_request", "general_question"];
+    const classify: ClassifyPort = async () => {
+      const intent = intents.shift() ?? "general_question";
+      return { ok: true, model: "m", inputTokens: 1, outputTokens: 1, output: { intents: [intent], primary: intent, confidence: 0.95, flags: [], childName: "", summary: "" } };
+    };
+    const draft: DraftPort = async (p) => ({
+      ok: true, model: "m", inputTokens: 1, outputTokens: 1,
+      output: { body: p.user.includes("Make-up times offered") ? "Hi Ann,\n\nThese times work:\n[OPTIONS]\nLet me know." : "Hi Ann,\n\nThanks, I will confirm it.", needsCharlie: false, reason: "" },
+    });
+    const reads: string[] = [];
+    const w = world({ classify, draft });
+    const deps = w.build.getMockImplementation()!("x") as IrisRunDeps;
+    deps.directory = async () => family;
+    deps.schedule = async (id) => (reads.push(`student:${id}`), {
+      series: [{ id: "s1", staffId: STAFF, studentId: SAM, subject: "MPM2D", kind: "weekly", startDate: "2026-10-06", startTime: "17:00", durationMinutes: 60, effectiveUntil: null }], exceptions: [],
+    });
+    deps.availability = async (id) => (reads.push(`teacher:${id}`), {
+      series: [], exceptions: [], availabilityExceptions: [],
+      windows: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startTime: "15:00", endTime: "19:00", effectiveFrom: "2026-01-01", effectiveUntil: null })),
+    });
+    deps.gmail.get = async (_t, id) => ({ ...message(id, "ann@x.com"), threadId: "t-m1" });
+    await w.run();
+    const [offer] = [...w.db.drafts.values()];
+    expect(offer).toMatchObject({ replyType: "reschedule_offer", state: "proposed" });
+    expect(offer.bodyText).toContain("- Wednesday 21 October, 3:00 pm to 4:00 pm");
+    expect(reads).toEqual([`student:${SAM}`, `teacher:${STAFF}`]);
+
+    deps.gmail.list = async () => ["m2"];
+    await w.run();
+    const byGmail = (gid: string) => [...w.db.messages.values()].find((m) => m.gmailMessageId === gid)!;
+    expect(byGmail("m2")).toMatchObject({ intent: "general_question", state: "drafted", threadId: byGmail("m1").threadId });
+    expect(w.db.drafts.get(offer.id)).toEqual(offer);
+    expect(reads).toHaveLength(2);
+  });
+});

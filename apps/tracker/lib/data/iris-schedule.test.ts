@@ -57,6 +57,37 @@ describe("createIrisScheduleReader", () => {
     await expect(createIrisScheduleReader(c.tracker, ORG).forStudent(STUDENT)).rejects.toThrow();
   });
 
+  // REQ-47 AC7, AC8: one teacher's whole calendar, select only, no date filter.
+  const STAFF = SERIES.notion_staff_id;
+  const WINDOW = { id: "70000000-0000-4000-8000-000000000001", org_id: ORG, notion_staff_id: STAFF, weekday: 3, start_time: "15:00:00", end_time: "19:00:00", effective_from: "2026-10-01", effective_until: null, updated_at: "2026-10-16T12:00:00Z" };
+  const TIME_OFF = { id: "80000000-0000-4000-8000-000000000001", org_id: ORG, notion_staff_id: STAFF, on_date: "2027-10-21", kind: "time_off", start_time: null, end_time: null, updated_at: "2026-10-16T12:00:00Z" };
+  const teacherAnswers = () => ({
+    class_series: { data: [SERIES], error: null }, class_exceptions: { data: [EXCEPTION], error: null },
+    availability_windows: { data: [WINDOW], error: null }, availability_exceptions: { data: [TIME_OFF], error: null },
+  });
+
+  it("forTeacher reads series, exceptions, windows and every availability exception, filtered by org and staff only", async () => {
+    const c = client(teacherAnswers());
+    const r = await createIrisScheduleReader(c.tracker, ORG).forTeacher(STAFF);
+    expect(c.calls.map((x) => x.table).sort()).toEqual(["availability_exceptions", "availability_windows", "class_exceptions", "class_series"]);
+    for (const call of c.calls) {
+      expect(call.ops, call.table).toContainEqual(["eq", ["org_id", ORG]]);
+      expect(call.ops.map(([op]) => op).every((op) => ["select", "eq", "in"].includes(op)), call.table).toBe(true);
+      if (call.table !== "class_exceptions") expect(call.ops, call.table).toContainEqual(["eq", ["notion_staff_id", STAFF]]);
+    }
+    expect(r.series.map((x) => x.id)).toEqual([SERIES.id]);
+    expect(r.exceptions.map((x) => x.id)).toEqual([EXCEPTION.id]);
+    expect(r.windows).toEqual([expect.objectContaining({ weekday: 3, startTime: "15:00", endTime: "19:00", effectiveFrom: "2026-10-01", effectiveUntil: null })]);
+    expect(r.availabilityExceptions).toEqual([expect.objectContaining({ onDate: "2027-10-21", kind: "time_off", startTime: null, endTime: null })]);
+  });
+
+  it("forTeacher throws on any query error", async () => {
+    for (const table of ["class_series", "class_exceptions", "availability_windows", "availability_exceptions"]) {
+      const c = client({ ...teacherAnswers(), [table]: { data: null, error: { message: "boom" } } });
+      await expect(createIrisScheduleReader(c.tracker, ORG).forTeacher(STAFF), table).rejects.toThrow("schedule unavailable");
+    }
+  });
+
   it("contains no write and no rpc call", () => {
     const src = readFileSync(join(__dirname, "iris-schedule.ts"), "utf8");
     for (const w of [".insert(", ".update(", ".upsert(", ".delete(", ".rpc("]) expect(src, w).not.toContain(w);

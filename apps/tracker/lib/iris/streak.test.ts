@@ -24,3 +24,13 @@ describe("streaks per reply type", () => {
     expect(MIGRATION).toMatch(/perform iris\.count_review\(d\.org_id, d\.reply_type, 'approve'/);
   });
 });
+
+// REQ-47 AC9: an offer is its own reply type, so approving one keys its own streak row.
+describe("reschedule_offer keeps its own streak", () => {
+  it("is a reply type apart from reschedule_request, and count_review keys by the draft's type", async () => {
+    const { REPLY_TYPES } = await import("./policy");
+    expect(REPLY_TYPES).toContain("reschedule_offer");
+    expect(REPLY_TYPES).toContain("reschedule_request");
+    expect(MIGRATION).toMatch(/perform iris\.count_review\(d\.org_id, d\.reply_type, 'approve'/);
+  });
+});

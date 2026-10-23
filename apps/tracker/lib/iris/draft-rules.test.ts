@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkDraft, withSignature } from "./draft-rules";
+import { checkDraft, timesOutsideSlots, withSignature } from "./draft-rules";
+import type { Slot } from "./makeup";
 import { SIGNATURE } from "./policy";
 
 // REQ-44 AC3, AC4: the signature is added once by code; rule-breaking drafts are caught.
@@ -43,5 +44,24 @@ describe("checkDraft", () => {
 
   it("lists every rule broken, in a fixed order", () => {
     expect(checkDraft("Iris says the $40 class at 5 pm is forfeit.")).toEqual(["money", "ai_line", "time", "forfeit"]);
+  });
+});
+
+// REQ-47 AC5: after the options are written in, a time may appear only when a slot supplied it.
+describe("timesOutsideSlots", () => {
+  const slots: Slot[] = [{ date: "2026-10-29", startTime: "16:00", endTime: "17:00", startsAt: "", endsAt: "" }];
+  it("accepts a slot's start or end however it is written", () => {
+    for (const t of ["4:00 pm", "4 pm", "4pm", "16:00", "5:00 p.m.", "17:00"]) expect(timesOutsideSlots(`See you at ${t}.`, slots), t).toEqual([]);
+    expect(timesOutsideSlots("- Thursday 29 October, 4:00 pm to 5:00 pm", slots)).toEqual([]);
+  });
+
+  it("flags any other time", () => {
+    expect(timesOutsideSlots("Or 3:30 pm instead?", slots)).toEqual(["3:30 pm"]);
+    expect(timesOutsideSlots("Or 4 am?", slots)).toEqual(["4 am"]);
+    expect(timesOutsideSlots("At 4:00 pm or 6 pm.", [])).toEqual(["4:00 pm", "6 pm"]);
+  });
+
+  it("is empty for a body with no times", () => {
+    expect(timesOutsideSlots("Hi Pat,\n\nCharlie will send options.", [])).toEqual([]);
   });
 });
